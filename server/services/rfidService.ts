@@ -1,6 +1,7 @@
 import { SerialPort } from 'serialport';
 import { ReadlineParser } from '@serialport/parser-readline';
 import EventEmitter from 'events';
+import WebSocket from 'ws';
 import { storage } from '../storage';
 import type { TagReadEvent, RfidReaderStatus, ReaderConfig } from '@shared/schema';
 import { ReaderType } from '@shared/schema';
@@ -43,6 +44,11 @@ export class RfidService extends EventEmitter {
   // RRU9816 binary frame assembler
   private frameBuffer = Buffer.alloc(0);
   private expectedFrameLength = 0;
+  
+  // WebSocket connection to C# sidecar for RRU9816
+  private sidecarWebSocket?: WebSocket;
+  private sidecarReconnectAttempts = 0;
+  private maxSidecarReconnectAttempts = 5;
 
   constructor() {
     super();
@@ -80,9 +86,11 @@ export class RfidService extends EventEmitter {
 
     this.currentReaderType = readerType;
 
-    // Route based on reader type: PC/SC for ACR1281U-C, Serial for UHF readers
+    // Route based on reader type: PC/SC for ACR1281U-C, WebSocket for RRU9816, Serial for others
     if (readerType === ReaderType.ACR1281UC) {
       return this.connectPcscReader();
+    } else if (readerType === ReaderType.RRU9816) {
+      return this.connectRRU9816Sidecar(portPath, customBaudRate || 57600);
     } else {
       return this.connectSerialReader(portPath, readerType, customBaudRate);
     }
@@ -120,6 +128,191 @@ export class RfidService extends EventEmitter {
       } as RfidReaderStatus);
       
       throw error;
+    }
+  }
+
+  private async connectRRU9816Sidecar(portPath: string, baudRate: number): Promise<void> {
+    return new Promise((resolve, reject) => {
+      try {
+        storage.addSystemLog({
+          level: 'INFO',
+          message: 'Connecting to RRU9816 via C# sidecar bridge...',
+        });
+
+        // Connect to C# sidecar WebSocket server
+        this.sidecarWebSocket = new WebSocket('ws://localhost:8081/');
+        
+        this.sidecarWebSocket.on('open', () => {
+          storage.addSystemLog({
+            level: 'SUCCESS',
+            message: '✅ Connected to RRU9816 sidecar bridge',
+          });
+
+          // Send connect command to sidecar
+          const connectCmd = {
+            command: 'connect',
+            port: portPath,
+            baudRate: baudRate
+          };
+
+          this.sidecarWebSocket?.send(JSON.stringify(connectCmd));
+        });
+
+        this.sidecarWebSocket.on('message', (data: WebSocket.Data) => {
+          try {
+            const message = JSON.parse(data.toString());
+            this.handleSidecarMessage(message, resolve, reject);
+          } catch (error) {
+            storage.addSystemLog({
+              level: 'ERROR',
+              message: `Sidecar message parse error: ${error instanceof Error ? error.message : 'Unknown error'}`,
+            });
+          }
+        });
+
+        this.sidecarWebSocket.on('error', (error) => {
+          storage.addSystemLog({
+            level: 'ERROR',
+            message: `Sidecar WebSocket error: ${error.message}`,
+          });
+          
+          this.handleSidecarReconnection();
+          reject(new Error(`Sidecar connection failed: ${error.message}`));
+        });
+
+        this.sidecarWebSocket.on('close', () => {
+          if (this.isConnected) {
+            storage.addSystemLog({
+              level: 'WARN',
+              message: 'Lost connection to RRU9816 sidecar, attempting reconnection...',
+            });
+            this.handleSidecarReconnection();
+          }
+        });
+
+        // Timeout for connection
+        setTimeout(() => {
+          if (!this.isConnected) {
+            reject(new Error('Timeout: Could not connect to RRU9816 sidecar. Make sure the C# sidecar is running.'));
+          }
+        }, 10000);
+
+      } catch (error) {
+        reject(error);
+      }
+    });
+  }
+
+  private handleSidecarMessage(message: any, resolve?: Function, reject?: Function): void {
+    switch (message.type) {
+      case 'connected':
+        this.isConnected = true;
+        this.currentPort = message.port;
+        this.currentReaderType = ReaderType.RRU9816;
+        this.currentBaudRate = message.baudRate;
+        
+        storage.addSystemLog({
+          level: 'SUCCESS',
+          message: `✅ RRU9816 connected via sidecar: ${message.port} @ ${message.baudRate} baud`,
+        });
+
+        this.emit('status', {
+          connected: true,
+          readerType: ReaderType.RRU9816,
+          port: message.port,
+        } as RfidReaderStatus);
+
+        // Start inventory automatically
+        this.sidecarWebSocket?.send(JSON.stringify({ command: 'start_inventory' }));
+        
+        if (resolve) resolve();
+        break;
+
+      case 'tag_read':
+        const tagEvent: TagReadEvent = {
+          epc: message.epc,
+          rssi: message.rssi,
+          timestamp: message.timestamp,
+          readerType: ReaderType.RRU9816,
+        };
+
+        storage.createOrUpdateRfidTag({
+          epc: message.epc,
+          rssi: message.rssi.toString(),
+        });
+
+        this.emit('tagRead', tagEvent);
+        
+        storage.addSystemLog({
+          level: 'SUCCESS',
+          message: `🎯 RRU9816 Sidecar Tag: EPC=${message.epc}, RSSI=${message.rssi.toFixed(1)} dBm`,
+        });
+        break;
+
+      case 'error':
+        storage.addSystemLog({
+          level: 'ERROR',
+          message: `RRU9816 Sidecar Error: ${message.message}`,
+        });
+        
+        if (reject) reject(new Error(message.message));
+        break;
+
+      case 'reader_info':
+        storage.addSystemLog({
+          level: 'INFO',
+          message: `RRU9816 Info: Version ${message.version}, Power ${message.power}, Type ${message.readerType}`,
+        });
+        break;
+
+      case 'inventory_started':
+        storage.addSystemLog({
+          level: 'INFO',
+          message: 'RRU9816 tag inventory started via sidecar',
+        });
+        break;
+
+      case 'disconnected':
+        this.isConnected = false;
+        this.currentPort = undefined;
+        this.currentReaderType = undefined;
+        
+        storage.addSystemLog({
+          level: 'INFO',
+          message: 'RRU9816 disconnected via sidecar',
+        });
+        break;
+
+      default:
+        storage.addSystemLog({
+          level: 'INFO',
+          message: `RRU9816 Sidecar: ${message.message || JSON.stringify(message)}`,
+        });
+        break;
+    }
+  }
+
+  private handleSidecarReconnection(): void {
+    if (this.sidecarReconnectAttempts < this.maxSidecarReconnectAttempts) {
+      this.sidecarReconnectAttempts++;
+      
+      storage.addSystemLog({
+        level: 'INFO',
+        message: `Attempting sidecar reconnection ${this.sidecarReconnectAttempts}/${this.maxSidecarReconnectAttempts}...`,
+      });
+
+      setTimeout(() => {
+        if (this.currentPort && this.currentBaudRate) {
+          this.connectRRU9816Sidecar(this.currentPort, this.currentBaudRate).catch(() => {
+            // Handle reconnection failure
+          });
+        }
+      }, 3000); // Wait 3 seconds before reconnecting
+    } else {
+      storage.addSystemLog({
+        level: 'ERROR',
+        message: 'Max sidecar reconnection attempts reached. Please restart the sidecar.',
+      });
     }
   }
 
@@ -282,10 +475,22 @@ export class RfidService extends EventEmitter {
       this.bufferInterval = undefined;
     }
 
+    // Reset sidecar reconnection attempts
+    this.sidecarReconnectAttempts = 0;
+
     if (this.isUsingPcsc) {
       // Disconnect PC/SC reader
       await pcscService.disconnect();
       this.isUsingPcsc = false;
+    } else if (this.sidecarWebSocket && this.currentReaderType === ReaderType.RRU9816) {
+      // Disconnect RRU9816 via sidecar
+      try {
+        this.sidecarWebSocket.send(JSON.stringify({ command: 'disconnect' }));
+        this.sidecarWebSocket.close();
+      } catch (error) {
+        // Ignore close errors
+      }
+      this.sidecarWebSocket = undefined;
     } else if (this.serialPort && this.serialPort.isOpen) {
       // Disconnect serial reader
       return new Promise((resolve) => {
@@ -300,6 +505,15 @@ export class RfidService extends EventEmitter {
     this.isConnected = false;
     this.currentPort = undefined;
     this.currentReaderType = undefined;
+
+    this.emit('status', {
+      connected: false,
+    } as RfidReaderStatus);
+
+    storage.addSystemLog({
+      level: 'INFO',
+      message: 'Disconnected from RFID reader',
+    });
   }
 
   private handleSerialData(data: string): void {
