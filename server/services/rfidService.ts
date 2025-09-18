@@ -123,12 +123,19 @@ export class RfidService extends EventEmitter {
     const baudRate = customBaudRate || config.baudRate || 57600;
 
     try {
+      // Добавляем принудительные настройки для преодоления блокировки порта
       this.serialPort = new SerialPort({
         path: portPath,
         baudRate,
         dataBits: 8,
         parity: 'none',
         stopBits: 1,
+        rtscts: false,         // Отключаем аппаратное управление потоком
+        xon: false,            // Отключаем программное управление потоком  
+        xoff: false,           // Отключаем программное управление потоком
+        xany: false,           // Отключаем произвольные символы управления
+        autoOpen: true,        // Автоматически открывать порт
+        lock: false,           // Не блокировать порт для других процессов
       });
 
       this.parser = this.serialPort.pipe(new ReadlineParser({ delimiter: '\r\n' }));
