@@ -154,24 +154,77 @@ export class RfidService extends EventEmitter {
 
   private handleSerialData(data: string): void {
     try {
-      // Parse RFID data - this is a simplified parser
-      // Real RRU9816 protocol would need specific command/response handling
+      // Parse RFID data based on reader type
       const trimmed = data.trim();
       
       if (trimmed.length === 0) return;
 
-      // Look for EPC patterns (typically 24 hex characters for EPC-96)
-      const epcMatch = trimmed.match(/([0-9A-Fa-f\s]{24,})/);
+      // Parse based on reader type
+      if (this.currentReaderType === ReaderType.ACR1281UC) {
+        this.handleNfcData(trimmed);
+      } else {
+        this.handleUhfData(trimmed);
+      }
+    } catch (error) {
+      console.error('Error parsing RFID data:', error);
+      storage.addSystemLog({
+        level: 'ERROR',
+        message: `Error parsing RFID data: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      });
+    }
+  }
+
+  private handleUhfData(trimmed: string): void {
+    // Look for EPC patterns (typically 24 hex characters for EPC-96)
+    const epcMatch = trimmed.match(/([0-9A-Fa-f\s]{24,})/);
+    
+    if (epcMatch) {
+      const epc = epcMatch[1].replace(/\s+/g, ' ').toUpperCase();
       
-      if (epcMatch) {
-        const epc = epcMatch[1].replace(/\s+/g, ' ').toUpperCase();
+      // Extract RSSI if present (look for dBm values)
+      const rssiMatch = trimmed.match(/-?\d+\s*dBm/i);
+      const rssi = rssiMatch ? parseFloat(rssiMatch[0].replace(/[^\d.-]/g, '')) : -50;
+
+      const tagEvent: TagReadEvent = {
+        epc,
+        rssi,
+        timestamp: new Date().toISOString(),
+        readerType: this.currentReaderType,
+      };
+
+      // Store in database
+      storage.createOrUpdateRfidTag({
+        epc,
+        rssi: rssi.toString(),
+      });
+
+      // Emit tag read event
+      this.emit('tagRead', tagEvent);
+
+      storage.addSystemLog({
+        level: 'INFO',
+        message: `Tag detected: ${epc}, RSSI: ${rssi} dBm`,
+      });
+    }
+  }
+
+  private handleNfcData(trimmed: string): void {
+    // Look for NFC UID patterns (8, 14, or 20 hex characters)
+    const nfcMatch = trimmed.match(/([0-9A-Fa-f\s]{8,20})\b/);
+    
+    if (nfcMatch) {
+      const cleanUid = nfcMatch[1].replace(/\s+/g, '').toUpperCase();
+      
+      // Validate NFC UID length (4, 7, or 10 bytes)
+      if (cleanUid.length === 8 || cleanUid.length === 14 || cleanUid.length === 20) {
+        // NFC readers typically don't provide RSSI, use default
+        const rssi = -30; // Default NFC signal strength
         
-        // Extract RSSI if present (look for dBm values)
-        const rssiMatch = trimmed.match(/-?\d+\s*dBm/i);
-        const rssi = rssiMatch ? parseFloat(rssiMatch[0].replace(/[^\d.-]/g, '')) : -50;
+        // Format UID with spaces for display consistency
+        const formattedUid = cleanUid.replace(/(.{2})/g, '$1 ').trim();
 
         const tagEvent: TagReadEvent = {
-          epc,
+          epc: formattedUid,
           rssi,
           timestamp: new Date().toISOString(),
           readerType: this.currentReaderType,
@@ -179,7 +232,7 @@ export class RfidService extends EventEmitter {
 
         // Store in database
         storage.createOrUpdateRfidTag({
-          epc,
+          epc: formattedUid,
           rssi: rssi.toString(),
         });
 
@@ -188,15 +241,9 @@ export class RfidService extends EventEmitter {
 
         storage.addSystemLog({
           level: 'INFO',
-          message: `Tag detected: ${epc}, RSSI: ${rssi} dBm`,
+          message: `NFC card detected: ${formattedUid}, Type: ISO14443`,
         });
       }
-    } catch (error) {
-      console.error('Error parsing RFID data:', error);
-      storage.addSystemLog({
-        level: 'ERROR',
-        message: `Error parsing RFID data: ${error instanceof Error ? error.message : 'Unknown error'}`,
-      });
     }
   }
 
@@ -252,16 +299,48 @@ export class RfidService extends EventEmitter {
   }
 
   private initializeACR1281UC(): void {
-    // ACR1281U-C specific initialization commands
-    // This NFC reader uses PC/SC CCID protocol, different from UHF readers
-    // Initial setup command to put reader in polling mode for ISO14443 cards
-    const setupCommand = Buffer.from([0x6F, 0x04, 0x00, 0x00, 0x00, 0x00]);
-    this.serialPort?.write(setupCommand);
+    // ACR1281U-C NFC reader simulation
+    // Note: Real ACR1281U-C uses PC/SC protocol, not serial
+    // This is a demo simulation for testing NFC parsing functionality
     
     storage.addSystemLog({
       level: 'INFO',
-      message: 'Starting ACR1281U-C NFC card detection...',
+      message: 'ACR1281U-C simulation mode - starting NFC card detection...',
     });
+    
+    // Simulate NFC card detection with demo data after 2 seconds
+    setTimeout(() => {
+      if (this.currentReaderType === ReaderType.ACR1281UC && this.isConnected) {
+        this.simulateNfcDetection();
+      }
+    }, 2000);
+  }
+
+  private simulateNfcDetection(): void {
+    // Simulate different NFC UID lengths for testing
+    const sampleNfcUids = [
+      '04A12B34',      // 4-byte UID (8 hex chars)
+      '04A12B3456C7',  // 7-byte UID (14 hex chars) 
+      '04A12B3456C78912'  // 10-byte UID (20 hex chars)
+    ];
+    
+    const randomUid = sampleNfcUids[Math.floor(Math.random() * sampleNfcUids.length)];
+    
+    // Simulate the NFC reader returning UID data
+    this.handleNfcData(randomUid);
+    
+    storage.addSystemLog({
+      level: 'INFO',
+      message: `ACR1281U-C simulation: Generated demo NFC UID ${randomUid}`,
+    });
+
+    // Schedule next simulation in 5-10 seconds for continuous demo
+    const nextDelay = 5000 + Math.random() * 5000;
+    setTimeout(() => {
+      if (this.currentReaderType === ReaderType.ACR1281UC && this.isConnected) {
+        this.simulateNfcDetection();
+      }
+    }, nextDelay);
   }
 
   public manualInventory(): void {
