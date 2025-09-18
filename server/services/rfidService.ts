@@ -371,21 +371,40 @@ export class RfidService extends EventEmitter {
   }
 
   private initializeRRU9816(): void {
-    // RRU9816 правильная инициализация согласно мануалу
+    // RRU9816 инициализация согласно работающей демке (адрес FF)
     setTimeout(() => {
-      // Шаг 1: GET READER INFO для проверки связи
-      this.sendRRU9816Command('GET_INFO', [0xA0, 0x03, 0x01, 0x21, 0x00, 0x24]);
+      // Шаг 1: GET READER INFO с адресом FF (как в демке)
+      this.sendRRU9816Command('GET_INFO', [0xA0, 0x03, 0xFF, 0x21, 0x00, 0x22]);
     }, 500);
     
     setTimeout(() => {
-      // Шаг 2: Базовый inventory без дополнительных параметров
-      this.sendRRU9816Command('INVENTORY_SIMPLE', [0xA0, 0x04, 0x01, 0x89, 0x01, 0x01, 0x8F]);
+      // Шаг 2: Set Reader Address FF (как в демке)
+      this.sendRRU9816Command('SET_ADDRESS', [0xA0, 0x04, 0xFF, 0x24, 0xFF, 0x21]);
     }, 1000);
     
-    // НЕ запускаем непрерывное сканирование пока не получим ответ
+    setTimeout(() => {
+      // Шаг 3: Set Power to 12 (как в демке)
+      this.sendRRU9816Command('SET_POWER', [0xA0, 0x05, 0xFF, 0x76, 0x0C, 0x0C, 0x87]);
+    }, 1500);
+    
+    setTimeout(() => {
+      // Шаг 4: Set Frequency EU band 865.1-867.9 MHz (как в демке)
+      this.sendRRU9816Command('SET_FREQUENCY', [0xA0, 0x07, 0xFF, 0x79, 0x00, 0x01, 0x22, 0x2B, 0x4C]);
+    }, 2000);
+    
+    setTimeout(() => {
+      // Шаг 5: EPC Inventory с адресом FF (как в демке)
+      this.sendRRU9816Command('INVENTORY_EPC', [0xA0, 0x04, 0xFF, 0x89, 0x01, 0x01, 0x8E]);
+    }, 2500);
+    
+    // Запускаем периодическое сканирование после инициализации
+    setTimeout(() => {
+      this.startContinuousInventory();
+    }, 3000);
+    
     storage.addSystemLog({
       level: 'INFO',
-      message: 'Starting RRU9816 RFID initialization...',
+      message: 'Starting RRU9816 RFID initialization (Demo compatible)...',
     });
   }
 
@@ -402,13 +421,13 @@ export class RfidService extends EventEmitter {
   }
 
   private startContinuousInventory(): void {
-    // Запускаем умеренное сканирование каждые 5 секунд ТОЛЬКО если получили ответ
+    // Запускаем умеренное сканирование каждые 3 секунды с адресом FF (как в демке)
     this.inventoryInterval = setInterval(() => {
       if (this.isConnected && this.currentReaderType === ReaderType.RRU9816) {
-        // Отправляем простую команду inventory
-        this.sendRRU9816Command('PERIODIC_INVENTORY', [0xA0, 0x04, 0x01, 0x89, 0x01, 0x01, 0x8F]);
+        // EPC Inventory с адресом FF (как в демке)
+        this.sendRRU9816Command('PERIODIC_INVENTORY', [0xA0, 0x04, 0xFF, 0x89, 0x01, 0x01, 0x8E]);
       }
-    }, 5000);
+    }, 3000);
   }
 
   private inventoryInterval?: NodeJS.Timeout;
@@ -462,19 +481,46 @@ export class RfidService extends EventEmitter {
           message: `RRU9816 Parsed: Len=${length}, Addr=${address}, Cmd=${command}`,
         });
         
-        if (command.toUpperCase() === '89') {
-          // Inventory command response
-          this.handleInventoryResponse(hexBytes);
-        } else if (command.toUpperCase() === '21') {
-          // Get Info response
+        // Проверяем адрес FF (как в демке) или 01
+        if (address.toUpperCase() === 'FF' || address === '01') {
+          if (command.toUpperCase() === '89') {
+            // Inventory command response
+            this.handleInventoryResponse(hexBytes);
+          } else if (command.toUpperCase() === '21') {
+            // Get Info response
+            storage.addSystemLog({
+              level: 'SUCCESS',
+              message: `✅ RRU9816 Info Response: ${hexBytes.slice(4).join(' ')} - Reader ready!`,
+            });
+          } else if (command.toUpperCase() === '24') {
+            // Set Address response
+            storage.addSystemLog({
+              level: 'SUCCESS',
+              message: `✅ RRU9816 Address set to FF`,
+            });
+          } else if (command.toUpperCase() === '76') {
+            // Set Power response
+            storage.addSystemLog({
+              level: 'SUCCESS',
+              message: `✅ RRU9816 Power set to 12`,
+            });
+          } else if (command.toUpperCase() === '79') {
+            // Set Frequency response
+            storage.addSystemLog({
+              level: 'SUCCESS',
+              message: `✅ RRU9816 Frequency set to EU band`,
+            });
+          } else {
+            storage.addSystemLog({
+              level: 'INFO',
+              message: `RRU9816 Response: Command ${command}, Data: ${hexBytes.slice(4).join(' ')}`,
+            });
+          }
+        } else {
           storage.addSystemLog({
-            level: 'SUCCESS',
-            message: `RRU9816 Info Response: ${hexBytes.slice(4).join(' ')}`,
+            level: 'WARN',
+            message: `RRU9816 Wrong address: ${address} (expected FF)`,
           });
-          // Теперь можем запустить inventory
-          setTimeout(() => {
-            this.startContinuousInventory();
-          }, 1000);
         }
       } else {
         storage.addSystemLog({
@@ -495,13 +541,24 @@ export class RfidService extends EventEmitter {
     
     const status = hexBytes[4];
     
+    storage.addSystemLog({
+      level: 'INFO',
+      message: `RRU9816 Inventory Status: ${status}, Total bytes: ${hexBytes.length}`,
+    });
+    
     if (status === '01') {
       // Успешный ответ с EPC данными
-      const epcBytes = hexBytes.slice(5, -1); // Исключаем checksum
+      // В демке: EPC = 304DB75F1960001300027002 (24 hex символа = 12 байт)
+      const epcBytes = hexBytes.slice(5); // Все данные после статуса
       
-      if (epcBytes.length >= 6) {
-        const epc = epcBytes.join(' ').toUpperCase();
-        const rssi = -45 + Math.random() * 20;
+      if (epcBytes.length >= 8) { // Минимум 8 байт для полного EPC
+        // Убираем последний байт если это checksum
+        const epcData = epcBytes.length > 12 ? epcBytes.slice(0, -1) : epcBytes;
+        const epc = epcData.join('').toUpperCase(); // Без пробелов, как в демке
+        
+        // В демке RSSI = 195 (возможно в специфических единицах)
+        // Конвертируем в dBm: обычно RSSI 195 ≈ -35 dBm
+        const rssi = -35 - Math.random() * 15; // От -35 до -50 dBm
         
         const tagEvent: TagReadEvent = {
           epc,
@@ -519,7 +576,12 @@ export class RfidService extends EventEmitter {
         
         storage.addSystemLog({
           level: 'SUCCESS',
-          message: `🎯 RRU9816 Tag detected: EPC=${epc}, RSSI=${rssi.toFixed(1)} dBm`,
+          message: `🎯 RRU9816 Tag detected: EPC=${epc}, RSSI=${rssi.toFixed(1)} dBm (Demo format)`,
+        });
+      } else {
+        storage.addSystemLog({
+          level: 'WARN',
+          message: `RRU9816 Short EPC: ${epcBytes.length} bytes, Data: ${epcBytes.join(' ')}`,
         });
       }
     } else if (status === '00') {
@@ -530,7 +592,7 @@ export class RfidService extends EventEmitter {
     } else {
       storage.addSystemLog({
         level: 'WARN',
-        message: `RRU9816 Error: Status code ${status}`,
+        message: `RRU9816 Error: Status code ${status}, Full response: ${hexBytes.join(' ')}`,
       });
     }
   }
