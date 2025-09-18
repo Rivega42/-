@@ -74,10 +74,14 @@ export class PcscService extends EventEmitter {
         message: `PC/SC reader detected: ${reader.name}`,
       });
 
-      // Check if this is ACR1281U-C reader
-      if (reader.name.toLowerCase().includes('acr1281') || 
-          reader.name.toLowerCase().includes('dual reader')) {
+      // Check if this is ACR1281U-C NFC reader (PICC interface only)
+      if (reader.name.toLowerCase().includes('acr1281') && 
+          reader.name.toLowerCase().includes('picc')) {
         this.currentReader = reader;
+        storage.addSystemLog({
+          level: 'INFO',
+          message: `Selected NFC reader: ${reader.name}`,
+        });
         this.setupReaderEventHandlers(reader);
       }
     });
@@ -119,7 +123,13 @@ export class PcscService extends EventEmitter {
   }
 
   private readNfcCard(reader: PcscReader): void {
-    reader.connect({ share_mode: 2 }, (err, protocol) => {
+    storage.addSystemLog({
+      level: 'INFO',
+      message: `Attempting to read card from reader: ${reader.name}`,
+    });
+    
+    // Try SCARD_SHARE_DIRECT mode first (best for NFC)
+    reader.connect({ share_mode: 3 }, (err, protocol) => {
       if (err) {
         storage.addSystemLog({
           level: 'ERROR',
@@ -224,9 +234,18 @@ export class PcscService extends EventEmitter {
       }
       
       const onReader = (reader: PcscReader) => {
-        if (reader.name.toLowerCase().includes('acr1281') || 
-            reader.name.toLowerCase().includes('dual reader')) {
-          this.nfc?.removeListener('reader', onReader);
+        if (reader.name.toLowerCase().includes('acr1281') && 
+            reader.name.toLowerCase().includes('picc')) {
+          this.currentReader = reader;
+          storage.addSystemLog({
+            level: 'INFO',
+            message: `Selected NFC reader for connection: ${reader.name}`,
+          });
+          try {
+            this.nfc?.removeListener?.('reader', onReader);
+          } catch (e) {
+            // Ignore listener removal errors
+          }
           resolve();
         }
       };
