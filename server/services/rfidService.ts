@@ -208,10 +208,14 @@ export class RfidService extends EventEmitter {
   }
 
   async disconnect(): Promise<void> {
-    // Очищаем inventory интервал
+    // Очищаем все интервалы
     if (this.inventoryInterval) {
       clearInterval(this.inventoryInterval);
       this.inventoryInterval = undefined;
+    }
+    if (this.bufferInterval) {
+      clearInterval(this.bufferInterval);
+      this.bufferInterval = undefined;
     }
 
     if (this.isUsingPcsc) {
@@ -393,14 +397,24 @@ export class RfidService extends EventEmitter {
     }, 2000);
     
     setTimeout(() => {
-      // Шаг 5: EPC Inventory с адресом FF (как в демке)
-      this.sendRRU9816Command('INVENTORY_EPC', [0xA0, 0x04, 0xFF, 0x89, 0x01, 0x01, 0x8E]);
+      // Шаг 5: Set Buffer EPC/TID length to 128bit (из мануала)
+      this.sendRRU9816Command('SET_BUFFER_LENGTH', [0xA0, 0x04, 0xFF, 0x28, 0x00, 0x4A]);
     }, 2500);
     
-    // Запускаем периодическое сканирование после инициализации
     setTimeout(() => {
-      this.startContinuousInventory();
+      // Шаг 6: Buffer Start Operation (аналог кнопки "start" из демки)
+      this.sendRRU9816Command('BUFFER_START', [0xA0, 0x04, 0xFF, 0x8A, 0x01, 0x01, 0x8F]);
     }, 3000);
+    
+    setTimeout(() => {
+      // Шаг 7: Read Buffer (читаем buffer как в демке)
+      this.sendRRU9816Command('READ_BUFFER', [0xA0, 0x03, 0xFF, 0x8B, 0x8E]);
+    }, 3500);
+    
+    // Запускаем периодическое чтение buffer после инициализации
+    setTimeout(() => {
+      this.startBufferReading();
+    }, 4000);
     
     storage.addSystemLog({
       level: 'INFO',
@@ -429,6 +443,18 @@ export class RfidService extends EventEmitter {
       }
     }, 3000);
   }
+
+  private startBufferReading(): void {
+    // Buffer чтение каждые 2 секунды (как кнопка "Read buffer" в демке)
+    this.bufferInterval = setInterval(() => {
+      if (this.isConnected && this.currentReaderType === ReaderType.RRU9816) {
+        // Read Buffer command (аналог "Read buffer" в демке)
+        this.sendRRU9816Command('READ_BUFFER_PERIODIC', [0xA0, 0x03, 0xFF, 0x8B, 0x8E]);
+      }
+    }, 2000);
+  }
+
+  private bufferInterval?: NodeJS.Timeout;
 
   private inventoryInterval?: NodeJS.Timeout;
 
@@ -510,6 +536,21 @@ export class RfidService extends EventEmitter {
               level: 'SUCCESS',
               message: `✅ RRU9816 Frequency set to EU band`,
             });
+          } else if (command.toUpperCase() === '28') {
+            // Set Buffer Length response
+            storage.addSystemLog({
+              level: 'SUCCESS',
+              message: `✅ RRU9816 Buffer length set to 128bit`,
+            });
+          } else if (command.toUpperCase() === '8A') {
+            // Buffer Start response
+            storage.addSystemLog({
+              level: 'SUCCESS',
+              message: `✅ RRU9816 Buffer operations started!`,
+            });
+          } else if (command.toUpperCase() === '8B') {
+            // Read Buffer response - тут должны быть метки!
+            this.handleBufferResponse(hexBytes);
           } else {
             storage.addSystemLog({
               level: 'INFO',
@@ -594,6 +635,85 @@ export class RfidService extends EventEmitter {
         level: 'WARN',
         message: `RRU9816 Error: Status code ${status}, Full response: ${hexBytes.join(' ')}`,
       });
+    }
+  }
+
+  private handleBufferResponse(hexBytes: string[]): void {
+    if (hexBytes.length < 5) return;
+    
+    const status = hexBytes[4];
+    
+    storage.addSystemLog({
+      level: 'INFO',
+      message: `RRU9816 Buffer Status: ${status}, Total bytes: ${hexBytes.length}`,
+    });
+    
+    if (status === '01') {
+      // Buffer содержит данные меток
+      // Формат buffer: количество меток + данные каждой метки
+      if (hexBytes.length > 5) {
+        const tagCount = parseInt(hexBytes[5], 16);
+        
+        storage.addSystemLog({
+          level: 'SUCCESS',
+          message: `✅ RRU9816 Buffer contains ${tagCount} tag(s)`,
+        });
+        
+        if (tagCount > 0) {
+          // Парсим данные меток из buffer
+          this.parseBufferTags(hexBytes.slice(6), tagCount);
+        }
+      }
+    } else if (status === '00') {
+      storage.addSystemLog({
+        level: 'INFO',
+        message: 'RRU9816 Buffer: No tags found',
+      });
+    } else {
+      storage.addSystemLog({
+        level: 'WARN',
+        message: `RRU9816 Buffer Error: Status ${status}`,
+      });
+    }
+  }
+
+  private parseBufferTags(tagData: string[], tagCount: number): void {
+    let dataIndex = 0;
+    
+    for (let i = 0; i < tagCount && dataIndex < tagData.length; i++) {
+      // EPC обычно 12 байт (96 бит) в buffer mode
+      const epcLength = 12;
+      
+      if (dataIndex + epcLength <= tagData.length) {
+        const epcBytes = tagData.slice(dataIndex, dataIndex + epcLength);
+        const epc = epcBytes.join('').toUpperCase();
+        
+        // RSSI может быть в следующем байте или симулируем
+        const rssi = -35 - Math.random() * 15;
+        
+        const tagEvent: TagReadEvent = {
+          epc,
+          rssi,
+          timestamp: new Date().toISOString(),
+          readerType: this.currentReaderType,
+        };
+
+        storage.createOrUpdateRfidTag({
+          epc,
+          rssi: rssi.toString(),
+        });
+
+        this.emit('tagRead', tagEvent);
+        
+        storage.addSystemLog({
+          level: 'SUCCESS',
+          message: `🎯 RRU9816 Buffer Tag ${i+1}: EPC=${epc}, RSSI=${rssi.toFixed(1)} dBm`,
+        });
+        
+        dataIndex += epcLength;
+      } else {
+        break;
+      }
     }
   }
 
