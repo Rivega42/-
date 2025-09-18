@@ -1,0 +1,316 @@
+import { EventEmitter } from 'events';
+import type { TagReadEvent, RfidReaderStatus } from '@shared/schema';
+import { ReaderType } from '@shared/schema';
+import { storage } from '../storage';
+
+// Interface for PC/SC functionality
+interface PcscReader {
+  name: string;
+  connect(options: any, callback: (err: Error | null, protocol?: number) => void): void;
+  transmit(command: Buffer, maxLength: number, callback: (err: Error | null, response?: Buffer) => void): void;
+  disconnect(callback: (err: Error | null) => void): void;
+  on(event: string, listener: (...args: any[]) => void): void;
+}
+
+interface NfcPcsc {
+  on(event: string, listener: (...args: any[]) => void): void;
+}
+
+// APDU Commands for different card types
+const APDU_COMMANDS = {
+  // Get UID for ISO14443 Type A cards (like MIFARE)
+  GET_UID_TYPE_A: Buffer.from([0xFF, 0xCA, 0x00, 0x00, 0x00]),
+  
+  // Select application for ISO14443 Type B cards
+  SELECT_APP_TYPE_B: Buffer.from([0x00, 0xA4, 0x04, 0x00, 0x0E, 0x32, 0x50, 0x41, 0x59, 0x2E, 0x53, 0x59, 0x53, 0x2E, 0x44, 0x44, 0x46, 0x30, 0x31]),
+  
+  // ISO7816 Get Data command for UID
+  GET_DATA: Buffer.from([0x00, 0xCA, 0x01, 0x00, 0x08])
+};
+
+export class PcscService extends EventEmitter {
+  private nfc: NfcPcsc | null = null;
+  private isAvailable = false;
+  private isConnected = false;
+  private currentReader: PcscReader | null = null;
+  private pollingInterval: NodeJS.Timeout | null = null;
+  
+  constructor() {
+    super();
+    this.checkPcscAvailability();
+  }
+
+  private async checkPcscAvailability(): Promise<void> {
+    try {
+      // Try to dynamically import nfc-pcsc (optional dependency)
+      const nfcModule = await import('nfc-pcsc').catch(() => null);
+      if (!nfcModule) throw new Error('nfc-pcsc module not available');
+      
+      const { NFC } = nfcModule;
+      this.nfc = new NFC();
+      this.isAvailable = true;
+      this.setupNfcEventHandlers();
+      
+      storage.addSystemLog({
+        level: 'INFO',
+        message: 'PC/SC service initialized successfully - real hardware support enabled',
+      });
+    } catch (error) {
+      this.isAvailable = false;
+      storage.addSystemLog({
+        level: 'INFO',
+        message: 'PC/SC not available - using simulation mode for ACR1281U-C',
+      });
+    }
+  }
+
+  private setupNfcEventHandlers(): void {
+    if (!this.nfc) return;
+
+    this.nfc.on('reader', (reader: PcscReader) => {
+      storage.addSystemLog({
+        level: 'INFO',
+        message: `PC/SC reader detected: ${reader.name}`,
+      });
+
+      // Check if this is ACR1281U-C reader
+      if (reader.name.toLowerCase().includes('acr1281') || 
+          reader.name.toLowerCase().includes('dual reader')) {
+        this.currentReader = reader;
+        this.setupReaderEventHandlers(reader);
+      }
+    });
+
+    this.nfc.on('error', (error: Error) => {
+      storage.addSystemLog({
+        level: 'ERROR',
+        message: `PC/SC error: ${error.message}`,
+      });
+      this.emit('status', {
+        connected: false,
+        error: error.message,
+      } as RfidReaderStatus);
+    });
+  }
+
+  private setupReaderEventHandlers(reader: PcscReader): void {
+    reader.on('card', () => {
+      storage.addSystemLog({
+        level: 'INFO',
+        message: 'NFC card detected on ACR1281U-C',
+      });
+      this.readNfcCard(reader);
+    });
+
+    reader.on('card.off', () => {
+      storage.addSystemLog({
+        level: 'INFO',
+        message: 'NFC card removed from ACR1281U-C',
+      });
+    });
+
+    reader.on('error', (error: Error) => {
+      storage.addSystemLog({
+        level: 'ERROR',
+        message: `ACR1281U-C reader error: ${error.message}`,
+      });
+    });
+  }
+
+  private readNfcCard(reader: PcscReader): void {
+    reader.connect({ share_mode: 2 }, (err, protocol) => {
+      if (err) {
+        storage.addSystemLog({
+          level: 'ERROR',
+          message: `Failed to connect to card: ${err.message}`,
+        });
+        return;
+      }
+
+      // Try different UID reading strategies
+      this.readCardUid(reader, protocol);
+    });
+  }
+
+  private readCardUid(reader: PcscReader, protocol?: number): void {
+    // Try Type A UID command first (most common)
+    reader.transmit(APDU_COMMANDS.GET_UID_TYPE_A, 256, (err, response) => {
+      if (err) {
+        // Fallback to generic GET_DATA command
+        reader.transmit(APDU_COMMANDS.GET_DATA, 256, (err2, response2) => {
+          if (err2) {
+            storage.addSystemLog({
+              level: 'WARNING',
+              message: `Could not read card UID: ${err2.message}`,
+            });
+            return;
+          }
+          this.processNfcResponse(response2);
+        });
+        return;
+      }
+      this.processNfcResponse(response);
+    });
+  }
+
+  private processNfcResponse(response: Buffer | undefined): void {
+    if (!response || response.length < 2) {
+      storage.addSystemLog({
+        level: 'WARNING',
+        message: 'Invalid NFC card response',
+      });
+      return;
+    }
+
+    // Check for successful response (ends with 90 00)
+    const statusWord = response.slice(-2);
+    if (statusWord[0] !== 0x90 || statusWord[1] !== 0x00) {
+      storage.addSystemLog({
+        level: 'WARNING',
+        message: `NFC command failed with status: ${statusWord.toString('hex')}`,
+      });
+      return;
+    }
+
+    // Extract UID (everything except last 2 status bytes)
+    const uidBytes = response.slice(0, -2);
+    const uid = uidBytes.toString('hex').toUpperCase();
+    
+    // Format with spaces for consistency
+    const formattedUid = uid.replace(/(.{2})/g, '$1 ').trim();
+
+    const tagEvent: TagReadEvent = {
+      epc: formattedUid,
+      rssi: -25, // PC/SC doesn't provide RSSI, use strong signal indication
+      timestamp: new Date().toISOString(),
+      readerType: ReaderType.ACR1281UC,
+    };
+
+    // Store in database
+    storage.createOrUpdateRfidTag({
+      epc: formattedUid,
+      rssi: '-25',
+    });
+
+    // Emit tag read event
+    this.emit('tagRead', tagEvent);
+
+    storage.addSystemLog({
+      level: 'INFO',
+      message: `Real NFC card read: ${formattedUid} (${uidBytes.length} bytes)`,
+    });
+  }
+
+  async connect(): Promise<void> {
+    if (!this.isAvailable) {
+      // Fallback to simulation mode
+      this.startSimulation();
+      return;
+    }
+
+    this.isConnected = true;
+    this.emit('status', {
+      connected: true,
+      readerType: ReaderType.ACR1281UC,
+      port: 'PC/SC',
+    } as RfidReaderStatus);
+
+    storage.addSystemLog({
+      level: 'INFO',
+      message: 'Connected to ACR1281U-C via PC/SC protocol',
+    });
+  }
+
+  async disconnect(): Promise<void> {
+    this.isConnected = false;
+    
+    if (this.pollingInterval) {
+      clearInterval(this.pollingInterval);
+      this.pollingInterval = null;
+    }
+
+    if (this.currentReader) {
+      this.currentReader.disconnect(() => {
+        storage.addSystemLog({
+          level: 'INFO',
+          message: 'Disconnected from ACR1281U-C',
+        });
+      });
+      this.currentReader = null;
+    }
+
+    this.emit('status', {
+      connected: false,
+    } as RfidReaderStatus);
+  }
+
+  private startSimulation(): void {
+    // Simulation mode for environments without PC/SC support
+    this.isConnected = true;
+    this.emit('status', {
+      connected: true,
+      readerType: ReaderType.ACR1281UC,
+      port: 'SIMULATION',
+    } as RfidReaderStatus);
+
+    storage.addSystemLog({
+      level: 'INFO',
+      message: 'ACR1281U-C simulation mode started (PC/SC not available)',
+    });
+
+    // Start polling simulation
+    this.pollingInterval = setInterval(() => {
+      this.simulateNfcDetection();
+    }, 8000 + Math.random() * 4000); // 8-12 seconds
+  }
+
+  private simulateNfcDetection(): void {
+    if (!this.isConnected) return;
+
+    const sampleNfcUids = [
+      '04 A1 2B 34',      // 4-byte UID
+      '04 A1 2B 34 56 C7',  // 7-byte UID 
+      '04 A1 2B 34 56 C7 89 12'  // 10-byte UID
+    ];
+    
+    const randomUid = sampleNfcUids[Math.floor(Math.random() * sampleNfcUids.length)];
+    
+    const tagEvent: TagReadEvent = {
+      epc: randomUid,
+      rssi: -28,
+      timestamp: new Date().toISOString(),
+      readerType: ReaderType.ACR1281UC,
+    };
+
+    storage.createOrUpdateRfidTag({
+      epc: randomUid,
+      rssi: '-28',
+    });
+
+    this.emit('tagRead', tagEvent);
+    
+    storage.addSystemLog({
+      level: 'INFO',
+      message: `Simulated NFC detection: ${randomUid}`,
+    });
+  }
+
+  public getConnectionStatus(): RfidReaderStatus {
+    return {
+      connected: this.isConnected,
+      readerType: ReaderType.ACR1281UC,
+      port: this.isAvailable ? 'PC/SC' : 'SIMULATION',
+    };
+  }
+
+  public isReady(): boolean {
+    return this.isAvailable || true; // Always ready (simulation fallback)
+  }
+
+  public getAvailableReaders(): string[] {
+    // In real PC/SC environment, this would enumerate readers
+    return this.isAvailable ? ['ACR1281U-C'] : ['ACR1281U-C (Simulation)'];
+  }
+}
+
+export const pcscService = new PcscService();
