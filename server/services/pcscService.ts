@@ -99,12 +99,12 @@ export class PcscService extends EventEmitter {
   }
 
   private setupReaderEventHandlers(reader: PcscReader): void {
-    reader.on('card', () => {
+    reader.on('card', (card: any) => {
       storage.addSystemLog({
         level: 'INFO',
         message: 'NFC card detected on ACR1281U-C',
       });
-      this.readNfcCard(reader);
+      this.processAutoCard(card);
     });
 
     reader.on('card.off', () => {
@@ -114,106 +114,60 @@ export class PcscService extends EventEmitter {
       });
     });
 
-    // NOTE: Удален reader.on('error') чтобы не мешал tryConnectModes
-    // Ошибки подключения обрабатываются в коллбеках connect()
-  }
-
-  private readNfcCard(reader: PcscReader): void {
-    storage.addSystemLog({
-      level: 'INFO',
-      message: `Attempting to read card from reader: ${reader.name}`,
-    });
-    
-    // Try multiple connection modes for compatibility
-    this.tryConnectModes(reader, [
-      2, // SCARD_SHARE_SHARED (most compatible)
-      1, // SCARD_SHARE_EXCLUSIVE  
-      3, // SCARD_SHARE_DIRECT
-    ], 0);
-  }
-
-  private tryConnectModes(reader: PcscReader, modes: number[], index: number): void {
-    if (index >= modes.length) {
+    reader.on('error', (error: Error) => {
       storage.addSystemLog({
-        level: 'ERROR',
-        message: `Failed to connect with any mode - tried ${modes.length} different approaches`,
+        level: 'WARNING',
+        message: `Reader error (will retry): ${error.message}`,
       });
-      return;
-    }
+      // Не прерываем работу - это могут быть временные ошибки
+    });
+  }
 
-    const currentMode = modes[index];
+  private processAutoCard(card: any): void {
     storage.addSystemLog({
       level: 'INFO',
-      message: `Trying connection mode ${currentMode}`,
+      message: `Processing card automatically connected by nfc-pcsc`,
     });
 
-    reader.connect({ share_mode: currentMode }, (err, protocol) => {
-      if (err) {
+    try {
+      // nfc-pcsc библиотека автоматически подключается и предоставляет card объект
+      let uid = '';
+      
+      if (card && card.uid) {
+        // Получаем UID напрямую из card объекта
+        uid = Array.from(card.uid).map((b: number) => b.toString(16).padStart(2, '0').toUpperCase()).join(' ');
+        
+        storage.addSystemLog({
+          level: 'INFO',
+          message: `Card UID extracted: ${uid}`,
+        });
+        
+        this.processNfcCard(uid);
+      } else {
         storage.addSystemLog({
           level: 'WARNING',
-          message: `Mode ${currentMode} failed: ${err.message}`,
+          message: `Card object missing UID data: ${JSON.stringify(card)}`,
         });
-        // Try next mode
-        this.tryConnectModes(reader, modes, index + 1);
-        return;
       }
-
+    } catch (error) {
       storage.addSystemLog({
-        level: 'INFO',
-        message: `Successfully connected with mode ${currentMode}, protocol: ${protocol}`,
+        level: 'ERROR',
+        message: `Error processing auto-connected card: ${error instanceof Error ? error.message : String(error)}`,
       });
-
-      // Success! Read the card
-      this.readCardUid(reader, protocol);
-    });
+    }
   }
 
-  private readCardUid(reader: PcscReader, protocol?: number): void {
-    // Try Type A UID command first (most common)
-    reader.transmit(APDU_COMMANDS.GET_UID_TYPE_A, 256, (err, response) => {
-      if (err) {
-        // Fallback to generic GET_DATA command
-        reader.transmit(APDU_COMMANDS.GET_DATA, 256, (err2, response2) => {
-          if (err2) {
-            storage.addSystemLog({
-              level: 'WARNING',
-              message: `Could not read card UID: ${err2.message}`,
-            });
-            return;
-          }
-          this.processNfcResponse(response2);
-        });
-        return;
-      }
-      this.processNfcResponse(response);
-    });
-  }
-
-  private processNfcResponse(response: Buffer | undefined): void {
-    if (!response || response.length < 2) {
+  private processNfcCard(uid: string): void {
+    if (!uid || uid.trim() === '') {
       storage.addSystemLog({
         level: 'WARNING',
-        message: 'Invalid NFC card response',
+        message: 'Empty or invalid UID received',
       });
       return;
     }
 
-    // Check for successful response (ends with 90 00)
-    const statusWord = response.slice(-2);
-    if (statusWord[0] !== 0x90 || statusWord[1] !== 0x00) {
-      storage.addSystemLog({
-        level: 'WARNING',
-        message: `NFC command failed with status: ${statusWord.toString('hex')}`,
-      });
-      return;
-    }
-
-    // Extract UID (everything except last 2 status bytes)
-    const uidBytes = response.slice(0, -2);
-    const uid = uidBytes.toString('hex').toUpperCase();
-    
-    // Format with spaces for consistency
-    const formattedUid = uid.replace(/(.{2})/g, '$1 ').trim();
+    // Format UID with spaces for consistency
+    const formattedUid = uid.trim();
 
     const tagEvent: TagReadEvent = {
       epc: formattedUid,
@@ -233,7 +187,7 @@ export class PcscService extends EventEmitter {
 
     storage.addSystemLog({
       level: 'INFO',
-      message: `Real NFC card read: ${formattedUid} (${uidBytes.length} bytes)`,
+      message: `✅ Real NFC card read: ${formattedUid}`,
     });
   }
 
