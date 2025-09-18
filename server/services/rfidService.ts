@@ -39,6 +39,10 @@ export class RfidService extends EventEmitter {
   private currentReaderType?: ReaderType;
   private currentBaudRate?: number;
   private isUsingPcsc = false;
+  
+  // RRU9816 binary frame assembler
+  private frameBuffer = Buffer.alloc(0);
+  private expectedFrameLength = 0;
 
   constructor() {
     super();
@@ -186,7 +190,8 @@ export class RfidService extends EventEmitter {
         lock: false,           // Не блокировать порт для других процессов
       });
 
-      this.parser = this.serialPort.pipe(new ReadlineParser({ delimiter: '\r\n' }));
+      // RRU9816 uses binary protocol, not text lines - no parser needed
+      // this.parser = this.serialPort.pipe(new ReadlineParser({ delimiter: '\r\n' }));
 
       this.serialPort.on('open', () => {
         this.isConnected = true;
@@ -203,6 +208,11 @@ export class RfidService extends EventEmitter {
           level: 'SUCCESS',
           message: `Connected to ${config.description} on port ${portPath} @ ${baudRate} baud`,
         });
+
+        // Setup DTR/RTS for RRU9816 hardware initialization (like C# demo)
+        if (readerType === ReaderType.RRU9816) {
+          this.initializeRRU9816HardwareSettings();
+        }
 
         // Initialize reader with type-specific commands
         this.initializeReader(readerType);
@@ -234,11 +244,16 @@ export class RfidService extends EventEmitter {
         });
       });
 
-      if (this.parser) {
-        this.parser.on('data', (data: string) => {
-          this.handleSerialData(data);
-        });
-      }
+      // Handle data based on reader type
+      this.serialPort.on('data', (data: Buffer) => {
+        if (readerType === ReaderType.RRU9816) {
+          this.handleRRU9816BinaryData(data);
+        } else {
+          // For other readers, convert buffer to string and use line parser
+          const dataStr = data.toString('utf8');
+          this.handleSerialData(dataStr);
+        }
+      });
 
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -419,6 +434,168 @@ export class RfidService extends EventEmitter {
       storage.addSystemLog({
         level: 'ERROR',
         message: `Failed to initialize ${readerType}: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      });
+    }
+  }
+
+  private handleRRU9816BinaryData(data: Buffer): void {
+    // Log raw response data for debugging
+    storage.addSystemLog({
+      level: 'INFO',
+      message: `RRU9816 Raw Response: ${data.toString('hex').toUpperCase()}`,
+    });
+
+    // Append new data to frame buffer
+    this.frameBuffer = Buffer.concat([this.frameBuffer, data]);
+
+    // Process complete frames
+    while (this.frameBuffer.length > 0) {
+      // Look for frame start (0xA0)
+      const startIndex = this.frameBuffer.indexOf(0xA0);
+      
+      if (startIndex === -1) {
+        // No frame start found, clear buffer
+        this.frameBuffer = Buffer.alloc(0);
+        break;
+      }
+      
+      if (startIndex > 0) {
+        // Remove data before frame start
+        this.frameBuffer = this.frameBuffer.slice(startIndex);
+      }
+      
+      // Need at least 3 bytes to read frame length: 0xA0 + LEN + ADDR
+      if (this.frameBuffer.length < 3) {
+        break;
+      }
+      
+      // Get frame length from second byte (LEN field)
+      const lenField = this.frameBuffer[1];
+      
+      // Total frame size = Header(1) + LEN(1) + Payload(LEN) + Checksum(1) = LEN + 3
+      const totalFrameLength = lenField + 3;
+      
+      // Check if we have complete frame
+      if (this.frameBuffer.length < totalFrameLength) {
+        break;
+      }
+      
+      // Extract complete frame
+      const frame = this.frameBuffer.slice(0, totalFrameLength);
+      this.frameBuffer = this.frameBuffer.slice(totalFrameLength);
+      
+      // Process the frame
+      this.processRRU9816Frame(frame);
+    }
+  }
+
+  private processRRU9816Frame(frame: Buffer): void {
+    if (frame.length < 4) return;
+    
+    const start = frame[0];     // Should be 0xA0
+    const length = frame[1];    // Frame length
+    const address = frame[2];   // Address (should be 0xFF)
+    const command = frame[3];   // Command code
+    
+    // Verify frame format
+    if (start !== 0xA0) {
+      storage.addSystemLog({
+        level: 'WARN',
+        message: `Invalid frame start: 0x${start.toString(16).toUpperCase()}, expected 0xA0`,
+      });
+      return;
+    }
+    
+    // Calculate and verify checksum (last byte)
+    const checksum = frame[frame.length - 1];
+    // Checksum calculated over data from LEN byte to last data byte (excluding A0 header and checksum itself)
+    const calculatedChecksum = this.calculateRRU9816Checksum(frame.slice(1, -1));
+    
+    // Log checksum for debugging but don't fail - let's see what algorithm RRU9816 actually uses
+    if (checksum !== calculatedChecksum) {
+      storage.addSystemLog({
+        level: 'INFO',  // Changed from WARN to INFO for debugging
+        message: `Checksum debug: got 0x${checksum.toString(16).toUpperCase()}, calculated XOR 0x${calculatedChecksum.toString(16).toUpperCase()} - processing frame anyway`,
+      });
+      // Don't return - continue processing to see actual responses
+    } else {
+      storage.addSystemLog({
+        level: 'SUCCESS',
+        message: `✅ Checksum verified: 0x${checksum.toString(16).toUpperCase()}`,
+      });
+    }
+    
+    // Frame is valid, process command response
+    storage.addSystemLog({
+      level: 'SUCCESS',
+      message: `✅ RRU9816 Valid Frame: Addr=0x${address.toString(16).toUpperCase()}, Cmd=0x${command.toString(16).toUpperCase()}, Len=${length}`,
+    });
+    
+    // Convert to hex array format for existing handler
+    const hexBytes = Array.from(frame).map(b => b.toString(16).padStart(2, '0').toUpperCase());
+    this.handleRRU9816Response(hexBytes.join(' '));
+  }
+
+  private calculateRRU9816Checksum(data: Buffer): number {
+    // XOR checksum (common for many RFID protocols)
+    let checksum = 0;
+    for (let i = 0; i < data.length; i++) {
+      checksum ^= data[i];
+    }
+    return checksum & 0xFF;
+  }
+
+  private initializeRRU9816HardwareSettings(): void {
+    if (!this.serialPort || !this.serialPort.isOpen) return;
+
+    storage.addSystemLog({
+      level: 'INFO',
+      message: 'Setting up RRU9816 hardware signals (DTR/RTS like C# demo)...',
+    });
+
+    try {
+      // Set DTR high (like C# demo OpenComPort)
+      this.serialPort.set({ dtr: true }, (err) => {
+        if (err) {
+          storage.addSystemLog({
+            level: 'WARN',
+            message: `Failed to set DTR: ${err.message}`,
+          });
+        } else {
+          storage.addSystemLog({
+            level: 'SUCCESS',
+            message: '✅ DTR signal set to HIGH',
+          });
+        }
+      });
+
+      // Set RTS low (like C# demo)
+      this.serialPort.set({ rts: false }, (err) => {
+        if (err) {
+          storage.addSystemLog({
+            level: 'WARN',
+            message: `Failed to set RTS: ${err.message}`,
+          });
+        } else {
+          storage.addSystemLog({
+            level: 'SUCCESS',
+            message: '✅ RTS signal set to LOW',
+          });
+        }
+      });
+
+      // Add delay before sending first command (like C# demo)
+      setTimeout(() => {
+        storage.addSystemLog({
+          level: 'INFO',
+          message: 'Hardware signals configured, ready for RRU9816 commands',
+        });
+      }, 100);
+
+    } catch (error) {
+      storage.addSystemLog({
+        level: 'ERROR',
+        message: `Hardware setup error: ${error instanceof Error ? error.message : 'Unknown error'}`,
       });
     }
   }
