@@ -128,17 +128,46 @@ export class PcscService extends EventEmitter {
       message: `Attempting to read card from reader: ${reader.name}`,
     });
     
-    // Try SCARD_SHARE_DIRECT mode first (best for NFC)
-    reader.connect({ share_mode: 3 }, (err, protocol) => {
+    // Try multiple connection modes for compatibility
+    this.tryConnectModes(reader, [
+      2, // SCARD_SHARE_SHARED (most compatible)
+      1, // SCARD_SHARE_EXCLUSIVE  
+      3, // SCARD_SHARE_DIRECT
+    ], 0);
+  }
+
+  private tryConnectModes(reader: PcscReader, modes: number[], index: number): void {
+    if (index >= modes.length) {
+      storage.addSystemLog({
+        level: 'ERROR',
+        message: `Failed to connect with any mode - tried ${modes.length} different approaches`,
+      });
+      return;
+    }
+
+    const currentMode = modes[index];
+    storage.addSystemLog({
+      level: 'INFO',
+      message: `Trying connection mode ${currentMode}`,
+    });
+
+    reader.connect({ share_mode: currentMode }, (err, protocol) => {
       if (err) {
         storage.addSystemLog({
-          level: 'ERROR',
-          message: `Failed to connect to card: ${err.message}`,
+          level: 'WARNING',
+          message: `Mode ${currentMode} failed: ${err.message}`,
         });
+        // Try next mode
+        this.tryConnectModes(reader, modes, index + 1);
         return;
       }
 
-      // Try different UID reading strategies
+      storage.addSystemLog({
+        level: 'INFO',
+        message: `Successfully connected with mode ${currentMode}, protocol: ${protocol}`,
+      });
+
+      // Success! Read the card
       this.readCardUid(reader, protocol);
     });
   }

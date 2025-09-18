@@ -1,0 +1,97 @@
+
+RRU9816 RFID Interface
+UHF Desktop Reader
+Connected
+localhost:5000
+Connection Control
+RFID Reader Type
+
+ACR1281U-C DualBoost II USB NFC Reader
+COM Port
+
+COM10
+Baud Rate
+
+115200
+Connect
+Disconnect
+Refresh Ports
+Device Information
+Model:
+ACR1281U-C
+Description:
+ACR1281U-C DualBoost II USB NFC Reader
+Frequency:
+13.56 MHz (NFC/HF)
+Protocol:
+ISO 14443 Type A/B, ISO 7816-4
+Default Baud Rate:
+115200
+Status:
+Connected
+Connected Reader:
+ACR1281U-C
+Port:
+PC/SC
+WebSocket
+Connected
+RFID Tag Readings
+0 tags detected
+Clear
+Start Reading
+Real-time Reading Active
+Rate: 0/sec
+No RFID Tags Detected
+Place RFID tags near the reader antenna to start detection
+
+Start Scanning
+Total Reads
+
+0
+
+Unique Tags
+
+0
+
+Read Rate
+
+0/s
+
+System Log
+Export
+Clear
+[21:45:22] [INFO] NFC card removed from ACR1281U-C
+[21:45:21] [ERROR] ACR1281U-C reader error: Invalid mode
+[21:45:21] [INFO] NFC card detected on ACR1281U-C
+[21:45:21] [INFO] Attempting to read card from reader: ACS ACR1281 1S Dual Reader PICC 0
+[21:45:19] [INFO] NFC card removed from ACR1281U-C
+[21:45:17] [INFO] NFC card detected on ACR1281U-C
+[21:45:17] [INFO] Attempting to read card from reader: ACS ACR1281 1S Dual Reader PICC 0
+[21:45:17] [ERROR] ACR1281U-C reader error: Invalid mode
+[21:45:16] [INFO] Manual inventory requested for ACR1281U-C (always active)
+[21:45:12] [INFO] NFC card removed from ACR1281U-C
+[21:45:11] [INFO] NFC card detected on ACR1281U-C
+[21:45:11] [INFO] Attempting to read card from reader: ACS ACR1281 1S Dual Reader PICC 0
+[21:45:11] [ERROR] ACR1281U-C reader error: Invalid mode
+[21:45:09] [INFO] Manual inventory requested for ACR1281U-C (always active)
+[21:45:09] [INFO] NFC card removed from ACR1281U-C
+[21:45:08] [INFO] NFC card detected on ACR1281U-C
+[21:45:08] [INFO] Attempting to read card from reader: ACS ACR1281 1S Dual Reader PICC 0
+[21:45:08] [ERROR] ACR1281U-C reader error: Invalid mode
+[21:45:04] [INFO] NFC card removed from ACR1281U-C
+[21:45:03] [INFO] Attempting to read card from reader: ACS ACR1281 1S Dual Reader PICC 0
+[21:45:03] [ERROR] ACR1281U-C reader error: Invalid mode
+[21:45:03] [INFO] NFC card detected on ACR1281U-C
+[21:45:00] [INFO] Connected to ACR1281U-C via PC/SC protocol
+[21:45:00] [INFO] ACR1281U-C connected via PC/SC protocol
+[21:44:43] [INFO] PC/SC reader detected: Aktiv Co. ruToken 2
+[21:44:43] [INFO] PC/SC reader detected: Microsoft IFD 0
+[21:44:43] [INFO] PC/SC reader detected: ACS ACR1281 1S Dual Reader SAM 0
+[21:44:43] [INFO] PC/SC reader detected: AKS ifdh 0
+[21:44:43] [INFO] PC/SC reader detected: AKS ifdh 1
+[21:44:43] [INFO] PC/SC reader detected: Aktiv Co. ruToken 0
+[21:44:43] [INFO] PC/SC reader detected: Aktiv Co. ruToken 1
+[21:44:43] [INFO] PC/SC reader detected: ACS ACR1281 1S Dual Reader ICC 0
+[21:44:43] [INFO] PC/SC reader detected: ACS ACR1281 1S Dual Reader PICC 0
+[21:44:43] [INFO] Selected NFC reader: ACS ACR1281 1S Dual Reader PICC 0
+[21:44:43] [INFO] PC/SC service initialized successfully - real hardware support enabled
