@@ -114,12 +114,8 @@ export class PcscService extends EventEmitter {
       });
     });
 
-    reader.on('error', (error: Error) => {
-      storage.addSystemLog({
-        level: 'ERROR',
-        message: `ACR1281U-C reader error: ${error.message}`,
-      });
-    });
+    // NOTE: Удален reader.on('error') чтобы не мешал tryConnectModes
+    // Ошибки подключения обрабатываются в коллбеках connect()
   }
 
   private readNfcCard(reader: PcscReader): void {

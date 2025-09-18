@@ -1,0 +1,84 @@
+[21:52:36] [INFO] NFC card removed from ACR1281U-C
+[21:52:32] [INFO] NFC card detected on ACR1281U-C
+[21:52:32] [INFO] Attempting to read card from reader: ACS ACR1281 1S Dual Reader PICC 0
+[21:52:32] [INFO] Trying connection mode 2
+[21:52:32] [ERROR] ACR1281U-C reader error: Invalid mode
+[21:52:29] [INFO] Manual inventory requested for ACR1281U-C (always active)
+[21:52:25] [INFO] NFC card removed from ACR1281U-C
+[21:52:17] [INFO] NFC card detected on ACR1281U-C
+[21:52:17] [INFO] Attempting to read card from reader: ACS ACR1281 1S Dual Reader PICC 0
+[21:52:17] [INFO] Trying connection mode 2
+[21:52:17] [ERROR] ACR1281U-C reader error: Invalid mode
+[21:52:14] [INFO] Manual inventory requested for ACR1281U-C (always active)
+[21:52:11] [INFO] NFC card removed from ACR1281U-C
+[21:52:03] [ERROR] ACR1281U-C reader error: Invalid mode
+[21:52:03] [INFO] NFC card detected on ACR1281U-C
+[21:52:03] [INFO] Attempting to read card from reader: ACS ACR1281 1S Dual Reader PICC 0
+[21:52:03] [INFO] Trying connection mode 2
+[21:51:50] [INFO] NFC card removed from ACR1281U-C
+[21:51:28] [INFO] NFC card detected on ACR1281U-C
+[21:51:28] [INFO] Attempting to read card from reader: ACS ACR1281 1S Dual Reader PICC 0
+[21:51:28] [INFO] Trying connection mode 2
+[21:51:28] [ERROR] ACR1281U-C reader error: Invalid mode
+[21:50:50] [INFO] NFC card removed from ACR1281U-C
+[21:50:49] [ERROR] ACR1281U-C reader error: Invalid mode
+[21:50:49] [INFO] Trying connection mode 2
+[21:50:49] [INFO] NFC card detected on ACR1281U-C
+[21:50:49] [INFO] Attempting to read card from reader: ACS ACR1281 1S Dual Reader PICC 0
+[21:50:49] [INFO] NFC card removed from ACR1281U-C
+[21:50:48] [INFO] NFC card detected on ACR1281U-C
+[21:50:48] [INFO] Attempting to read card from reader: ACS ACR1281 1S Dual Reader PICC 0
+[21:50:48] [INFO] Trying connection mode 2
+[21:50:48] [ERROR] ACR1281U-C reader error: Invalid mode
+[21:50:43] [INFO] NFC card removed from ACR1281U-C
+[21:50:41] [INFO] NFC card detected on ACR1281U-C
+[21:50:41] [INFO] Attempting to read card from reader: ACS ACR1281 1S Dual Reader PICC 0
+[21:50:41] [INFO] Trying connection mode 2
+[21:50:41] [ERROR] ACR1281U-C reader error: Invalid mode
+[21:50:40] [INFO] NFC card removed from ACR1281U-C
+[21:50:39] [ERROR] ACR1281U-C reader error: Invalid mode
+[21:50:39] [INFO] NFC card detected on ACR1281U-C
+[21:50:39] [INFO] Attempting to read card from reader: ACS ACR1281 1S Dual Reader PICC 0
+[21:50:39] [INFO] Trying connection mode 2
+[21:50:38] [INFO] Manual inventory requested for ACR1281U-C (always active)
+[21:50:38] [INFO] Manual inventory requested for ACR1281U-C (always active)
+[21:50:37] [INFO] Manual inventory requested for ACR1281U-C (always active)
+[21:50:36] [INFO] NFC card removed from ACR1281U-C
+[21:50:36] [INFO] NFC card detected on ACR1281U-C
+[21:50:36] [INFO] Attempting to read card from reader: ACS ACR1281 1S Dual Reader PICC 0
+[21:50:36] [INFO] Trying connection mode 2
+[21:50:36] [ERROR] ACR1281U-C reader error: Invalid mode
+[21:50:34] [INFO] NFC card removed from ACR1281U-C
+[21:50:33] [ERROR] ACR1281U-C reader error: Invalid mode
+[21:50:33] [INFO] NFC card detected on ACR1281U-C
+[21:50:33] [INFO] Attempting to read card from reader: ACS ACR1281 1S Dual Reader PICC 0
+[21:50:33] [INFO] Trying connection mode 2
+[21:50:32] [INFO] NFC card removed from ACR1281U-C
+[21:50:32] [INFO] NFC card detected on ACR1281U-C
+[21:50:32] [INFO] Attempting to read card from reader: ACS ACR1281 1S Dual Reader PICC 0
+[21:50:32] [INFO] Trying connection mode 2
+[21:50:32] [ERROR] ACR1281U-C reader error: Invalid mode
+[21:50:27] [INFO] NFC card removed from ACR1281U-C
+[21:50:25] [INFO] NFC card detected on ACR1281U-C
+[21:50:25] [INFO] Attempting to read card from reader: ACS ACR1281 1S Dual Reader PICC 0
+[21:50:25] [INFO] Trying connection mode 2
+[21:50:25] [ERROR] ACR1281U-C reader error: Invalid mode
+[21:50:24] [INFO] Manual inventory requested for ACR1281U-C (always active)
+[21:50:20] [INFO] NFC card removed from ACR1281U-C
+[21:50:20] [INFO] NFC card detected on ACR1281U-C
+[21:50:20] [INFO] Attempting to read card from reader: ACS ACR1281 1S Dual Reader PICC 0
+[21:50:20] [INFO] Trying connection mode 2
+[21:50:20] [ERROR] ACR1281U-C reader error: Invalid mode
+[21:50:16] [INFO] Connected to ACR1281U-C via PC/SC protocol
+[21:50:16] [INFO] ACR1281U-C connected via PC/SC protocol
+[21:49:59] [INFO] PC/SC reader detected: ACS ACR1281 1S Dual Reader SAM 0
+[21:49:59] [INFO] PC/SC reader detected: AKS ifdh 0
+[21:49:59] [INFO] PC/SC reader detected: AKS ifdh 1
+[21:49:59] [INFO] PC/SC reader detected: Aktiv Co. ruToken 0
+[21:49:59] [INFO] PC/SC reader detected: Aktiv Co. ruToken 1
+[21:49:59] [INFO] PC/SC reader detected: Aktiv Co. ruToken 2
+[21:49:59] [INFO] PC/SC reader detected: Microsoft IFD 0
+[21:49:59] [INFO] PC/SC reader detected: ACS ACR1281 1S Dual Reader ICC 0
+[21:49:59] [INFO] PC/SC reader detected: ACS ACR1281 1S Dual Reader PICC 0
+[21:49:59] [INFO] Selected NFC reader: ACS ACR1281 1S Dual Reader PICC 0
+[21:49:59] [INFO] PC/SC service initialized successfully - real hardware support enabled
