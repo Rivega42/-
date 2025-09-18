@@ -37,6 +37,7 @@ export class RfidService extends EventEmitter {
   private isConnected = false;
   private currentPort?: string;
   private currentReaderType?: ReaderType;
+  private currentBaudRate?: number;
   private isUsingPcsc = false;
 
   constructor() {
@@ -120,7 +121,54 @@ export class RfidService extends EventEmitter {
 
   private async connectSerialReader(portPath: string, readerType: ReaderType, customBaudRate?: number): Promise<void> {
     const config = READER_CONFIGS[readerType];
-    const baudRate = customBaudRate || config.baudRate || 57600;
+    
+    // Если задан кастомный baud rate, используем его
+    if (customBaudRate) {
+      await this.tryConnectWithBaudRate(portPath, readerType, customBaudRate);
+      return;
+    }
+    
+    // Пробуем baud rates из C# демки по порядку: 9600, 57600, 115200, 38400, 19200
+    const baudRates = [9600, 57600, 115200, 38400, 19200];
+    
+    for (const baudRate of baudRates) {
+      try {
+        storage.addSystemLog({
+          level: 'INFO',
+          message: `Trying RRU9816 connection with baud rate ${baudRate}...`,
+        });
+        
+        await this.tryConnectWithBaudRate(portPath, readerType, baudRate);
+        
+        storage.addSystemLog({
+          level: 'SUCCESS',
+          message: `✅ RRU9816 connected successfully with baud rate ${baudRate}!`,
+        });
+        return; // Успешное подключение!
+        
+      } catch (error) {
+        storage.addSystemLog({
+          level: 'WARN',
+          message: `Failed to connect with baud rate ${baudRate}: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        });
+        
+        // Отключаемся перед следующей попыткой
+        if (this.serialPort) {
+          try {
+            this.serialPort.close();
+          } catch (e) {
+            // Игнорируем ошибки закрытия
+          }
+          this.serialPort = undefined;
+        }
+      }
+    }
+    
+    throw new Error('Failed to connect to RRU9816 with any supported baud rate');
+  }
+
+  private async tryConnectWithBaudRate(portPath: string, readerType: ReaderType, baudRate: number): Promise<void> {
+    const config = READER_CONFIGS[readerType];
 
     try {
       // Добавляем принудительные настройки для преодоления блокировки порта
@@ -144,6 +192,7 @@ export class RfidService extends EventEmitter {
         this.isConnected = true;
         this.currentPort = portPath;
         this.currentReaderType = readerType;
+        this.currentBaudRate = baudRate;
         this.emit('status', {
           connected: true,
           readerType,
@@ -152,7 +201,7 @@ export class RfidService extends EventEmitter {
         
         storage.addSystemLog({
           level: 'SUCCESS',
-          message: `Connected to ${config.description} on port ${portPath}`,
+          message: `Connected to ${config.description} on port ${portPath} @ ${baudRate} baud`,
         });
 
         // Initialize reader with type-specific commands
@@ -418,7 +467,12 @@ export class RfidService extends EventEmitter {
     
     storage.addSystemLog({
       level: 'INFO',
-      message: 'Starting RRU9816 RFID initialization (Demo compatible)...',
+      message: `Starting RRU9816 RFID initialization with baud rate ${this.currentBaudRate} (Demo compatible)...`,
+    });
+    
+    storage.addSystemLog({
+      level: 'INFO',
+      message: `RRU9816 - Port: ${this.currentPort}, Baud: ${this.currentBaudRate}, Address: FF (like C# demo)`,
     });
   }
 
