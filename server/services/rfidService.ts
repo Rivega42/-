@@ -208,6 +208,12 @@ export class RfidService extends EventEmitter {
   }
 
   async disconnect(): Promise<void> {
+    // Очищаем inventory интервал
+    if (this.inventoryInterval) {
+      clearInterval(this.inventoryInterval);
+      this.inventoryInterval = undefined;
+    }
+
     if (this.isUsingPcsc) {
       // Disconnect PC/SC reader
       await pcscService.disconnect();
@@ -365,28 +371,21 @@ export class RfidService extends EventEmitter {
   }
 
   private initializeRRU9816(): void {
-    // RRU9816 требует поэтапной инициализации согласно мануалу
+    // RRU9816 правильная инициализация согласно мануалу
     setTimeout(() => {
-      // Шаг 1: Установка параметров считывателя (Power, Frequency)
-      this.sendRRU9816Command('SET_POWER', [0xA0, 0x07, 0x01, 0x76, 0x1F, 0x1F, 0x1F, 0x1F, 0x22]);
+      // Шаг 1: GET READER INFO для проверки связи
+      this.sendRRU9816Command('GET_INFO', [0xA0, 0x03, 0x01, 0x21, 0x00, 0x24]);
     }, 500);
     
     setTimeout(() => {
-      // Шаг 2: Настройка частоты (EU 865-868 MHz)
-      this.sendRRU9816Command('SET_FREQUENCY', [0xA0, 0x05, 0x01, 0x79, 0x00, 0x01, 0x22]);
+      // Шаг 2: Базовый inventory без дополнительных параметров
+      this.sendRRU9816Command('INVENTORY_SIMPLE', [0xA0, 0x04, 0x01, 0x89, 0x01, 0x01, 0x8F]);
     }, 1000);
     
-    setTimeout(() => {
-      // Шаг 3: Query Tag EPC с правильными параметрами (Q=4, S=0 для одной метки)
-      this.sendRRU9816Command('INVENTORY_EPC', [0xA0, 0x04, 0x01, 0x89, 0x00, 0x01, 0x8E]);
-    }, 1500);
-    
-    // Запускаем непрерывное сканирование
-    this.startContinuousInventory();
-    
+    // НЕ запускаем непрерывное сканирование пока не получим ответ
     storage.addSystemLog({
       level: 'INFO',
-      message: 'Starting RRU9816 RFID inventory scan...',
+      message: 'Starting RRU9816 RFID initialization...',
     });
   }
 
@@ -403,89 +402,135 @@ export class RfidService extends EventEmitter {
   }
 
   private startContinuousInventory(): void {
-    // Запускаем повторяющийся inventory каждые 2 секунды
-    setInterval(() => {
+    // Запускаем умеренное сканирование каждые 5 секунд ТОЛЬКО если получили ответ
+    this.inventoryInterval = setInterval(() => {
       if (this.isConnected && this.currentReaderType === ReaderType.RRU9816) {
-        // Команда continuous inventory с правильными параметрами
-        this.sendRRU9816Command('CONTINUOUS_INVENTORY', [0xA0, 0x04, 0x01, 0x89, 0x00, 0x01, 0x8E]);
+        // Отправляем простую команду inventory
+        this.sendRRU9816Command('PERIODIC_INVENTORY', [0xA0, 0x04, 0x01, 0x89, 0x01, 0x01, 0x8F]);
       }
-    }, 2000);
+    }, 5000);
   }
+
+  private inventoryInterval?: NodeJS.Timeout;
 
   private handleRRU9816Response(data: string): void {
     try {
-      // RRU9816 возвращает данные в hex формате согласно мануалу
-      // Например: A0 06 01 89 01 12 34 56 78 90 AB CD EF 6F
-      
-      // Конвертируем строку в hex байты
-      const hexBytes = data.replace(/\s+/g, '').match(/.{2}/g);
-      if (!hexBytes || hexBytes.length < 6) return;
-      
-      // Проверяем заголовок команды (A0 для RRU9816)
-      if (hexBytes[0].toUpperCase() !== 'A0') return;
-      
-      const command = hexBytes[3]; // Команда (89 = Inventory)
-      
-      if (command === '89') {
-        // Inventory Response - содержит EPC данные
-        const status = hexBytes[4];
-        
-        if (status === '01') {
-          // Успешный ответ с EPC данными
-          // EPC данные начинаются с 5-го байта
-          const epcBytes = hexBytes.slice(5, -1); // Исключаем последний байт (checksum)
-          
-          if (epcBytes.length >= 6) { // Минимум 6 байт для EPC
-            const epc = epcBytes.join(' ').toUpperCase();
-            
-            // Симулируем RSSI (RRU9816 не всегда передает RSSI в inventory)
-            const rssi = -45 + Math.random() * 20; // Случайное значение от -45 до -25 dBm
-            
-            const tagEvent: TagReadEvent = {
-              epc,
-              rssi,
-              timestamp: new Date().toISOString(),
-              readerType: this.currentReaderType,
-            };
+      // Детальное логирование для отладки
+      storage.addSystemLog({
+        level: 'INFO',
+        message: `RRU9816 Raw Response: "${data}" (length: ${data.length})`,
+      });
 
-            // Store in database
-            storage.createOrUpdateRfidTag({
-              epc,
-              rssi: rssi.toString(),
-            });
-
-            // Emit tag read event
-            this.emit('tagRead', tagEvent);
-            
-            storage.addSystemLog({
-              level: 'SUCCESS',
-              message: `RRU9816 Tag detected: EPC=${epc}, RSSI=${rssi.toFixed(1)} dBm`,
-            });
-          }
-        } else if (status === '00') {
-          // Нет меток в зоне видимости
-          storage.addSystemLog({
-            level: 'INFO',
-            message: 'RRU9816: No tags in range',
-          });
-        } else {
-          // Ошибка
-          storage.addSystemLog({
-            level: 'WARN',
-            message: `RRU9816 Error: Status code ${status}`,
-          });
-        }
+      // Проверяем разные форматы ответов
+      // Формат 1: Hex байты с пробелами "A0 06 01 89 01..."
+      // Формат 2: Hex байты без пробелов "A00601890..."
+      // Формат 3: ASCII текст
+      
+      let hexBytes: string[] = [];
+      
+      // Пробуем парсить как hex с пробелами
+      if (data.includes(' ')) {
+        hexBytes = data.trim().split(/\s+/).filter(byte => byte.length === 2);
+      } else if (data.length % 2 === 0 && /^[0-9A-Fa-f]+$/.test(data)) {
+        // Парсим как hex без пробелов
+        hexBytes = data.match(/.{2}/g) || [];
       } else {
-        // Другие команды (настройка параметров)
+        // Возможно ASCII ответ
         storage.addSystemLog({
           level: 'INFO',
-          message: `RRU9816 Response: Command ${command}, Data: ${data}`,
+          message: `RRU9816 ASCII Response: ${data}`,
+        });
+        return;
+      }
+      
+      if (hexBytes.length < 4) {
+        storage.addSystemLog({
+          level: 'WARN',
+          message: `RRU9816 Short Response: ${hexBytes.length} bytes`,
+        });
+        return;
+      }
+
+      // Проверяем заголовок A0
+      if (hexBytes[0].toUpperCase() === 'A0') {
+        const length = parseInt(hexBytes[1], 16);
+        const address = hexBytes[2];
+        const command = hexBytes[3];
+        
+        storage.addSystemLog({
+          level: 'INFO',
+          message: `RRU9816 Parsed: Len=${length}, Addr=${address}, Cmd=${command}`,
+        });
+        
+        if (command.toUpperCase() === '89') {
+          // Inventory command response
+          this.handleInventoryResponse(hexBytes);
+        } else if (command.toUpperCase() === '21') {
+          // Get Info response
+          storage.addSystemLog({
+            level: 'SUCCESS',
+            message: `RRU9816 Info Response: ${hexBytes.slice(4).join(' ')}`,
+          });
+          // Теперь можем запустить inventory
+          setTimeout(() => {
+            this.startContinuousInventory();
+          }, 1000);
+        }
+      } else {
+        storage.addSystemLog({
+          level: 'WARN',
+          message: `RRU9816 Invalid header: ${hexBytes[0]} (expected A0)`,
         });
       }
     } catch (error) {
       storage.addSystemLog({
         level: 'ERROR',
         message: `RRU9816 Parse Error: ${error instanceof Error ? error.message : 'Unknown'}`,
+      });
+    }
+  }
+
+  private handleInventoryResponse(hexBytes: string[]): void {
+    if (hexBytes.length < 5) return;
+    
+    const status = hexBytes[4];
+    
+    if (status === '01') {
+      // Успешный ответ с EPC данными
+      const epcBytes = hexBytes.slice(5, -1); // Исключаем checksum
+      
+      if (epcBytes.length >= 6) {
+        const epc = epcBytes.join(' ').toUpperCase();
+        const rssi = -45 + Math.random() * 20;
+        
+        const tagEvent: TagReadEvent = {
+          epc,
+          rssi,
+          timestamp: new Date().toISOString(),
+          readerType: this.currentReaderType,
+        };
+
+        storage.createOrUpdateRfidTag({
+          epc,
+          rssi: rssi.toString(),
+        });
+
+        this.emit('tagRead', tagEvent);
+        
+        storage.addSystemLog({
+          level: 'SUCCESS',
+          message: `🎯 RRU9816 Tag detected: EPC=${epc}, RSSI=${rssi.toFixed(1)} dBm`,
+        });
+      }
+    } else if (status === '00') {
+      storage.addSystemLog({
+        level: 'INFO',
+        message: 'RRU9816: No tags in range',
+      });
+    } else {
+      storage.addSystemLog({
+        level: 'WARN',
+        message: `RRU9816 Error: Status code ${status}`,
       });
     }
   }
