@@ -4,6 +4,7 @@ import { WebSocketServer, WebSocket } from "ws";
 import { storage } from "./storage";
 import { rfidService } from "./services/rfidService";
 import type { WebSocketMessage, TagReadEvent, RfidReaderStatus, SystemLog } from "@shared/schema";
+import { ReaderType } from "@shared/schema";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   const httpServer = createServer(app);
@@ -76,17 +77,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get RFID reader configurations
+  app.get("/api/reader-configs", (req, res) => {
+    try {
+      const configs = rfidService.getReaderConfigs();
+      res.json({ configs });
+    } catch (error) {
+      res.status(500).json({ 
+        error: error instanceof Error ? error.message : 'Failed to get reader configs' 
+      });
+    }
+  });
+
   // Connect to RFID reader
   app.post("/api/connect", async (req, res) => {
     try {
-      const { port, baudRate = 57600 } = req.body;
+      const { port, readerType, baudRate } = req.body;
       
       if (!port) {
         return res.status(400).json({ error: 'Port is required' });
       }
+      
+      if (!readerType) {
+        return res.status(400).json({ error: 'Reader type is required' });
+      }
 
-      await rfidService.connect(port, baudRate);
-      res.json({ success: true, message: 'Connected successfully' });
+      // Validate reader type
+      if (!Object.values(ReaderType).includes(readerType)) {
+        return res.status(400).json({ error: 'Invalid reader type' });
+      }
+
+      await rfidService.connect(port, readerType, baudRate);
+      res.json({ success: true, message: `Connected to ${readerType} successfully` });
     } catch (error) {
       res.status(500).json({ 
         error: error instanceof Error ? error.message : 'Failed to connect' 

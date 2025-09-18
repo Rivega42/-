@@ -2,13 +2,33 @@ import { SerialPort } from 'serialport';
 import { ReadlineParser } from '@serialport/parser-readline';
 import EventEmitter from 'events';
 import { storage } from '../storage';
-import type { TagReadEvent, RfidReaderStatus } from '@shared/schema';
+import type { TagReadEvent, RfidReaderStatus, ReaderConfig } from '@shared/schema';
+import { ReaderType } from '@shared/schema';
+
+// Reader configurations for different models
+const READER_CONFIGS: Record<ReaderType, ReaderConfig> = {
+  [ReaderType.RRU9816]: {
+    type: ReaderType.RRU9816,
+    baudRate: 57600,
+    description: 'RRU9816 UHF RFID Reader',
+    protocol: 'EPC C1G2 Protocol',
+    frequency: '860-960MHz'
+  },
+  [ReaderType.IQRFID5102]: {
+    type: ReaderType.IQRFID5102,
+    baudRate: 115200,
+    description: 'IQRFID-5102 Desktop UHF RFID Reader',
+    protocol: 'EPC Class 1 Gen2 (ISO18000-6C)',
+    frequency: 'UHF 860-960MHz'
+  }
+};
 
 export class RfidService extends EventEmitter {
   private serialPort?: SerialPort;
   private parser?: ReadlineParser;
   private isConnected = false;
   private currentPort?: string;
+  private currentReaderType?: ReaderType;
 
   constructor() {
     super();
@@ -27,10 +47,13 @@ export class RfidService extends EventEmitter {
     }
   }
 
-  async connect(portPath: string, baudRate: number = 57600): Promise<void> {
+  async connect(portPath: string, readerType: ReaderType, customBaudRate?: number): Promise<void> {
     if (this.isConnected) {
       await this.disconnect();
     }
+
+    const config = READER_CONFIGS[readerType];
+    const baudRate = customBaudRate || config.baudRate || 57600;
 
     try {
       this.serialPort = new SerialPort({
@@ -46,18 +69,20 @@ export class RfidService extends EventEmitter {
       this.serialPort.on('open', () => {
         this.isConnected = true;
         this.currentPort = portPath;
+        this.currentReaderType = readerType;
         this.emit('status', {
           connected: true,
+          readerType,
           port: portPath,
         } as RfidReaderStatus);
         
         storage.addSystemLog({
           level: 'SUCCESS',
-          message: `Connected to RRU9816 on port ${portPath}`,
+          message: `Connected to ${config.description} on port ${portPath}`,
         });
 
-        // Initialize reader - send inventory command
-        this.startInventory();
+        // Initialize reader with type-specific commands
+        this.initializeReader(readerType);
       });
 
       this.serialPort.on('error', (error) => {
@@ -75,6 +100,7 @@ export class RfidService extends EventEmitter {
       this.serialPort.on('close', () => {
         this.isConnected = false;
         this.currentPort = undefined;
+        this.currentReaderType = undefined;
         this.emit('status', {
           connected: false,
         } as RfidReaderStatus);
@@ -141,6 +167,7 @@ export class RfidService extends EventEmitter {
           epc,
           rssi,
           timestamp: new Date().toISOString(),
+          readerType: this.currentReaderType,
         };
 
         // Store in database
@@ -166,38 +193,74 @@ export class RfidService extends EventEmitter {
     }
   }
 
-  private startInventory(): void {
+  private initializeReader(readerType: ReaderType): void {
     if (!this.serialPort || !this.serialPort.isOpen) return;
 
-    // Send inventory command - this would be specific to RRU9816 protocol
-    // For now, using a generic approach
     try {
-      // Most UHF RFID readers use commands like this
-      // Actual RRU9816 might need specific hex commands
-      const inventoryCommand = Buffer.from([0xA0, 0x03, 0x01, 0x89, 0x01, 0x8D]); // Example command
-      this.serialPort.write(inventoryCommand);
-      
-      storage.addSystemLog({
-        level: 'INFO',
-        message: 'Starting RFID inventory scan...',
-      });
+      switch (readerType) {
+        case ReaderType.RRU9816:
+          this.initializeRRU9816();
+          break;
+        case ReaderType.IQRFID5102:
+          this.initializeIQRFID5102();
+          break;
+        default:
+          storage.addSystemLog({
+            level: 'WARNING',
+            message: `Unknown reader type: ${readerType}`,
+          });
+      }
     } catch (error) {
       storage.addSystemLog({
         level: 'ERROR',
-        message: `Failed to start inventory: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        message: `Failed to initialize ${readerType}: ${error instanceof Error ? error.message : 'Unknown error'}`,
       });
     }
   }
 
+  private initializeRRU9816(): void {
+    // RRU9816 specific initialization commands
+    const inventoryCommand = Buffer.from([0xA0, 0x03, 0x01, 0x89, 0x01, 0x8D]);
+    this.serialPort?.write(inventoryCommand);
+    
+    storage.addSystemLog({
+      level: 'INFO',
+      message: 'Starting RRU9816 RFID inventory scan...',
+    });
+  }
+
+  private initializeIQRFID5102(): void {
+    // IQRFID-5102 specific initialization commands
+    // This reader may use different command protocol
+    const inventoryCommand = Buffer.from([0xBB, 0x00, 0x01, 0x00, 0x01, 0x7E]);
+    this.serialPort?.write(inventoryCommand);
+    
+    storage.addSystemLog({
+      level: 'INFO',
+      message: 'Starting IQRFID-5102 RFID inventory scan...',
+    });
+  }
+
   public manualInventory(): void {
-    this.startInventory();
+    if (this.currentReaderType) {
+      this.initializeReader(this.currentReaderType);
+    }
   }
 
   public getConnectionStatus(): RfidReaderStatus {
     return {
       connected: this.isConnected,
+      readerType: this.currentReaderType,
       port: this.currentPort,
     };
+  }
+
+  public getReaderConfigs(): Record<ReaderType, ReaderConfig> {
+    return READER_CONFIGS;
+  }
+
+  public getReaderConfig(readerType: ReaderType): ReaderConfig {
+    return READER_CONFIGS[readerType];
   }
 }
 
