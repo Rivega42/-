@@ -1,0 +1,83 @@
+C:\RFIDIntegrator>npm install nfc-pcsc
+npm warn deprecated @esbuild-kit/esm-loader@2.6.5: Merged into tsx: https://tsx.is
+npm warn deprecated @esbuild-kit/core-utils@3.3.2: Merged into tsx: https://tsx.is
+npm warn cleanup Failed to remove some directories [
+npm warn cleanup   [
+npm warn cleanup     '\\\\?\\C:\\RFIDIntegrator\\node_modules',
+npm warn cleanup     [Error: EPERM: operation not permitted, rmdir 'C:\RFIDIntegrator\node_modules\@tanstack\react-query\build\codemods\src\v5\remove-overloads'] {
+npm warn cleanup       errno: -4048,
+npm warn cleanup       code: 'EPERM',
+npm warn cleanup       syscall: 'rmdir',
+npm warn cleanup       path: 'C:\\RFIDIntegrator\\node_modules\\@tanstack\\react-query\\build\\codemods\\src\\v5\\remove-overloads'
+npm warn cleanup     }
+npm warn cleanup   ],
+npm warn cleanup   [
+npm warn cleanup     '\\\\?\\C:\\RFIDIntegrator\\node_modules\\framer-motion',
+npm warn cleanup     [Error: EPERM: operation not permitted, rmdir 'C:\RFIDIntegrator\node_modules\framer-motion\dist'] {
+npm warn cleanup       errno: -4048,
+npm warn cleanup       code: 'EPERM',
+npm warn cleanup       syscall: 'rmdir',
+npm warn cleanup       path: 'C:\\RFIDIntegrator\\node_modules\\framer-motion\\dist'
+npm warn cleanup     }
+npm warn cleanup   ],
+npm warn cleanup   [
+npm warn cleanup     '\\\\?\\C:\\RFIDIntegrator\\node_modules\\@tanstack',
+npm warn cleanup     [Error: EPERM: operation not permitted, rmdir 'C:\RFIDIntegrator\node_modules\@tanstack\react-query\build'] {
+npm warn cleanup       errno: -4048,
+npm warn cleanup       code: 'EPERM',
+npm warn cleanup       syscall: 'rmdir',
+npm warn cleanup       path: 'C:\\RFIDIntegrator\\node_modules\\@tanstack\\react-query\\build'
+npm warn cleanup     }
+npm warn cleanup   ]
+npm warn cleanup ]
+npm error code 1
+npm error path C:\RFIDIntegrator\node_modules\@pokusew\pcsclite
+npm error command failed
+npm error command C:\WINDOWS\system32\cmd.exe /d /s /c node-gyp rebuild
+npm error gyp info it worked if it ends with ok
+npm error gyp info using node-gyp@11.2.0
+npm error gyp info using node@22.18.0 | win32 | x64
+npm error gyp info find Python using Python version 3.13.5 found at "C:\Users\admin\AppData\Local\Programs\Python\Python313\python.exe"
+npm error gyp ERR! find VS
+npm error gyp ERR! find VS msvs_version not set from command line or npm config
+npm error gyp ERR! find VS VCINSTALLDIR not set, not running in VS Command Prompt
+npm error gyp ERR! find VS could not use PowerShell to find Visual Studio 2017 or newer, try re-running with '--loglevel silly' for more details.
+npm error gyp ERR! find VS
+npm error gyp ERR! find VS Failure details: undefined
+npm error gyp ERR! find VS unknown version "undefined" found at "C:\Program Files\Microsoft Visual Studio\18\Insiders"
+npm error gyp ERR! find VS checking VS2022 (17.14.36511.14) found at:
+npm error gyp ERR! find VS "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools"
+npm error gyp ERR! find VS - found "Visual Studio C++ core features"
+npm error gyp ERR! find VS - missing any VC++ toolset
+npm error gyp ERR! find VS checking VS2022 (17.14.36511.14) found at:
+npm error gyp ERR! find VS "C:\Program Files\Microsoft Visual Studio\2022\Community"
+npm error gyp ERR! find VS - found "Visual Studio C++ core features"
+npm error gyp ERR! find VS - missing any VC++ toolset
+npm error gyp ERR! find VS could not find a version of Visual Studio 2017 or newer to use
+npm error gyp ERR! find VS not looking for VS2017 as it is only supported up to Node.js 21
+npm error gyp ERR! find VS not looking for VS2017 as it is only supported up to Node.js 21
+npm error gyp ERR! find VS not looking for VS2017 as it is only supported up to Node.js 21
+npm error gyp ERR! find VS not looking for VS2015 as it is only supported up to Node.js 18
+npm error gyp ERR! find VS not looking for VS2013 as it is only supported up to Node.js 8
+npm error gyp ERR! find VS
+npm error gyp ERR! find VS **************************************************************
+npm error gyp ERR! find VS You need to install the latest version of Visual Studio
+npm error gyp ERR! find VS including the "Desktop development with C++" workload.
+npm error gyp ERR! find VS For more information consult the documentation at:
+npm error gyp ERR! find VS https://github.com/nodejs/node-gyp#on-windows
+npm error gyp ERR! find VS **************************************************************
+npm error gyp ERR! find VS
+npm error gyp ERR! configure error
+npm error gyp ERR! stack Error: Could not find any Visual Studio installation to use
+npm error gyp ERR! stack at VisualStudioFinder.fail (C:\Program Files\nodejs\node_modules\npm\node_modules\node-gyp\lib\find-visualstudio.js:118:11)
+npm error gyp ERR! stack at VisualStudioFinder.findVisualStudio (C:\Program Files\nodejs\node_modules\npm\node_modules\node-gyp\lib\find-visualstudio.js:74:17)
+npm error gyp ERR! stack at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+npm error gyp ERR! stack at async createBuildDir (C:\Program Files\nodejs\node_modules\npm\node_modules\node-gyp\lib\configure.js:112:18)
+npm error gyp ERR! stack at async run (C:\Program Files\nodejs\node_modules\npm\node_modules\node-gyp\bin\node-gyp.js:81:18)
+npm error gyp ERR! System Windows_NT 10.0.22631
+npm error gyp ERR! command "C:\\Program Files\\nodejs\\node.exe" "C:\\Program Files\\nodejs\\node_modules\\npm\\node_modules\\node-gyp\\bin\\node-gyp.js" "rebuild"
+npm error gyp ERR! cwd C:\RFIDIntegrator\node_modules\@pokusew\pcsclite
+npm error gyp ERR! node -v v22.18.0
+npm error gyp ERR! node-gyp -v v11.2.0
+npm error gyp ERR! not ok
+npm error A complete log of this run can be found in: C:\Users\admin\AppData\Local\npm-cache\_logs\2025-09-18T17_08_08_350Z-debug-0.log
