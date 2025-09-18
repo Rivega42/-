@@ -34,9 +34,25 @@ export type RfidTag = typeof rfidTags.$inferSelect;
 export type InsertSystemLog = z.infer<typeof insertSystemLogSchema>;
 export type SystemLog = typeof systemLogs.$inferSelect;
 
+// RFID Reader Types
+export enum ReaderType {
+  RRU9816 = 'RRU9816',
+  IQRFID5102 = 'IQRFID-5102'
+}
+
+export interface ReaderConfig {
+  type: ReaderType;
+  port?: string;
+  baudRate?: number;
+  description: string;
+  protocol: string;
+  frequency: string;
+}
+
 // WebSocket message types
 export interface RfidReaderStatus {
   connected: boolean;
+  readerType?: ReaderType;
   port?: string;
   error?: string;
 }
@@ -45,6 +61,7 @@ export interface TagReadEvent {
   epc: string;
   rssi: number;
   timestamp: string;
+  readerType?: ReaderType;
 }
 
 export interface WebSocketMessage {
