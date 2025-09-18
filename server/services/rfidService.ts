@@ -4,6 +4,7 @@ import EventEmitter from 'events';
 import { storage } from '../storage';
 import type { TagReadEvent, RfidReaderStatus, ReaderConfig } from '@shared/schema';
 import { ReaderType } from '@shared/schema';
+import { pcscService } from './pcscService';
 
 // Reader configurations for different models
 const READER_CONFIGS: Record<ReaderType, ReaderConfig> = {
@@ -36,9 +37,22 @@ export class RfidService extends EventEmitter {
   private isConnected = false;
   private currentPort?: string;
   private currentReaderType?: ReaderType;
+  private isUsingPcsc = false;
 
   constructor() {
     super();
+    this.setupPcscEventHandlers();
+  }
+
+  private setupPcscEventHandlers(): void {
+    // Forward PC/SC service events to main service
+    pcscService.on('tagRead', (tagEvent: TagReadEvent) => {
+      this.emit('tagRead', tagEvent);
+    });
+
+    pcscService.on('status', (status: RfidReaderStatus) => {
+      this.emit('status', status);
+    });
   }
 
   async getAvailablePorts(): Promise<string[]> {
@@ -59,6 +73,52 @@ export class RfidService extends EventEmitter {
       await this.disconnect();
     }
 
+    this.currentReaderType = readerType;
+
+    // Route based on reader type: PC/SC for ACR1281U-C, Serial for UHF readers
+    if (readerType === ReaderType.ACR1281UC) {
+      return this.connectPcscReader();
+    } else {
+      return this.connectSerialReader(portPath, readerType, customBaudRate);
+    }
+  }
+
+  private async connectPcscReader(): Promise<void> {
+    try {
+      this.isUsingPcsc = true;
+      await pcscService.connect();
+      
+      this.isConnected = true;
+      this.currentPort = 'PC/SC';
+
+      storage.addSystemLog({
+        level: 'INFO',
+        message: 'ACR1281U-C connected via PC/SC protocol',
+      });
+
+      this.emit('status', {
+        connected: true,
+        readerType: ReaderType.ACR1281UC,
+        port: 'PC/SC',
+      } as RfidReaderStatus);
+
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      storage.addSystemLog({
+        level: 'ERROR',
+        message: `Failed to connect via PC/SC: ${errorMessage}`,
+      });
+      
+      this.emit('status', {
+        connected: false,
+        error: errorMessage,
+      } as RfidReaderStatus);
+      
+      throw error;
+    }
+  }
+
+  private async connectSerialReader(portPath: string, readerType: ReaderType, customBaudRate?: number): Promise<void> {
     const config = READER_CONFIGS[readerType];
     const baudRate = customBaudRate || config.baudRate || 57600;
 
@@ -141,7 +201,12 @@ export class RfidService extends EventEmitter {
   }
 
   async disconnect(): Promise<void> {
-    if (this.serialPort && this.serialPort.isOpen) {
+    if (this.isUsingPcsc) {
+      // Disconnect PC/SC reader
+      await pcscService.disconnect();
+      this.isUsingPcsc = false;
+    } else if (this.serialPort && this.serialPort.isOpen) {
+      // Disconnect serial reader
       return new Promise((resolve) => {
         this.serialPort!.close(() => {
           this.serialPort = undefined;
@@ -150,6 +215,10 @@ export class RfidService extends EventEmitter {
         });
       });
     }
+
+    this.isConnected = false;
+    this.currentPort = undefined;
+    this.currentReaderType = undefined;
   }
 
   private handleSerialData(data: string): void {
@@ -299,57 +368,31 @@ export class RfidService extends EventEmitter {
   }
 
   private initializeACR1281UC(): void {
-    // ACR1281U-C NFC reader simulation
-    // Note: Real ACR1281U-C uses PC/SC protocol, not serial
-    // This is a demo simulation for testing NFC parsing functionality
-    
+    // ACR1281U-C now uses dedicated PC/SC service
+    // This method is kept for compatibility but delegates to PC/SC service
     storage.addSystemLog({
       level: 'INFO',
-      message: 'ACR1281U-C simulation mode - starting NFC card detection...',
+      message: 'ACR1281U-C initialization handled by PC/SC service',
     });
-    
-    // Simulate NFC card detection with demo data after 2 seconds
-    setTimeout(() => {
-      if (this.currentReaderType === ReaderType.ACR1281UC && this.isConnected) {
-        this.simulateNfcDetection();
-      }
-    }, 2000);
-  }
-
-  private simulateNfcDetection(): void {
-    // Simulate different NFC UID lengths for testing
-    const sampleNfcUids = [
-      '04A12B34',      // 4-byte UID (8 hex chars)
-      '04A12B3456C7',  // 7-byte UID (14 hex chars) 
-      '04A12B3456C78912'  // 10-byte UID (20 hex chars)
-    ];
-    
-    const randomUid = sampleNfcUids[Math.floor(Math.random() * sampleNfcUids.length)];
-    
-    // Simulate the NFC reader returning UID data
-    this.handleNfcData(randomUid);
-    
-    storage.addSystemLog({
-      level: 'INFO',
-      message: `ACR1281U-C simulation: Generated demo NFC UID ${randomUid}`,
-    });
-
-    // Schedule next simulation in 5-10 seconds for continuous demo
-    const nextDelay = 5000 + Math.random() * 5000;
-    setTimeout(() => {
-      if (this.currentReaderType === ReaderType.ACR1281UC && this.isConnected) {
-        this.simulateNfcDetection();
-      }
-    }, nextDelay);
   }
 
   public manualInventory(): void {
-    if (this.currentReaderType) {
+    if (this.isUsingPcsc) {
+      // PC/SC readers are always polling automatically
+      storage.addSystemLog({
+        level: 'INFO',
+        message: 'Manual inventory requested for ACR1281U-C (always active)',
+      });
+    } else if (this.currentReaderType) {
       this.initializeReader(this.currentReaderType);
     }
   }
 
   public getConnectionStatus(): RfidReaderStatus {
+    if (this.isUsingPcsc) {
+      return pcscService.getConnectionStatus();
+    }
+    
     return {
       connected: this.isConnected,
       readerType: this.currentReaderType,

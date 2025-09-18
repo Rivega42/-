@@ -34,10 +34,11 @@ export class PcscService extends EventEmitter {
   private isConnected = false;
   private currentReader: PcscReader | null = null;
   private pollingInterval: NodeJS.Timeout | null = null;
+  private initPromise: Promise<void>;
   
   constructor() {
     super();
-    this.checkPcscAvailability();
+    this.initPromise = this.checkPcscAvailability();
   }
 
   private async checkPcscAvailability(): Promise<void> {
@@ -202,23 +203,60 @@ export class PcscService extends EventEmitter {
   }
 
   async connect(): Promise<void> {
+    // Wait for initialization to complete
+    await this.initPromise;
+    
     if (!this.isAvailable) {
       // Fallback to simulation mode
       this.startSimulation();
       return;
     }
 
-    this.isConnected = true;
-    this.emit('status', {
-      connected: true,
-      readerType: ReaderType.ACR1281UC,
-      port: 'PC/SC',
-    } as RfidReaderStatus);
-
-    storage.addSystemLog({
-      level: 'INFO',
-      message: 'Connected to ACR1281U-C via PC/SC protocol',
+    // Wait for actual reader detection (with timeout)
+    const readerTimeout = new Promise<void>((_, reject) => {
+      setTimeout(() => reject(new Error('No ACR1281U-C reader found within 5 seconds')), 5000);
     });
+
+    const readerFound = new Promise<void>((resolve) => {
+      if (this.currentReader) {
+        resolve();
+        return;
+      }
+      
+      const onReader = (reader: PcscReader) => {
+        if (reader.name.toLowerCase().includes('acr1281') || 
+            reader.name.toLowerCase().includes('dual reader')) {
+          this.nfc?.removeListener('reader', onReader);
+          resolve();
+        }
+      };
+      
+      this.nfc?.on('reader', onReader);
+    });
+
+    try {
+      await Promise.race([readerFound, readerTimeout]);
+      
+      this.isConnected = true;
+      this.emit('status', {
+        connected: true,
+        readerType: ReaderType.ACR1281UC,
+        port: 'PC/SC',
+      } as RfidReaderStatus);
+
+      storage.addSystemLog({
+        level: 'INFO',
+        message: 'Connected to ACR1281U-C via PC/SC protocol',
+      });
+      
+    } catch (error) {
+      // Fallback to simulation if no hardware found
+      storage.addSystemLog({
+        level: 'WARNING',
+        message: 'ACR1281U-C hardware not found, using simulation mode',
+      });
+      this.startSimulation();
+    }
   }
 
   async disconnect(): Promise<void> {
