@@ -184,6 +184,47 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // TEMPORARY: Simulate RFID tag reading for testing (remove in production)
+  app.post("/api/simulate-tag-read", async (req, res) => {
+    try {
+      const { epc, rssi, timestamp } = req.body;
+      
+      if (!epc) {
+        return res.status(400).json({ error: 'EPC is required' });
+      }
+
+      // Store in database
+      const tag = await storage.createOrUpdateRfidTag({
+        epc,
+        rssi: rssi?.toString() || '-50',
+      });
+
+      // Emit tag read event
+      const tagEvent = {
+        epc: tag.epc,
+        rssi: parseFloat(tag.rssi || '0'),
+        timestamp: timestamp || new Date().toISOString(),
+      };
+
+      broadcast({
+        type: 'tag_read',
+        data: tagEvent,
+      });
+
+      // Add system log
+      await storage.addSystemLog({
+        level: 'INFO',
+        message: `Simulated tag read: ${epc}, RSSI: ${rssi || -50} dBm`,
+      });
+
+      res.json({ success: true, message: 'Tag simulated successfully', tag });
+    } catch (error) {
+      res.status(500).json({ 
+        error: error instanceof Error ? error.message : 'Failed to simulate tag' 
+      });
+    }
+  });
+
   // Periodically broadcast statistics
   setInterval(async () => {
     try {
