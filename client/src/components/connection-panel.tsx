@@ -6,7 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Cog, Plug, X, RefreshCw, Wifi, Server } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { apiRequest } from '@/lib/queryClient';
-import type { RfidReaderStatus } from '@shared/schema';
+import type { RfidReaderStatus, ReaderType, ReaderConfig } from '@shared/schema';
 
 interface ConnectionPanelProps {
   readerStatus: RfidReaderStatus;
@@ -16,7 +16,9 @@ interface ConnectionPanelProps {
 export function ConnectionPanel({ readerStatus, wsConnected }: ConnectionPanelProps) {
   const [availablePorts, setAvailablePorts] = useState<string[]>([]);
   const [selectedPort, setSelectedPort] = useState<string>('');
-  const [selectedBaudRate, setSelectedBaudRate] = useState<string>('57600');
+  const [selectedReaderType, setSelectedReaderType] = useState<ReaderType | ''>('');
+  const [selectedBaudRate, setSelectedBaudRate] = useState<string>('');
+  const [readerConfigs, setReaderConfigs] = useState<Record<ReaderType, ReaderConfig> | null>(null);
   const [isConnecting, setIsConnecting] = useState(false);
   const { toast } = useToast();
 
@@ -34,9 +36,34 @@ export function ConnectionPanel({ readerStatus, wsConnected }: ConnectionPanelPr
     }
   };
 
+  const loadReaderConfigs = async () => {
+    try {
+      const response = await apiRequest('GET', '/api/reader-configs');
+      const data = await response.json();
+      setReaderConfigs(data.configs || {});
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to load reader configurations",
+        variant: "destructive",
+      });
+    }
+  };
+
   useEffect(() => {
     loadPorts();
+    loadReaderConfigs();
   }, []);
+
+  // Update baud rate when reader type changes
+  useEffect(() => {
+    if (selectedReaderType && readerConfigs) {
+      const config = readerConfigs[selectedReaderType as ReaderType];
+      if (config && config.baudRate) {
+        setSelectedBaudRate(config.baudRate.toString());
+      }
+    }
+  }, [selectedReaderType, readerConfigs]);
 
   const handleConnect = async () => {
     if (!selectedPort) {
@@ -48,16 +75,26 @@ export function ConnectionPanel({ readerStatus, wsConnected }: ConnectionPanelPr
       return;
     }
 
+    if (!selectedReaderType) {
+      toast({
+        title: "Error",
+        description: "Please select a reader type",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setIsConnecting(true);
     try {
       await apiRequest('POST', '/api/connect', {
         port: selectedPort,
-        baudRate: parseInt(selectedBaudRate),
+        readerType: selectedReaderType,
+        baudRate: selectedBaudRate ? parseInt(selectedBaudRate) : undefined,
       });
       
       toast({
         title: "Success",
-        description: `Connected to ${selectedPort}`,
+        description: `Connected to ${selectedReaderType} on ${selectedPort}`,
       });
     } catch (error) {
       toast({
@@ -106,6 +143,22 @@ export function ConnectionPanel({ readerStatus, wsConnected }: ConnectionPanelPr
           </div>
 
           <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-foreground mb-2">RFID Reader Type</label>
+              <Select value={selectedReaderType} onValueChange={(value) => setSelectedReaderType(value as ReaderType)}>
+                <SelectTrigger data-testid="select-reader-type">
+                  <SelectValue placeholder="Select Reader Model..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {readerConfigs && Object.entries(readerConfigs).map(([type, config]) => (
+                    <SelectItem key={type} value={type}>
+                      {config.description}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
             <div>
               <label className="block text-sm font-medium text-foreground mb-2">COM Port</label>
               <Select value={selectedPort} onValueChange={setSelectedPort}>
@@ -174,18 +227,36 @@ export function ConnectionPanel({ readerStatus, wsConnected }: ConnectionPanelPr
           <div className="mt-8 pt-6 border-t border-border">
             <h3 className="text-sm font-medium text-foreground mb-4">Device Information</h3>
             <div className="space-y-3 text-sm">
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Model:</span>
-                <code className="text-foreground font-mono">RRU9816</code>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Frequency:</span>
-                <span className="text-foreground">UHF 860-960MHz</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Protocol:</span>
-                <span className="text-foreground">EPC C1G2</span>
-              </div>
+              {selectedReaderType && readerConfigs ? (
+                <>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Model:</span>
+                    <code className="text-foreground font-mono">{selectedReaderType}</code>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Description:</span>
+                    <span className="text-foreground">{readerConfigs[selectedReaderType as ReaderType].description}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Frequency:</span>
+                    <span className="text-foreground">{readerConfigs[selectedReaderType as ReaderType].frequency}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Protocol:</span>
+                    <span className="text-foreground">{readerConfigs[selectedReaderType as ReaderType].protocol}</span>
+                  </div>
+                  {readerConfigs[selectedReaderType as ReaderType].baudRate && (
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Default Baud Rate:</span>
+                      <span className="text-foreground">{readerConfigs[selectedReaderType as ReaderType].baudRate}</span>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div className="text-center text-muted-foreground py-4">
+                  Select a reader type to view device information
+                </div>
+              )}
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Status:</span>
                 <div className="flex items-center space-x-2">
@@ -195,6 +266,12 @@ export function ConnectionPanel({ readerStatus, wsConnected }: ConnectionPanelPr
                   </span>
                 </div>
               </div>
+              {readerStatus.connected && readerStatus.readerType && (
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Connected Reader:</span>
+                  <code className="text-foreground font-mono">{readerStatus.readerType}</code>
+                </div>
+              )}
               {readerStatus.port && (
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Port:</span>
