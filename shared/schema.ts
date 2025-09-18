@@ -37,7 +37,8 @@ export type SystemLog = typeof systemLogs.$inferSelect;
 // RFID Reader Types
 export enum ReaderType {
   RRU9816 = 'RRU9816',
-  IQRFID5102 = 'IQRFID-5102'
+  IQRFID5102 = 'IQRFID-5102',
+  ACR1281UC = 'ACR1281U-C'
 }
 
 export interface ReaderConfig {

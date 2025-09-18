@@ -20,6 +20,13 @@ const READER_CONFIGS: Record<ReaderType, ReaderConfig> = {
     description: 'IQRFID-5102 Desktop UHF RFID Reader',
     protocol: 'EPC Class 1 Gen2 (ISO18000-6C)',
     frequency: 'UHF 860-960MHz'
+  },
+  [ReaderType.ACR1281UC]: {
+    type: ReaderType.ACR1281UC,
+    baudRate: 115200,
+    description: 'ACR1281U-C DualBoost II USB NFC Reader',
+    protocol: 'ISO 14443 Type A/B, ISO 7816-4',
+    frequency: '13.56 MHz (NFC/HF)'
   }
 };
 
@@ -204,6 +211,9 @@ export class RfidService extends EventEmitter {
         case ReaderType.IQRFID5102:
           this.initializeIQRFID5102();
           break;
+        case ReaderType.ACR1281UC:
+          this.initializeACR1281UC();
+          break;
         default:
           storage.addSystemLog({
             level: 'WARNING',
@@ -238,6 +248,19 @@ export class RfidService extends EventEmitter {
     storage.addSystemLog({
       level: 'INFO',
       message: 'Starting IQRFID-5102 RFID inventory scan...',
+    });
+  }
+
+  private initializeACR1281UC(): void {
+    // ACR1281U-C specific initialization commands
+    // This NFC reader uses PC/SC CCID protocol, different from UHF readers
+    // Initial setup command to put reader in polling mode for ISO14443 cards
+    const setupCommand = Buffer.from([0x6F, 0x04, 0x00, 0x00, 0x00, 0x00]);
+    this.serialPort?.write(setupCommand);
+    
+    storage.addSystemLog({
+      level: 'INFO',
+      message: 'Starting ACR1281U-C NFC card detection...',
     });
   }
 
