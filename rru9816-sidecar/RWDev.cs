@@ -131,5 +131,16 @@ namespace UHF
         [DllImport(DLLNAME, CallingConvention = CallingConvention.StdCall)]
         public static extern int ClearTagBuffer(ref byte ComAdr,
                                                int frmComPortindex);
+
+        // MISSING FUNCTIONS FROM C# DEMO - ADD THESE!
+        [DllImport(DLLNAME, CallingConvention = CallingConvention.StdCall)]
+        public static extern int SetWorkMode(ref byte ComAdr,
+                                             byte Read_mode,
+                                             int frmComPortindex);
+
+        [DllImport(DLLNAME, CallingConvention = CallingConvention.StdCall)]
+        public static extern int SetAntennaMultiplexing(ref byte ComAdr,
+                                            byte Ant,
+                                            int frmComPortindex);
     }
 }
