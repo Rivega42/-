@@ -305,40 +305,15 @@ namespace RRU9816Sidecar
                     Console.WriteLine($"❌ ClearBuffer_G2 exception: {ex.Message}"); 
                 }
                 
-                // Step 2: Set Work Mode (MISSING from our original code!)
-                try 
-                {
-                    byte Read_mode = 1; // Buffer mode (from C# demo analysis)
-                    fCmdRet = RWDev.SetWorkMode(ref fComAdr, Read_mode, frmcomportindex);
-                    Console.WriteLine($"🔍 SetWorkMode result: {fCmdRet} ({GetReturnCodeDesc(fCmdRet)})");
-                    if (fCmdRet == 0) Console.WriteLine("✅ Work mode set to buffer");
-                    else Console.WriteLine($"⚠️  SetWorkMode returned: {fCmdRet} - {GetReturnCodeDesc(fCmdRet)} (continuing anyway)");
-                }
-                catch (Exception ex) 
-                { 
-                    Console.WriteLine($"❌ SetWorkMode exception: {ex.Message}"); 
-                }
-                
-                // Step 3: Set Antenna Multiplexing (MISSING from our original code!)
-                try 
-                {
-                    byte Ant = 1; // Antenna 1 (from C# demo analysis)
-                    fCmdRet = RWDev.SetAntennaMultiplexing(ref fComAdr, Ant, frmcomportindex);
-                    Console.WriteLine($"🔍 SetAntennaMultiplexing result: {fCmdRet} ({GetReturnCodeDesc(fCmdRet)})");
-                    if (fCmdRet == 0) Console.WriteLine("✅ Antenna multiplexing set to 1");
-                    else Console.WriteLine($"⚠️  SetAntennaMultiplexing returned: {fCmdRet} - {GetReturnCodeDesc(fCmdRet)} (continuing anyway)");
-                }
-                catch (Exception ex) 
-                { 
-                    Console.WriteLine($"❌ SetAntennaMultiplexing exception: {ex.Message}"); 
-                }
+                // SOLUTION: Skip SetWorkMode and SetAntennaMultiplexing - NOT supported by RRU9816 v03.01
+                Console.WriteLine("⚠️ Skipping SetWorkMode and SetAntennaMultiplexing (not supported by this firmware version)");
                 
                 // Step 4: Start inventory using CORRECT InventoryBuffer_G2 function from documentation!
                 try
                 {
-                    // Parameters matching C# demo defaults (from Form1.cs variables)
-                    byte QValue = 0;        // Default from C# demo (private byte Qvalue = 0)
-                    byte Session = 0;       // Default from C# demo (private byte Session = 0)
+                    // IMPROVED Parameters for better tag detection
+                    byte QValue = 4;        // IMPROVED: Better Q value for tag population (was 0)
+                    byte Session = 1;       // IMPROVED: Use session 1 for inventory (was 0)
                     byte MaskMem = 1;       // EPC memory
                     byte[] MaskAdr = new byte[2] { 0x00, 0x00 };
                     byte MaskLen = 0;       // No mask
@@ -348,13 +323,13 @@ namespace RRU9816Sidecar
                     byte LenTID = 0;        // TID length
                     byte TIDFlag = 0;       // No TID
                     byte Target = 0;        // Default from C# demo (private byte Target = 0)
-                    byte InAnt = 0;         // Default from C# demo (private byte InAnt = 0)
-                    byte Scantime = 0;      // Default from C# demo (private byte Scantime = 0)
+                    byte InAnt = 0x01;      // FIXED: Explicitly select antenna 1 (was 0 = no antenna!)
+                    byte Scantime = 10;     // IMPROVED: Use proper scan time (was 0)
                     byte Fastflag = 0;      // Default from C# demo (private byte FastFlag = 0)
                     int BufferCount = 0;
                     int TagNum = 0;
                     
-                    Console.WriteLine($"🔍 Starting InventoryBuffer_G2 with Q={QValue}, S={Session}, Ant={InAnt}");
+                    Console.WriteLine($"🔍 Starting InventoryBuffer_G2 with Q={QValue}, Session={Session}, Antenna={InAnt}, Scantime={Scantime}");
                     fCmdRet = RWDev.InventoryBuffer_G2(ref fComAdr, QValue, Session, MaskMem, MaskAdr, MaskLen, MaskData,
                                                        MaskFlag, AdrTID, LenTID, TIDFlag, Target, InAnt, Scantime, Fastflag,
                                                        ref BufferCount, ref TagNum, frmcomportindex);
