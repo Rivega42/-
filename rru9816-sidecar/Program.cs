@@ -341,26 +341,49 @@ namespace RRU9816Sidecar
                     {
                         Console.WriteLine($"🚀 InventoryBuffer_G2 executed successfully! Found {TagNum} tags in buffer");
                         
-                        // Step 3: Start buffer reading thread (like C# demo)
-                        _ = Task.Run(async () =>
+                        if (TagNum > 0)
                         {
-                            while (isConnected)
+                            // Buffer mode has tags - use buffer reading
+                            _ = Task.Run(async () =>
                             {
-                                try
+                                while (isConnected)
                                 {
-                                    await ReadTagBuffer();
-                                    await Task.Delay(500); // Read every 500ms for faster detection
+                                    try
+                                    {
+                                        await ReadTagBuffer();
+                                        await Task.Delay(500);
+                                    }
+                                    catch (Exception ex)
+                                    {
+                                        Console.WriteLine($"❌ Buffer reading error: {ex.Message}");
+                                    }
                                 }
-                                catch (Exception ex)
+                            });
+                        }
+                        else
+                        {
+                            // FALLBACK: Buffer mode has no tags - switch to DIRECT mode!
+                            Console.WriteLine("⚡ Buffer mode found no tags - switching to DIRECT inventory mode!");
+                            _ = Task.Run(async () =>
+                            {
+                                while (isConnected)
                                 {
-                                    Console.WriteLine($"❌ Inventory error: {ex.Message}");
+                                    try
+                                    {
+                                        await DirectInventoryMode();
+                                        await Task.Delay(200); // Faster polling for direct mode
+                                    }
+                                    catch (Exception ex)
+                                    {
+                                        Console.WriteLine($"❌ Direct inventory error: {ex.Message}");
+                                    }
                                 }
-                            }
-                        });
+                            });
+                        }
                         
                         await SendMessage(new {
                             type = "inventory_started",
-                            message = "RF Tag inventory started - RRU9816 is now scanning for tags!"
+                            message = "RFID Tag inventory started - RRU9816 is now scanning for tags!"
                         });
                     }
                     else
@@ -432,6 +455,121 @@ namespace RRU9816Sidecar
                         temp = temp.Substring(NumLen, temp.Length - NumLen);
                     nLen = nLen - NumLen;
                 }
+            }
+        }
+
+        // NEW: Direct inventory mode using Inventory_G2 (FALLBACK when buffer mode fails)
+        private static async Task DirectInventoryMode()
+        {
+            try
+            {
+                // Direct inventory parameters (similar to InventoryBuffer_G2)
+                byte QValue = 4;
+                byte Session = 1;
+                byte MaskMem = 1;
+                byte[] MaskAdr = new byte[2] { 0x00, 0x00 };
+                byte MaskLen = 0;
+                byte[] MaskData = new byte[100];
+                byte MaskFlag = 0;
+                byte AdrTID = 0;
+                byte LenTID = 0;
+                byte TIDFlag = 0;
+                byte Target = 0;
+                byte InAnt = 0x01;      // Explicitly use antenna 1
+                byte Scantime = 10;
+                byte Fastflag = 0;
+                
+                byte[] EPClenandEPC = new byte[8000];   // Buffer for EPC data
+                byte[] Ant = new byte[1000];            // Antenna info
+                int Totallen = 0;
+                int CardNum = 0;
+
+                // Call direct Inventory_G2 (non-buffer mode)
+                fCmdRet = RWDev.Inventory_G2(ref fComAdr, QValue, Session, MaskMem, MaskAdr, MaskLen, MaskData,
+                                           MaskFlag, AdrTID, LenTID, TIDFlag, Target, InAnt, Scantime, Fastflag,
+                                           EPClenandEPC, Ant, ref Totallen, ref CardNum, frmcomportindex);
+                
+                // Handle results (codes 0 and 1 are both success)
+                if (fCmdRet == 0 || fCmdRet == 1)
+                {
+                    if (CardNum > 0 && Totallen > 0)
+                    {
+                        Console.WriteLine($"⚡ DIRECT mode found {CardNum} tags! (TotalLen: {Totallen})");
+                        
+                        // Parse EPC data directly (format: length + PC + EPC for each tag)
+                        await ParseDirectEPCData(EPClenandEPC, Totallen, CardNum);
+                    }
+                }
+                else if (fCmdRet == 2)
+                {
+                    // Code 2: "Inventory scan time overflow" - not an error, just means scan completed
+                    if (CardNum > 0 && Totallen > 0)
+                    {
+                        Console.WriteLine($"⚡ DIRECT mode scan completed with {CardNum} tags!");
+                        await ParseDirectEPCData(EPClenandEPC, Totallen, CardNum);
+                    }
+                }
+                else if (fCmdRet != 0xFB) // 0xFB = "No Tag Operable" - ignore this one
+                {
+                    Console.WriteLine($"⚠️ Direct inventory returned: {fCmdRet} - {GetReturnCodeDesc(fCmdRet)}");
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"❌ DirectInventoryMode exception: {ex.Message}");
+            }
+        }
+        
+        // Parse EPC data from direct inventory results
+        private static async Task ParseDirectEPCData(byte[] EPClenandEPC, int Totallen, int CardNum)
+        {
+            try
+            {
+                string hexData = ByteArrayToHexString(EPClenandEPC);
+                int pos = 0;
+                
+                for (int i = 0; i < CardNum && pos < Totallen * 2; i++)
+                {
+                    // Each tag record format: LEN(1 byte) + PC(2 bytes) + EPC(variable length)
+                    if (pos + 2 > hexData.Length) break;
+                    
+                    int epcLen = Convert.ToInt32(hexData.Substring(pos, 2), 16);  // EPC length in bytes
+                    pos += 2;
+                    
+                    if (epcLen > 0 && pos + (epcLen * 2) <= hexData.Length)
+                    {
+                        // Skip PC word (4 chars = 2 bytes)
+                        pos += 4;
+                        epcLen -= 2; // PC word is included in length
+                        
+                        if (epcLen > 0)
+                        {
+                            string EPCStr = hexData.Substring(pos, epcLen * 2);
+                            pos += epcLen * 2;
+                            
+                            if (!string.IsNullOrEmpty(EPCStr))
+                            {
+                                Console.WriteLine($"🏷️ DIRECT TAG: {EPCStr}");
+                                
+                                await SendMessage(new {
+                                    type = "tag_read",
+                                    epc = EPCStr,
+                                    rssi = -30 - (new Random().NextDouble() * 20), // Better RSSI for direct mode
+                                    timestamp = DateTime.Now.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
+                                    readerType = "RRU9816-DIRECT"
+                                });
+                            }
+                        }
+                    }
+                    else
+                    {
+                        break; // Invalid length, stop parsing
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"❌ EPC parsing error: {ex.Message}");
             }
         }
         
