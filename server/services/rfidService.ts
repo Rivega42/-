@@ -1168,10 +1168,10 @@ export class RfidService extends EventEmitter {
 
   // NEW: Handle IQRFID-5102 binary responses with 0xBB protocol
   private handleIQRFID5102BinaryData(data: Buffer): void {
-    // Log raw response for debugging
+    // Log raw response for debugging - even if it's just status/ack
     storage.addSystemLog({
-      level: 'INFO',
-      message: `IQRFID-5102 Raw Data: ${data.toString('hex').toUpperCase()}`,
+      level: 'INFO', 
+      message: `IQRFID-5102 Raw Data (${data.length} bytes): ${data.toString('hex').toUpperCase()}`,
     });
 
     // IQRFID-5102 uses 0xBB protocol format
@@ -1262,10 +1262,19 @@ export class RfidService extends EventEmitter {
       message: 'Starting IQRFID-5102 multiple inventory with ISO18000-6C protocol (BB 00 27 00 00 27 7E)...',
     });
     
-    // Start continuous inventory polling every 2 seconds (slower for stability)
+    // Start continuous inventory polling every 2 seconds (slower for stability)  
     this.inventoryInterval = setInterval(() => {
       if (this.serialPort?.isOpen) {
         this.serialPort.write(inventoryCommand);
+        storage.addSystemLog({
+          level: 'INFO',
+          message: `📡 IQRFID-5102 sending inventory command...`,
+        });
+      } else {
+        storage.addSystemLog({
+          level: 'WARN', 
+          message: `⚠️ IQRFID-5102 port is closed, skipping inventory`,
+        });
       }
     }, 2000);
   }
