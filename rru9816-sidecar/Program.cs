@@ -293,24 +293,55 @@ namespace RRU9816Sidecar
                 Console.WriteLine("🔍 Starting tag inventory...");
                 
                 // Step 1: Clear tag buffer first (like Delphi demo)
-                fCmdRet = RWDev.ClearTagBuffer(ref fComAdr, frmcomportindex);
-                if (fCmdRet == 0) Console.WriteLine("✅ Tag buffer cleared");
+                try 
+                {
+                    fCmdRet = RWDev.ClearTagBuffer(ref fComAdr, frmcomportindex);
+                    Console.WriteLine($"🔍 ClearTagBuffer result: {fCmdRet}");
+                    if (fCmdRet == 0) Console.WriteLine("✅ Tag buffer cleared");
+                    else Console.WriteLine($"❌ Failed to clear buffer: {fCmdRet}");
+                }
+                catch (Exception ex) 
+                { 
+                    Console.WriteLine($"❌ ClearTagBuffer exception: {ex.Message}"); 
+                }
                 
                 // Step 2: Set antenna (antenna 1, like Delphi default)
-                fCmdRet = RWDev.SetAntenna(ref fComAdr, 1, frmcomportindex);
-                if (fCmdRet == 0) Console.WriteLine("✅ Antenna set to 1");
+                try
+                {
+                    fCmdRet = RWDev.SetAntenna(ref fComAdr, 1, frmcomportindex);
+                    Console.WriteLine($"🔍 SetAntenna result: {fCmdRet}");
+                    if (fCmdRet == 0) Console.WriteLine("✅ Antenna set to 1");
+                    else Console.WriteLine($"❌ Failed to set antenna: {fCmdRet}");
+                }
+                catch (Exception ex) 
+                { 
+                    Console.WriteLine($"❌ SetAntenna exception: {ex.Message}"); 
+                }
                 
                 // Step 3: Set work mode to buffer mode (0 = answer mode, 1 = buffer mode)
-                fCmdRet = RWDev.SetWorkMode(ref fComAdr, 1, frmcomportindex);
-                if (fCmdRet == 0) Console.WriteLine("✅ Work mode set to buffer");
+                try
+                {
+                    fCmdRet = RWDev.SetWorkMode(ref fComAdr, 1, frmcomportindex);
+                    Console.WriteLine($"🔍 SetWorkMode result: {fCmdRet}");
+                    if (fCmdRet == 0) Console.WriteLine("✅ Work mode set to buffer");
+                    else Console.WriteLine($"❌ Failed to set work mode: {fCmdRet}");
+                }
+                catch (Exception ex) 
+                { 
+                    Console.WriteLine($"❌ SetWorkMode exception: {ex.Message}"); 
+                }
                 
                 // Step 4: Start buffer inventory (THIS IS THE KEY - missing before!)
-                byte QValue = 4;    // Default Q value like Delphi
-                byte Session = 0;   // Default session
-                fCmdRet = RWDev.StartBufferInventory(ref fComAdr, QValue, Session, frmcomportindex);
-                if (fCmdRet == 0) 
+                try
                 {
-                    Console.WriteLine("🚀 RF Inventory started successfully!");
+                    byte QValue = 4;    // Default Q value like Delphi
+                    byte Session = 0;   // Default session
+                    Console.WriteLine($"🔍 Attempting StartBufferInventory with Q={QValue}, Session={Session}");
+                    fCmdRet = RWDev.StartBufferInventory(ref fComAdr, QValue, Session, frmcomportindex);
+                    Console.WriteLine($"🔍 StartBufferInventory result: {fCmdRet}");
+                    if (fCmdRet == 0) 
+                    {
+                        Console.WriteLine("🚀 RF Inventory started successfully!");
                     
                     // Step 5: Start buffer reading thread (like C# demo)
                     _ = Task.Run(async () =>
@@ -329,17 +360,26 @@ namespace RRU9816Sidecar
                         }
                     });
                     
-                    await SendMessage(new {
-                        type = "inventory_started",
-                        message = "RF Tag inventory started - RRU9816 is now scanning for tags!"
-                    });
+                        await SendMessage(new {
+                            type = "inventory_started",
+                            message = "RF Tag inventory started - RRU9816 is now scanning for tags!"
+                        });
+                    }
+                    else
+                    {
+                        Console.WriteLine($"❌ Failed to start RF inventory: {fCmdRet}");
+                        await SendMessage(new {
+                            type = "error",
+                            message = $"Failed to start RF inventory: {fCmdRet}"
+                        });
+                    }
                 }
-                else
-                {
-                    Console.WriteLine($"❌ Failed to start RF inventory: {fCmdRet}");
+                catch (Exception ex) 
+                { 
+                    Console.WriteLine($"❌ StartBufferInventory exception: {ex.Message}"); 
                     await SendMessage(new {
                         type = "error",
-                        message = $"Failed to start RF inventory: {fCmdRet}"
+                        message = $"StartBufferInventory failed: {ex.Message}"
                     });
                 }
             }
