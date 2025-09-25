@@ -16,6 +16,26 @@ namespace RRU9816Sidecar
         private static int frmcomportindex = 0;
         private static byte fComAdr = 0xff;
         private static int fCmdRet;
+        
+        // Return code descriptions from C# demo
+        private static string GetReturnCodeDesc(int cmdRet)
+        {
+            switch (cmdRet)
+            {
+                case 0x00: return "successfully";
+                case 0x01: return "Return before Inventory finished";
+                case 0x02: return "the Inventory-scan-time overflow";
+                case 0x03: return "More Data";
+                case 0xFA: return "Get Tag,Poor Communication,Inoperable";
+                case 0xFB: return "No Tag Operable";  
+                case 0xFC: return "Tag Return ErrorCode";
+                case 0xFD: return "Command length wrong";
+                case 0xFE: return "Illegal command";
+                case 0xFF: return "Parameter Error";
+                case 250: return "Get Tag,Poor Communication,Inoperable"; // 0xFA in decimal
+                default: return $"Unknown code: {cmdRet} (0x{cmdRet:X2})";
+            }
+        }
         private static bool isConnected = false;
         private static WebSocket connectedClient = null;
         
@@ -310,9 +330,9 @@ namespace RRU9816Sidecar
                 {
                     byte Read_mode = 1; // Buffer mode (from C# demo analysis)
                     fCmdRet = RWDev.SetWorkMode(ref fComAdr, Read_mode, frmcomportindex);
-                    Console.WriteLine($"🔍 SetWorkMode result: {fCmdRet}");
+                    Console.WriteLine($"🔍 SetWorkMode result: {fCmdRet} ({GetReturnCodeDesc(fCmdRet)})");
                     if (fCmdRet == 0) Console.WriteLine("✅ Work mode set to buffer");
-                    else Console.WriteLine($"❌ Failed to set work mode: {fCmdRet}");
+                    else Console.WriteLine($"⚠️  SetWorkMode returned: {fCmdRet} - {GetReturnCodeDesc(fCmdRet)} (continuing anyway)");
                 }
                 catch (Exception ex) 
                 { 
@@ -324,9 +344,9 @@ namespace RRU9816Sidecar
                 {
                     byte Ant = 1; // Antenna 1 (from C# demo analysis)
                     fCmdRet = RWDev.SetAntennaMultiplexing(ref fComAdr, Ant, frmcomportindex);
-                    Console.WriteLine($"🔍 SetAntennaMultiplexing result: {fCmdRet}");
+                    Console.WriteLine($"🔍 SetAntennaMultiplexing result: {fCmdRet} ({GetReturnCodeDesc(fCmdRet)})");
                     if (fCmdRet == 0) Console.WriteLine("✅ Antenna multiplexing set to 1");
-                    else Console.WriteLine($"❌ Failed to set antenna multiplexing: {fCmdRet}");
+                    else Console.WriteLine($"⚠️  SetAntennaMultiplexing returned: {fCmdRet} - {GetReturnCodeDesc(fCmdRet)} (continuing anyway)");
                 }
                 catch (Exception ex) 
                 { 
