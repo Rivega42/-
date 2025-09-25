@@ -66,5 +66,40 @@ namespace UHF
         [DllImport(DLLNAME, CallingConvention = CallingConvention.StdCall)]
         public static extern int ClearTagBuffer(ref byte ComAdr,
                                                int frmComPortindex);
+
+        // Inventory start/stop functions - Missing in original code!
+        [DllImport(DLLNAME, CallingConvention = CallingConvention.StdCall)]
+        public static extern int Inventory_G2(ref byte ComAdr,
+                                              byte QValue,
+                                              byte Session, 
+                                              byte MaskMem,
+                                              byte[] MaskAdr,
+                                              byte MaskLen,
+                                              byte[] MaskData,
+                                              byte MaskDataLen,
+                                              byte[] CardData,
+                                              ref int Totallen,
+                                              ref int CardNum,
+                                              int frmComPortindex);
+
+        [DllImport(DLLNAME, CallingConvention = CallingConvention.StdCall)]
+        public static extern int StartBufferInventory(ref byte ComAdr,
+                                                      byte QValue,
+                                                      byte Session,
+                                                      int frmComPortindex);
+
+        [DllImport(DLLNAME, CallingConvention = CallingConvention.StdCall)]
+        public static extern int StopBufferInventory(ref byte ComAdr,
+                                                     int frmComPortindex);
+
+        [DllImport(DLLNAME, CallingConvention = CallingConvention.StdCall)]
+        public static extern int SetWorkMode(ref byte ComAdr,
+                                            byte WorkMode,
+                                            int frmComPortindex);
+
+        [DllImport(DLLNAME, CallingConvention = CallingConvention.StdCall)]
+        public static extern int SetAntenna(ref byte ComAdr,
+                                           byte AntennaNo,
+                                           int frmComPortindex);
     }
 }

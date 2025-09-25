@@ -238,7 +238,7 @@ namespace RRU9816Sidecar
                 
                 // Set default configuration (like C# demo btDefault_Click)
                 byte aNewComAdr = 0x00;
-                byte powerDbm = 30;
+                byte powerDbm = 26; // Match Delphi demo setting
                 byte fBaud = 5;
                 byte scantime = 10;
                 dminfre = 64;
@@ -288,29 +288,69 @@ namespace RRU9816Sidecar
                 return;
             }
             
-            Console.WriteLine("🔍 Starting tag inventory...");
-            
-            // Start buffer reading thread (like C# demo)
-            _ = Task.Run(async () =>
+            try
             {
-                while (isConnected)
+                Console.WriteLine("🔍 Starting tag inventory...");
+                
+                // Step 1: Clear tag buffer first (like Delphi demo)
+                fCmdRet = RWDev.ClearTagBuffer(ref fComAdr, frmcomportindex);
+                if (fCmdRet == 0) Console.WriteLine("✅ Tag buffer cleared");
+                
+                // Step 2: Set antenna (antenna 1, like Delphi default)
+                fCmdRet = RWDev.SetAntenna(ref fComAdr, 1, frmcomportindex);
+                if (fCmdRet == 0) Console.WriteLine("✅ Antenna set to 1");
+                
+                // Step 3: Set work mode to buffer mode (0 = answer mode, 1 = buffer mode)
+                fCmdRet = RWDev.SetWorkMode(ref fComAdr, 1, frmcomportindex);
+                if (fCmdRet == 0) Console.WriteLine("✅ Work mode set to buffer");
+                
+                // Step 4: Start buffer inventory (THIS IS THE KEY - missing before!)
+                byte QValue = 4;    // Default Q value like Delphi
+                byte Session = 0;   // Default session
+                fCmdRet = RWDev.StartBufferInventory(ref fComAdr, QValue, Session, frmcomportindex);
+                if (fCmdRet == 0) 
                 {
-                    try
+                    Console.WriteLine("🚀 RF Inventory started successfully!");
+                    
+                    // Step 5: Start buffer reading thread (like C# demo)
+                    _ = Task.Run(async () =>
                     {
-                        await ReadTagBuffer();
-                        await Task.Delay(2000); // Read every 2 seconds
-                    }
-                    catch (Exception ex)
-                    {
-                        Console.WriteLine($"❌ Inventory error: {ex.Message}");
-                    }
+                        while (isConnected)
+                        {
+                            try
+                            {
+                                await ReadTagBuffer();
+                                await Task.Delay(500); // Read every 500ms for faster detection
+                            }
+                            catch (Exception ex)
+                            {
+                                Console.WriteLine($"❌ Inventory error: {ex.Message}");
+                            }
+                        }
+                    });
+                    
+                    await SendMessage(new {
+                        type = "inventory_started",
+                        message = "RF Tag inventory started - RRU9816 is now scanning for tags!"
+                    });
                 }
-            });
-            
-            await SendMessage(new {
-                type = "inventory_started",
-                message = "Tag inventory started"
-            });
+                else
+                {
+                    Console.WriteLine($"❌ Failed to start RF inventory: {fCmdRet}");
+                    await SendMessage(new {
+                        type = "error",
+                        message = $"Failed to start RF inventory: {fCmdRet}"
+                    });
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"❌ StartInventory failed: {ex.Message}");
+                await SendMessage(new {
+                    type = "error",
+                    message = $"StartInventory failed: {ex.Message}"
+                });
+            }
         }
         
         private static async Task ReadTagBuffer()
