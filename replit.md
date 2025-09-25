@@ -2,7 +2,23 @@
 
 ## Overview
 
-This is a full-stack RFID reader dashboard application built with React, Express, and TypeScript. The application provides real-time monitoring and management of RFID tag readings through a web interface. It connects to RFID hardware via serial port communication and displays tag data, connection status, and system logs in a modern dashboard interface.
+This is a full-stack RFID reader dashboard application built with React, Express, and TypeScript. The application provides real-time monitoring and management of multiple RFID reader types through a web interface. It successfully integrates RRU9816, IQRFID-5102, and ACR1281U-C RFID readers with real-time tag display, connection status, and system logs in a modern dashboard interface.
+
+## Recent Changes (September 2025)
+
+### ✅ RRU9816 Integration Completed
+- **Successful Hardware Connection**: RRU9816 v03.01 firmware properly connects via COM port at 57600 baud
+- **DLL Integration Resolved**: Fixed function naming issues by using correct RRU9816.dll functions (InventoryBuffer_G2, not SetAntenna/StartBufferInventory)
+- **Firmware Compatibility**: Bypassed unsupported SetWorkMode/SetAntennaMultiplexing commands specific to v03.01 firmware
+- **Dual-Mode Inventory**: Implemented buffer-first approach with automatic fallback to direct Inventory_G2 mode
+- **Tag Detection Working**: Successfully detecting RFID tags with proper EPC parsing and real-time display
+- **Windows Compatibility**: Full Windows 10/11 support with .NET 6.0 sidecar bridge
+
+### Technical Breakthrough
+- **Problem Solved**: RRU9816 DLL documentation discrepancy resolved through official User Guide analysis
+- **Error Handling**: Proper handling of firmware-specific error codes including communication warnings
+- **Direct Mode**: When buffer mode returns 0 tags, system automatically switches to 200ms direct polling
+- **EPC Parsing**: Fixed bounds checking and PC-word extraction for direct mode, preventing zero-padding corruption
 
 ## User Preferences
 
@@ -40,10 +56,13 @@ Preferred communication style: Simple, everyday language.
 - **Architecture Ready**: Session infrastructure in place for future auth implementation
 
 ### Hardware Integration
-- **RFID Communication**: Serial port communication with configurable baud rates
+- **Multi-Reader Support**: Successfully integrates RRU9816, IQRFID-5102, and ACR1281U-C RFID readers
+- **RRU9816 Sidecar Bridge**: .NET 6.0 C# bridge connects RRU9816.dll to Node.js application via WebSocket (ws://localhost:8081)
+- **RFID Communication**: Direct DLL calls for RRU9816, Serial port communication for other readers with configurable baud rates
 - **Event-Driven Architecture**: EventEmitter pattern for handling tag reads and status changes
-- **Connection Management**: Automatic reconnection and error handling for serial connections
-- **Supported Operations**: Tag inventory scanning, real-time tag detection, connection monitoring
+- **Connection Management**: Automatic reconnection and error handling for hardware connections
+- **Dual-Mode Inventory**: Buffer mode with automatic fallback to direct polling for maximum compatibility
+- **Supported Operations**: Tag inventory scanning, real-time tag detection, connection monitoring, PC/SC support for ACR1281U-C
 
 ### Real-time Features
 - **WebSocket Server**: Dedicated WebSocket endpoint (/ws) for real-time communication
@@ -68,8 +87,11 @@ Preferred communication style: Simple, everyday language.
 - **Type Safety**: TypeScript with strict configuration across frontend and backend
 
 ### Hardware Dependencies
-- **Serial Communication**: @serialport/parser-readline for RFID reader communication
+- **Serial Communication**: @serialport/parser-readline for RFID reader communication  
+- **Windows Compatibility**: .NET 6.0 runtime for RRU9816 sidecar bridge
+- **DLL Integration**: RRU9816.dll with proper function mapping (InventoryBuffer_G2, GetTagBufferInfo)
 - **Supported Platforms**: Cross-platform serial port support for Windows, macOS, and Linux
+- **WebSocket Bridge**: ws://localhost:8081 for RRU9816 hardware communication
 
 ### Frontend Libraries
 - **Component Library**: Comprehensive Radix UI component set with shadcn/ui styling
