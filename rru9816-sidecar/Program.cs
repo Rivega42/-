@@ -17,6 +17,7 @@ namespace RRU9816Sidecar
         private static byte fComAdr = 0xff;
         private static int fCmdRet;
         private static bool isConnected = false;
+        private static bool scanningActive = false;  // FIXED: Add scanning control
         private static WebSocket connectedClient = null;
         
         static async Task Main(string[] args)
@@ -341,44 +342,52 @@ namespace RRU9816Sidecar
                     {
                         Console.WriteLine($"🚀 InventoryBuffer_G2 executed successfully! Found {TagNum} tags in buffer");
                         
-                        if (TagNum > 0)
+                        // FIXED: Prevent multiple scanning loops
+                        if (!scanningActive)
                         {
-                            // Buffer mode has tags - use buffer reading
-                            _ = Task.Run(async () =>
+                            scanningActive = true;
+                            
+                            if (TagNum > 0)
                             {
-                                while (isConnected)
+                                // Buffer mode has tags - use buffer reading
+                                _ = Task.Run(async () =>
                                 {
-                                    try
+                                    while (isConnected && scanningActive)
                                     {
-                                        await ReadTagBuffer();
-                                        await Task.Delay(500);
+                                        try
+                                        {
+                                            await ReadTagBuffer();
+                                            await Task.Delay(500);
+                                        }
+                                        catch (Exception ex)
+                                        {
+                                            Console.WriteLine($"❌ Buffer reading error: {ex.Message}");
+                                        }
                                     }
-                                    catch (Exception ex)
-                                    {
-                                        Console.WriteLine($"❌ Buffer reading error: {ex.Message}");
-                                    }
-                                }
-                            });
-                        }
-                        else
-                        {
-                            // FALLBACK: Buffer mode has no tags - switch to DIRECT mode!
-                            Console.WriteLine("⚡ Buffer mode found no tags - switching to DIRECT inventory mode!");
-                            _ = Task.Run(async () =>
+                                    Console.WriteLine("🔄 Buffer scanning stopped");
+                                });
+                            }
+                            else
                             {
-                                while (isConnected)
+                                // FALLBACK: Buffer mode has no tags - switch to DIRECT mode!
+                                Console.WriteLine("⚡ Buffer mode found no tags - switching to DIRECT inventory mode!");
+                                _ = Task.Run(async () =>
                                 {
-                                    try
+                                    while (isConnected && scanningActive)
                                     {
-                                        await DirectInventoryMode();
-                                        await Task.Delay(200); // Faster polling for direct mode
+                                        try
+                                        {
+                                            await DirectInventoryMode();
+                                            await Task.Delay(200); // Faster polling for direct mode
+                                        }
+                                        catch (Exception ex)
+                                        {
+                                            Console.WriteLine($"❌ Direct inventory error: {ex.Message}");
+                                        }
                                     }
-                                    catch (Exception ex)
-                                    {
-                                        Console.WriteLine($"❌ Direct inventory error: {ex.Message}");
-                                    }
-                                }
-                            });
+                                    Console.WriteLine("🔄 Direct scanning stopped");
+                                });
+                            }
                         }
                         
                         await SendMessage(new {
@@ -527,43 +536,61 @@ namespace RRU9816Sidecar
             {
                 string hexData = ByteArrayToHexString(EPClenandEPC);
                 int pos = 0;
+                int maxPos = Totallen * 2; // FIXED: Use actual data length
                 
-                for (int i = 0; i < CardNum && pos < Totallen * 2; i++)
+                for (int i = 0; i < CardNum && pos < maxPos; i++)
                 {
-                    // Each tag record format: LEN(1 byte) + PC(2 bytes) + EPC(variable length)
-                    if (pos + 2 > hexData.Length) break;
+                    // Each tag record format from RRU9816 documentation
+                    if (pos + 2 > maxPos) break;
                     
-                    int epcLen = Convert.ToInt32(hexData.Substring(pos, 2), 16);  // EPC length in bytes
+                    // Get EPC length (including PC word)
+                    int totalLen = Convert.ToInt32(hexData.Substring(pos, 2), 16);
                     pos += 2;
                     
-                    if (epcLen > 0 && pos + (epcLen * 2) <= hexData.Length)
+                    // FIXED: Strict bounds checking
+                    if (totalLen >= 4 && pos + (totalLen * 2) <= maxPos)
                     {
-                        // Skip PC word (4 chars = 2 bytes)
+                        // Extract PC word (first 2 bytes)
+                        string pcWord = hexData.Substring(pos, 4);
                         pos += 4;
-                        epcLen -= 2; // PC word is included in length
                         
-                        if (epcLen > 0)
+                        // Calculate actual EPC length from PC word
+                        int pcValue = Convert.ToInt32(pcWord, 16);
+                        int epcLenFromPC = ((pcValue >> 11) & 0x1F) * 2; // EPC length in bytes from PC
+                        
+                        // FIXED: Ensure EPC length doesn't exceed record bounds
+                        int actualEpcLen = Math.Min(epcLenFromPC, totalLen - 2);
+                        
+                        if (actualEpcLen > 0 && actualEpcLen <= 62) // Max EPC length is 62 bytes
                         {
-                            string EPCStr = hexData.Substring(pos, epcLen * 2);
-                            pos += epcLen * 2;
+                            // FIXED: Extract exact EPC length without trimming zeros
+                            string EPCStr = hexData.Substring(pos, actualEpcLen * 2);
                             
-                            if (!string.IsNullOrEmpty(EPCStr))
+                            // FIXED: Skip exactly the remaining bytes in this record
+                            pos += (totalLen - 2) * 2;
+                            
+                            if (!string.IsNullOrEmpty(EPCStr) && EPCStr.Length >= 8)
                             {
-                                Console.WriteLine($"🏷️ DIRECT TAG: {EPCStr}");
+                                Console.WriteLine($"🏷️ DIRECT TAG: {EPCStr} (PC: {pcWord}, Len: {actualEpcLen})");
                                 
                                 await SendMessage(new {
                                     type = "tag_read",
                                     epc = EPCStr,
-                                    rssi = -30 - (new Random().NextDouble() * 20), // Better RSSI for direct mode
+                                    rssi = -30 - (new Random().NextDouble() * 20),
                                     timestamp = DateTime.Now.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
                                     readerType = "RRU9816-DIRECT"
                                 });
                             }
                         }
+                        else
+                        {
+                            // Skip invalid or too long EPC - advance by remaining record bytes
+                            pos += (totalLen - 2) * 2;
+                        }
                     }
                     else
                     {
-                        break; // Invalid length, stop parsing
+                        break; // Invalid data
                     }
                 }
             }
@@ -576,6 +603,9 @@ namespace RRU9816Sidecar
         private static async Task StopInventory()
         {
             Console.WriteLine("⏹️ Stopping inventory...");
+            
+            // FIXED: Actually stop scanning
+            scanningActive = false;
             
             await SendMessage(new {
                 type = "inventory_stopped",
