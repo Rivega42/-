@@ -305,12 +305,40 @@ namespace RRU9816Sidecar
                     Console.WriteLine($"❌ ClearBuffer_G2 exception: {ex.Message}"); 
                 }
                 
-                // Step 2: Start inventory using CORRECT InventoryBuffer_G2 function from documentation!
+                // Step 2: Set Work Mode (MISSING from our original code!)
+                try 
+                {
+                    byte Read_mode = 1; // Buffer mode (from C# demo analysis)
+                    fCmdRet = RWDev.SetWorkMode(ref fComAdr, Read_mode, frmcomportindex);
+                    Console.WriteLine($"🔍 SetWorkMode result: {fCmdRet}");
+                    if (fCmdRet == 0) Console.WriteLine("✅ Work mode set to buffer");
+                    else Console.WriteLine($"❌ Failed to set work mode: {fCmdRet}");
+                }
+                catch (Exception ex) 
+                { 
+                    Console.WriteLine($"❌ SetWorkMode exception: {ex.Message}"); 
+                }
+                
+                // Step 3: Set Antenna Multiplexing (MISSING from our original code!)
+                try 
+                {
+                    byte Ant = 1; // Antenna 1 (from C# demo analysis)
+                    fCmdRet = RWDev.SetAntennaMultiplexing(ref fComAdr, Ant, frmcomportindex);
+                    Console.WriteLine($"🔍 SetAntennaMultiplexing result: {fCmdRet}");
+                    if (fCmdRet == 0) Console.WriteLine("✅ Antenna multiplexing set to 1");
+                    else Console.WriteLine($"❌ Failed to set antenna multiplexing: {fCmdRet}");
+                }
+                catch (Exception ex) 
+                { 
+                    Console.WriteLine($"❌ SetAntennaMultiplexing exception: {ex.Message}"); 
+                }
+                
+                // Step 4: Start inventory using CORRECT InventoryBuffer_G2 function from documentation!
                 try
                 {
-                    // Parameters from documentation (Buffer Operation section uses Q=4, S=1, Target A)
-                    byte QValue = 4;        // Q value from demo 
-                    byte Session = 1;       // Session from demo (S=1)
+                    // Parameters matching C# demo defaults (from Form1.cs variables)
+                    byte QValue = 0;        // Default from C# demo (private byte Qvalue = 0)
+                    byte Session = 0;       // Default from C# demo (private byte Session = 0)
                     byte MaskMem = 1;       // EPC memory
                     byte[] MaskAdr = new byte[2] { 0x00, 0x00 };
                     byte MaskLen = 0;       // No mask
@@ -319,10 +347,10 @@ namespace RRU9816Sidecar
                     byte AdrTID = 0;        // TID address
                     byte LenTID = 0;        // TID length
                     byte TIDFlag = 0;       // No TID
-                    byte Target = 0;        // Target A = 0
-                    byte InAnt = 1;         // Antenna 1
-                    byte Scantime = 10;     // 10 * 10ms = 100ms like demo
-                    byte Fastflag = 1;      // Fast mode
+                    byte Target = 0;        // Default from C# demo (private byte Target = 0)
+                    byte InAnt = 0;         // Default from C# demo (private byte InAnt = 0)
+                    byte Scantime = 0;      // Default from C# demo (private byte Scantime = 0)
+                    byte Fastflag = 0;      // Default from C# demo (private byte FastFlag = 0)
                     int BufferCount = 0;
                     int TagNum = 0;
                     
