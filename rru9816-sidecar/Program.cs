@@ -305,18 +305,47 @@ namespace RRU9816Sidecar
                     Console.WriteLine($"❌ ClearTagBuffer exception: {ex.Message}"); 
                 }
                 
-                // Step 2: Set antenna (antenna 1, like Delphi default)
+                // Step 2: Try different antenna function names
+                bool antennaSet = false;
+                
+                // Try SetAnt first
                 try
                 {
-                    fCmdRet = RWDev.SetAntenna(ref fComAdr, 1, frmcomportindex);
-                    Console.WriteLine($"🔍 SetAntenna result: {fCmdRet}");
-                    if (fCmdRet == 0) Console.WriteLine("✅ Antenna set to 1");
-                    else Console.WriteLine($"❌ Failed to set antenna: {fCmdRet}");
+                    fCmdRet = RWDev.SetAnt(ref fComAdr, 1, frmcomportindex);
+                    Console.WriteLine($"🔍 SetAnt result: {fCmdRet}");
+                    if (fCmdRet == 0) 
+                    {
+                        Console.WriteLine("✅ Antenna set to 1 (via SetAnt)");
+                        antennaSet = true;
+                    }
+                    else Console.WriteLine($"❌ Failed SetAnt: {fCmdRet}");
                 }
                 catch (Exception ex) 
                 { 
-                    Console.WriteLine($"❌ SetAntenna exception: {ex.Message}"); 
+                    Console.WriteLine($"❌ SetAnt exception: {ex.Message}"); 
                 }
+                
+                // Try SetFrequency if SetAnt failed
+                if (!antennaSet)
+                {
+                    try
+                    {
+                        fCmdRet = RWDev.SetFrequency(ref fComAdr, 1, frmcomportindex);
+                        Console.WriteLine($"🔍 SetFrequency result: {fCmdRet}");
+                        if (fCmdRet == 0) 
+                        {
+                            Console.WriteLine("✅ Antenna set to 1 (via SetFrequency)");
+                            antennaSet = true;
+                        }
+                        else Console.WriteLine($"❌ Failed SetFrequency: {fCmdRet}");
+                    }
+                    catch (Exception ex) 
+                    { 
+                        Console.WriteLine($"❌ SetFrequency exception: {ex.Message}"); 
+                    }
+                }
+                
+                if (!antennaSet) Console.WriteLine("⚠️ No antenna function worked - continuing anyway");
                 
                 // Step 3: Set work mode to buffer mode (0 = answer mode, 1 = buffer mode)
                 try
@@ -331,18 +360,79 @@ namespace RRU9816Sidecar
                     Console.WriteLine($"❌ SetWorkMode exception: {ex.Message}"); 
                 }
                 
-                // Step 4: Start buffer inventory (THIS IS THE KEY - missing before!)
+                // Step 4: Try different inventory start function names  
+                bool inventoryStarted = false;
+                byte QValue = 4;    // Default Q value like Delphi
+                byte Session = 0;   // Default session
+                
+                // Try StartInventory first
                 try
                 {
-                    byte QValue = 4;    // Default Q value like Delphi
-                    byte Session = 0;   // Default session
-                    Console.WriteLine($"🔍 Attempting StartBufferInventory with Q={QValue}, Session={Session}");
-                    fCmdRet = RWDev.StartBufferInventory(ref fComAdr, QValue, Session, frmcomportindex);
-                    Console.WriteLine($"🔍 StartBufferInventory result: {fCmdRet}");
+                    Console.WriteLine($"🔍 Trying StartInventory with Q={QValue}, Session={Session}");
+                    fCmdRet = RWDev.StartInventory(ref fComAdr, QValue, Session, frmcomportindex);
+                    Console.WriteLine($"🔍 StartInventory result: {fCmdRet}");
                     if (fCmdRet == 0) 
                     {
-                        Console.WriteLine("🚀 RF Inventory started successfully!");
-                    
+                        Console.WriteLine("🚀 RF Inventory started successfully (via StartInventory)!");
+                        inventoryStarted = true;
+                    }
+                    else Console.WriteLine($"❌ Failed StartInventory: {fCmdRet}");
+                }
+                catch (Exception ex) 
+                { 
+                    Console.WriteLine($"❌ StartInventory exception: {ex.Message}"); 
+                }
+                
+                // Try BeginBufferInventory if StartInventory failed
+                if (!inventoryStarted)
+                {
+                    try
+                    {
+                        Console.WriteLine($"🔍 Trying BeginBufferInventory with Q={QValue}, Session={Session}");
+                        fCmdRet = RWDev.BeginBufferInventory(ref fComAdr, QValue, Session, frmcomportindex);
+                        Console.WriteLine($"🔍 BeginBufferInventory result: {fCmdRet}");
+                        if (fCmdRet == 0) 
+                        {
+                            Console.WriteLine("🚀 RF Inventory started successfully (via BeginBufferInventory)!");
+                            inventoryStarted = true;
+                        }
+                        else Console.WriteLine($"❌ Failed BeginBufferInventory: {fCmdRet}");
+                    }
+                    catch (Exception ex) 
+                    { 
+                        Console.WriteLine($"❌ BeginBufferInventory exception: {ex.Message}"); 
+                    }
+                }
+                
+                // Try Inventory_G2 as last resort (different parameters)
+                if (!inventoryStarted)
+                {
+                    try
+                    {
+                        Console.WriteLine($"🔍 Trying Inventory_G2 with Q={QValue}, Session={Session}");
+                        byte[] MaskAdr = new byte[2];
+                        byte[] MaskData = new byte[100];
+                        byte[] CardData = new byte[8000];
+                        int Totallen = 0;
+                        int CardNum = 0;
+                        
+                        fCmdRet = RWDev.Inventory_G2(ref fComAdr, QValue, Session, 1, MaskAdr, 0, MaskData, 0, CardData, ref Totallen, ref CardNum, frmcomportindex);
+                        Console.WriteLine($"🔍 Inventory_G2 result: {fCmdRet}");
+                        if (fCmdRet == 0) 
+                        {
+                            Console.WriteLine("🚀 RF Inventory started successfully (via Inventory_G2)!");
+                            inventoryStarted = true;
+                        }
+                        else Console.WriteLine($"❌ Failed Inventory_G2: {fCmdRet}");
+                    }
+                    catch (Exception ex) 
+                    { 
+                        Console.WriteLine($"❌ Inventory_G2 exception: {ex.Message}"); 
+                    }
+                }
+                
+                if (inventoryStarted) 
+                {
                     // Step 5: Start buffer reading thread (like C# demo)
                     _ = Task.Run(async () =>
                     {
@@ -360,26 +450,17 @@ namespace RRU9816Sidecar
                         }
                     });
                     
-                        await SendMessage(new {
-                            type = "inventory_started",
-                            message = "RF Tag inventory started - RRU9816 is now scanning for tags!"
-                        });
-                    }
-                    else
-                    {
-                        Console.WriteLine($"❌ Failed to start RF inventory: {fCmdRet}");
-                        await SendMessage(new {
-                            type = "error",
-                            message = $"Failed to start RF inventory: {fCmdRet}"
-                        });
-                    }
+                    await SendMessage(new {
+                        type = "inventory_started",
+                        message = "RF Tag inventory started - RRU9816 is now scanning for tags!"
+                    });
                 }
-                catch (Exception ex) 
-                { 
-                    Console.WriteLine($"❌ StartBufferInventory exception: {ex.Message}"); 
+                else
+                {
+                    Console.WriteLine($"❌ All inventory start functions failed!");
                     await SendMessage(new {
                         type = "error",
-                        message = $"StartBufferInventory failed: {ex.Message}"
+                        message = "Failed to start RF inventory - no suitable function found in DLL"
                     });
                 }
             }

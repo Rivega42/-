@@ -67,7 +67,7 @@ namespace UHF
         public static extern int ClearTagBuffer(ref byte ComAdr,
                                                int frmComPortindex);
 
-        // Inventory start/stop functions - Missing in original code!
+        // Try different function names that might exist in RRU9816.dll
         [DllImport(DLLNAME, CallingConvention = CallingConvention.StdCall)]
         public static extern int Inventory_G2(ref byte ComAdr,
                                               byte QValue,
@@ -82,24 +82,38 @@ namespace UHF
                                               ref int CardNum,
                                               int frmComPortindex);
 
+        // Try alternative inventory start function names
         [DllImport(DLLNAME, CallingConvention = CallingConvention.StdCall)]
-        public static extern int StartBufferInventory(ref byte ComAdr,
+        public static extern int StartInventory(ref byte ComAdr,
+                                               byte QValue,
+                                               byte Session,
+                                               int frmComPortindex);
+
+        // Try buffer-specific inventory  
+        [DllImport(DLLNAME, CallingConvention = CallingConvention.StdCall)]
+        public static extern int BeginBufferInventory(ref byte ComAdr,
                                                       byte QValue,
                                                       byte Session,
                                                       int frmComPortindex);
 
         [DllImport(DLLNAME, CallingConvention = CallingConvention.StdCall)]
-        public static extern int StopBufferInventory(ref byte ComAdr,
-                                                     int frmComPortindex);
+        public static extern int StopInventory(ref byte ComAdr,
+                                              int frmComPortindex);
 
         [DllImport(DLLNAME, CallingConvention = CallingConvention.StdCall)]
         public static extern int SetWorkMode(ref byte ComAdr,
                                             byte WorkMode,
                                             int frmComPortindex);
 
+        // Try alternative antenna function names
         [DllImport(DLLNAME, CallingConvention = CallingConvention.StdCall)]
-        public static extern int SetAntenna(ref byte ComAdr,
-                                           byte AntennaNo,
-                                           int frmComPortindex);
+        public static extern int SetFrequency(ref byte ComAdr,
+                                             byte AntennaNo,
+                                             int frmComPortindex);
+
+        [DllImport(DLLNAME, CallingConvention = CallingConvention.StdCall)]
+        public static extern int SetAnt(ref byte ComAdr,
+                                       byte AntennaNo,
+                                       int frmComPortindex);
     }
 }
