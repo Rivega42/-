@@ -16,26 +16,6 @@ namespace RRU9816Sidecar
         private static int frmcomportindex = 0;
         private static byte fComAdr = 0xff;
         private static int fCmdRet;
-        
-        // Return code descriptions from C# demo
-        private static string GetReturnCodeDesc(int cmdRet)
-        {
-            switch (cmdRet)
-            {
-                case 0x00: return "successfully";
-                case 0x01: return "Return before Inventory finished";
-                case 0x02: return "the Inventory-scan-time overflow";
-                case 0x03: return "More Data";
-                case 0xFA: return "Get Tag,Poor Communication,Inoperable";
-                case 0xFB: return "No Tag Operable";  
-                case 0xFC: return "Tag Return ErrorCode";
-                case 0xFD: return "Command length wrong";
-                case 0xFE: return "Illegal command";
-                case 0xFF: return "Parameter Error";
-                case 250: return "Get Tag,Poor Communication,Inoperable"; // 0xFA in decimal
-                default: return $"Unknown code: {cmdRet} (0x{cmdRet:X2})";
-            }
-        }
         private static bool isConnected = false;
         private static WebSocket connectedClient = null;
         
@@ -537,12 +517,20 @@ namespace RRU9816Sidecar
                 case 0x00: return "Successfully";
                 case 0x01: return "Return before Inventory finished";
                 case 0x02: return "The Inventory-scan-time overflow";
+                case 0x03: return "More Data";
                 case 0x30: return "Communication error";
                 case 0x31: return "CRC checksum error";
                 case 0x35: return "ComPort Opened";
                 case 0x36: return "ComPort Closed";
                 case 0x37: return "Invalid Handle";
                 case 0x38: return "Invalid Port";
+                case 0xFA: // 250 in decimal
+                case 250: return "Get Tag,Poor Communication,Inoperable";
+                case 0xFB: return "No Tag Operable";
+                case 0xFC: return "Tag Return ErrorCode";
+                case 0xFD: return "Command length wrong";
+                case 0xFE: return "Illegal command";
+                case 0xFF: return "Parameter Error";
                 default: return $"Error code: 0x{cmdRet:X2}";
             }
         }
