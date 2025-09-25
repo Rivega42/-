@@ -38,7 +38,13 @@ export class PcscService extends EventEmitter {
   
   constructor() {
     super();
-    this.initPromise = this.checkPcscAvailability();
+    // Не инициализируем PC/SC автоматически - только по требованию
+    this.initPromise = Promise.resolve();
+    
+    storage.addSystemLog({
+      level: 'INFO',
+      message: 'PC/SC service created (will initialize on demand)',
+    });
   }
 
   private async checkPcscAvailability(): Promise<void> {
@@ -200,6 +206,15 @@ export class PcscService extends EventEmitter {
   }
 
   async connect(): Promise<void> {
+    // Initialize PC/SC on demand if not done yet
+    if (!this.isAvailable && !this.nfc) {
+      storage.addSystemLog({
+        level: 'INFO',
+        message: 'Initializing PC/SC service on demand for ACR1281U-C...',
+      });
+      await this.checkPcscAvailability();
+    }
+    
     // Wait for initialization to complete
     await this.initPromise;
     
