@@ -325,8 +325,10 @@ export class RfidService extends EventEmitter {
       return;
     }
     
-    // Пробуем baud rates из C# демки по порядку: 9600, 57600, 115200, 38400, 19200
-    const baudRates = [9600, 57600, 115200, 38400, 19200];
+    // Пробуем разные baud rates для IQRFID-5102: 115200, 57600, 9600, 38400, 19200  
+    const baudRates = readerType === ReaderType.IQRFID5102 
+      ? [115200, 57600, 9600, 38400, 19200]
+      : [9600, 57600, 115200, 38400, 19200];
     
     for (const baudRate of baudRates) {
       try {
@@ -1177,9 +1179,9 @@ export class RfidService extends EventEmitter {
     
     if (data.length < 7) return; // Minimum frame size
     
-    // Look for complete frames starting with 0xBB
+    // Look for complete frames starting with 0xBB (handle both 0x22 and 0x27 commands)
     for (let i = 0; i < data.length - 6; i++) {
-      if (data[i] === 0xBB && data[i + 1] === 0x02 && data[i + 2] === 0x22) {
+      if (data[i] === 0xBB && data[i + 1] === 0x02 && (data[i + 2] === 0x22 || data[i + 2] === 0x27)) {
         // Found notice frame for inventory response
         const lenMsb = data[i + 3];
         const lenLsb = data[i + 4];
@@ -1251,21 +1253,21 @@ export class RfidService extends EventEmitter {
 
   private initializeIQRFID5102(): void {
     // IQRFID-5102 uses ISO18000-6C protocol with 0xBB header format
-    // Correct single inventory command: BB 00 22 00 00 22 7E
-    const inventoryCommand = Buffer.from([0xBB, 0x00, 0x22, 0x00, 0x00, 0x22, 0x7E]);
+    // Try multiple inventory command: BB 00 27 00 00 27 7E (0x27 = multiple inventory)
+    const inventoryCommand = Buffer.from([0xBB, 0x00, 0x27, 0x00, 0x00, 0x27, 0x7E]);
     this.serialPort?.write(inventoryCommand);
     
     storage.addSystemLog({
       level: 'INFO',
-      message: 'Starting IQRFID-5102 inventory with ISO18000-6C protocol (BB 00 22 00 00 22 7E)...',
+      message: 'Starting IQRFID-5102 multiple inventory with ISO18000-6C protocol (BB 00 27 00 00 27 7E)...',
     });
     
-    // Start continuous inventory polling every 1 second
+    // Start continuous inventory polling every 2 seconds (slower for stability)
     this.inventoryInterval = setInterval(() => {
       if (this.serialPort?.isOpen) {
         this.serialPort.write(inventoryCommand);
       }
-    }, 1000);
+    }, 2000);
   }
 
   private initializeACR1281UC(): void {
