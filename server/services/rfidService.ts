@@ -332,14 +332,14 @@ export class RfidService extends EventEmitter {
       try {
         storage.addSystemLog({
           level: 'INFO',
-          message: `Trying RRU9816 connection with baud rate ${baudRate}...`,
+          message: `Trying ${config.description} connection with baud rate ${baudRate}...`,
         });
         
         await this.tryConnectWithBaudRate(portPath, readerType, baudRate);
         
         storage.addSystemLog({
           level: 'SUCCESS',
-          message: `✅ RRU9816 connected successfully with baud rate ${baudRate}!`,
+          message: `✅ ${config.description} connected successfully with baud rate ${baudRate}!`,
         });
         return; // Успешное подключение!
         
@@ -361,7 +361,7 @@ export class RfidService extends EventEmitter {
       }
     }
     
-    throw new Error('Failed to connect to RRU9816 with any supported baud rate');
+    throw new Error(`Failed to connect to ${config.description} with any supported baud rate`);
   }
 
   private async tryConnectWithBaudRate(portPath: string, readerType: ReaderType, baudRate: number): Promise<void> {
@@ -441,6 +441,8 @@ export class RfidService extends EventEmitter {
       this.serialPort.on('data', (data: Buffer) => {
         if (readerType === ReaderType.RRU9816) {
           this.handleRRU9816BinaryData(data);
+        } else if (readerType === ReaderType.IQRFID5102) {
+          this.handleIQRFID5102BinaryData(data);
         } else {
           // For other readers, convert buffer to string and use line parser
           const dataStr = data.toString('utf8');
@@ -1162,16 +1164,108 @@ export class RfidService extends EventEmitter {
     }
   }
 
+  // NEW: Handle IQRFID-5102 binary responses with 0xBB protocol
+  private handleIQRFID5102BinaryData(data: Buffer): void {
+    // Log raw response for debugging
+    storage.addSystemLog({
+      level: 'INFO',
+      message: `IQRFID-5102 Raw Data: ${data.toString('hex').toUpperCase()}`,
+    });
+
+    // IQRFID-5102 uses 0xBB protocol format
+    // Response format: BB 02 22 [LEN_MSB] [LEN_LSB] [RSSI] [PC_MSB] [PC_LSB] [EPC_DATA...] [CRC_MSB] [CRC_LSB] [CHECKSUM] 7E
+    
+    if (data.length < 7) return; // Minimum frame size
+    
+    // Look for complete frames starting with 0xBB
+    for (let i = 0; i < data.length - 6; i++) {
+      if (data[i] === 0xBB && data[i + 1] === 0x02 && data[i + 2] === 0x22) {
+        // Found notice frame for inventory response
+        const lenMsb = data[i + 3];
+        const lenLsb = data[i + 4];
+        const parameterLength = (lenMsb << 8) | lenLsb;
+        
+        // Check if we have complete frame
+        const totalFrameLength = 6 + parameterLength + 1; // Header(3) + Len(2) + Parameters + Checksum(1) + End(1)
+        if (i + totalFrameLength <= data.length && data[i + totalFrameLength - 1] === 0x7E) {
+          this.parseIQRFID5102TagData(data.slice(i, i + totalFrameLength));
+        }
+      }
+    }
+  }
+
+  private parseIQRFID5102TagData(frame: Buffer): void {
+    try {
+      // Frame format: BB 02 22 [LEN_MSB] [LEN_LSB] [RSSI] [PC_MSB] [PC_LSB] [EPC_DATA...] [CRC_MSB] [CRC_LSB] [CHECKSUM] 7E
+      if (frame.length < 10) return;
+      
+      const parameterLength = (frame[3] << 8) | frame[4];
+      if (parameterLength < 5) return; // Need at least RSSI + PC + some EPC
+      
+      const rssiRaw = frame[5];
+      // RSSI is complement coded - convert to dBm
+      const rssi = rssiRaw > 127 ? rssiRaw - 256 : rssiRaw;
+      
+      const pcMsb = frame[6];
+      const pcLsb = frame[7];
+      const pcWord = (pcMsb << 8) | pcLsb;
+      
+      // Calculate EPC length from PC word (bits 15-11)
+      const epcLengthWords = (pcWord >> 11) & 0x1F;
+      const epcLengthBytes = epcLengthWords * 2;
+      
+      if (parameterLength < 3 + epcLengthBytes + 2) return; // RSSI + PC + EPC + CRC
+      
+      // Extract EPC data
+      const epcData = frame.slice(8, 8 + epcLengthBytes);
+      const epc = epcData.toString('hex').toUpperCase();
+      
+      if (epc.length > 0) {
+        const tagEvent: TagReadEvent = {
+          epc,
+          rssi,
+          timestamp: new Date().toISOString(),
+          readerType: this.currentReaderType,
+        };
+
+        storage.createOrUpdateRfidTag({
+          epc,
+          rssi: rssi.toString(),
+        });
+
+        this.emit('tagRead', tagEvent);
+        
+        storage.addSystemLog({
+          level: 'SUCCESS',
+          message: `🎯 IQRFID-5102 Tag: EPC=${epc}, RSSI=${rssi} dBm, PC=${pcWord.toString(16).toUpperCase().padStart(4, '0')}`,
+        });
+      }
+      
+    } catch (error) {
+      storage.addSystemLog({
+        level: 'ERROR',
+        message: `IQRFID-5102 parsing error: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      });
+    }
+  }
+
   private initializeIQRFID5102(): void {
-    // IQRFID-5102 specific initialization commands
-    // This reader may use different command protocol
-    const inventoryCommand = Buffer.from([0xBB, 0x00, 0x01, 0x00, 0x01, 0x7E]);
+    // IQRFID-5102 uses ISO18000-6C protocol with 0xBB header format
+    // Correct single inventory command: BB 00 22 00 00 22 7E
+    const inventoryCommand = Buffer.from([0xBB, 0x00, 0x22, 0x00, 0x00, 0x22, 0x7E]);
     this.serialPort?.write(inventoryCommand);
     
     storage.addSystemLog({
       level: 'INFO',
-      message: 'Starting IQRFID-5102 RFID inventory scan...',
+      message: 'Starting IQRFID-5102 inventory with ISO18000-6C protocol (BB 00 22 00 00 22 7E)...',
     });
+    
+    // Start continuous inventory polling every 1 second
+    this.inventoryInterval = setInterval(() => {
+      if (this.serialPort?.isOpen) {
+        this.serialPort.write(inventoryCommand);
+      }
+    }, 1000);
   }
 
   private initializeACR1281UC(): void {
