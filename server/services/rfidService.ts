@@ -1282,6 +1282,11 @@ export class RfidService extends EventEmitter {
         });
       }
     }, 2000);
+    
+    storage.addSystemLog({
+      level: 'INFO',
+      message: `✅ IQRFID-5102 interval started! Timer ID: ${this.inventoryInterval}`,
+    });
   }
 
   private initializeACR1281UC(): void {
