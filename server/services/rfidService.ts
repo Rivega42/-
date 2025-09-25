@@ -1262,6 +1262,11 @@ export class RfidService extends EventEmitter {
       message: 'Starting IQRFID-5102 multiple inventory with ISO18000-6C protocol (BB 00 27 00 00 27 7E)...',
     });
     
+    // Clear any existing interval
+    if (this.inventoryInterval) {
+      clearInterval(this.inventoryInterval);
+    }
+    
     // Start continuous inventory polling every 2 seconds (slower for stability)  
     this.inventoryInterval = setInterval(() => {
       if (this.serialPort?.isOpen) {
