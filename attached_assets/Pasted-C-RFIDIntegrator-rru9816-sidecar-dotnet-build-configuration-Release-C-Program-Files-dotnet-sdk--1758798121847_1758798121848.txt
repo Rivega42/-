@@ -1,0 +1,15 @@
+C:\RFIDIntegrator\rru9816-sidecar>dotnet build --configuration Release
+C:\Program Files\dotnet\sdk\9.0.305\Sdks\Microsoft.NET.Sdk\targets\Microsoft.NET.EolTargetFrameworks.targets(32,5): warning NETSDK1138: целевая платформа "net6.0" больше не поддерживается и не будет получать обновления для системы безопасности в будущем. Дополнительные сведения о политике поддержки см. в https://aka.ms/dotnet-core-support.
+Восстановление успешно выполнено с предупреждениями (1) через 2,6 с
+    C:\Program Files\dotnet\sdk\9.0.305\Sdks\Microsoft.NET.Sdk\targets\Microsoft.NET.EolTargetFrameworks.targets(32,5): warning NETSDK1138: целевая платформа "net6.0" больше не поддерживается и не будет получать обновления для системы безопасности в будущем. Дополнительные сведения о политике поддержки см. в https://aka.ms/dotnet-core-support.
+  RRU9816Sidecar сбой с ошибками (1) и предупреждениями (7) (2,4 с)
+    C:\Program Files\dotnet\sdk\9.0.305\Sdks\Microsoft.NET.Sdk\targets\Microsoft.NET.EolTargetFrameworks.targets(32,5): warning NETSDK1138: целевая платформа "net6.0" больше не поддерживается и не будет получать обновления для системы безопасности в будущем. Дополнительные сведения о политике поддержки см. в https://aka.ms/dotnet-core-support.
+    C:\RFIDIntegrator\rru9816-sidecar\Program.cs(104,35): warning CS8625: Литерал, равный NULL, не может быть преобразован в ссылочный тип, не допускающий значение NULL.
+    C:\RFIDIntegrator\rru9816-sidecar\Program.cs(113,31): warning CS8600: Преобразование литерала, допускающего значение NULL или возможного значения NULL в тип, не допускающий значение NULL.
+    C:\RFIDIntegrator\rru9816-sidecar\Program.cs(114,34): warning CS8602: Разыменование вероятной пустой ссылки.
+    C:\RFIDIntegrator\rru9816-sidecar\Program.cs(242,22): warning CS0219: Переменной "fBaud" присвоено значение, но оно ни разу не использовано.
+    C:\RFIDIntegrator\rru9816-sidecar\Program.cs(528,17): error CS0152: Предложение Switch содержит несколько случаев со значением метки "250".
+    C:\RFIDIntegrator\rru9816-sidecar\Program.cs(20,52): warning CS8625: Литерал, равный NULL, не может быть преобразован в ссылочный тип, не допускающий значение NULL.
+    C:\RFIDIntegrator\rru9816-sidecar\Program.cs(14,37): warning CS8618: поле "httpListener", не допускающий значения NULL, должен содержать значение, отличное от NULL, при выходе из конструктора. Рассмотрите возможность добавления модификатора "required" или объявления значения поле, допускающего значение NULL.
+
+Сборка сбой с ошибками (1) и предупреждениями (9) через 8,3 с
