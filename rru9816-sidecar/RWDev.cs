@@ -57,63 +57,79 @@ namespace UHF
                                             byte powerDbm,
                                             int frmComPortindex);
 
+        // GetTagBufferInfo maps to ReadBuffer_G2 from documentation
+        [DllImport(DLLNAME, CallingConvention = CallingConvention.StdCall)]
+        public static extern int ReadBuffer_G2(ref byte ComAdr,
+                                               ref int Totallen,
+                                               ref int CardNum,
+                                               byte[] pEPCList,
+                                               int FrmHandle);
+
+        // ClearTagBuffer maps to ClearBuffer_G2 from documentation  
+        [DllImport(DLLNAME, CallingConvention = CallingConvention.StdCall)]
+        public static extern int ClearBuffer_G2(ref byte ComAdr,
+                                                int FrmHandle);
+
+        // GetBufferCnt_G2 from documentation
+        [DllImport(DLLNAME, CallingConvention = CallingConvention.StdCall)]
+        public static extern int GetBufferCnt_G2(ref byte ComAdr,
+                                                 ref int Count,
+                                                 int FrmHandle);
+
+        // CORRECT function from documentation - InventoryBuffer_G2
+        [DllImport(DLLNAME, CallingConvention = CallingConvention.StdCall)]
+        public static extern int InventoryBuffer_G2(ref byte ComAdr,
+                                                    byte QValue,
+                                                    byte Session,
+                                                    byte MaskMem,
+                                                    byte[] MaskAdr,
+                                                    byte MaskLen,
+                                                    byte[] MaskData,
+                                                    byte MaskFlag,
+                                                    byte AdrTID,
+                                                    byte LenTID,
+                                                    byte TIDFlag,
+                                                    byte Target,
+                                                    byte InAnt,
+                                                    byte Scantime,
+                                                    byte Fastflag,
+                                                    ref int BufferCount,
+                                                    ref int TagNum,
+                                                    int FrmHandle);
+
+        // Standard Inventory_G2 from documentation
+        [DllImport(DLLNAME, CallingConvention = CallingConvention.StdCall)]
+        public static extern int Inventory_G2(ref byte ComAdr,
+                                              byte QValue,
+                                              byte Session,
+                                              byte MaskMem,
+                                              byte[] MaskAdr,
+                                              byte MaskLen,
+                                              byte[] MaskData,
+                                              byte MaskFlag,
+                                              byte AdrTID,
+                                              byte LenTID,
+                                              byte TIDFlag,
+                                              byte Target,
+                                              byte InAnt,
+                                              byte Scantime,
+                                              byte Fastflag,
+                                              byte[] EPClenandEPC,
+                                              byte[] Ant,
+                                              ref int Totallen,
+                                              ref int CardNum,
+                                              int FrmHandle);
+
+        // Keep existing GetTagBufferInfo for backward compatibility
         [DllImport(DLLNAME, CallingConvention = CallingConvention.StdCall)]
         public static extern int GetTagBufferInfo(ref byte ComAdr,
                                                   byte[] Data,
                                                   ref int dataLength,
                                                   int frmComPortindex);
 
+        // Keep existing ClearTagBuffer for backward compatibility  
         [DllImport(DLLNAME, CallingConvention = CallingConvention.StdCall)]
         public static extern int ClearTagBuffer(ref byte ComAdr,
                                                int frmComPortindex);
-
-        // Try different function names that might exist in RRU9816.dll
-        [DllImport(DLLNAME, CallingConvention = CallingConvention.StdCall)]
-        public static extern int Inventory_G2(ref byte ComAdr,
-                                              byte QValue,
-                                              byte Session, 
-                                              byte MaskMem,
-                                              byte[] MaskAdr,
-                                              byte MaskLen,
-                                              byte[] MaskData,
-                                              byte MaskDataLen,
-                                              byte[] CardData,
-                                              ref int Totallen,
-                                              ref int CardNum,
-                                              int frmComPortindex);
-
-        // Try alternative inventory start function names
-        [DllImport(DLLNAME, CallingConvention = CallingConvention.StdCall)]
-        public static extern int StartInventory(ref byte ComAdr,
-                                               byte QValue,
-                                               byte Session,
-                                               int frmComPortindex);
-
-        // Try buffer-specific inventory  
-        [DllImport(DLLNAME, CallingConvention = CallingConvention.StdCall)]
-        public static extern int BeginBufferInventory(ref byte ComAdr,
-                                                      byte QValue,
-                                                      byte Session,
-                                                      int frmComPortindex);
-
-        [DllImport(DLLNAME, CallingConvention = CallingConvention.StdCall)]
-        public static extern int StopInventory(ref byte ComAdr,
-                                              int frmComPortindex);
-
-        [DllImport(DLLNAME, CallingConvention = CallingConvention.StdCall)]
-        public static extern int SetWorkMode(ref byte ComAdr,
-                                            byte WorkMode,
-                                            int frmComPortindex);
-
-        // Try alternative antenna function names
-        [DllImport(DLLNAME, CallingConvention = CallingConvention.StdCall)]
-        public static extern int SetFrequency(ref byte ComAdr,
-                                             byte AntennaNo,
-                                             int frmComPortindex);
-
-        [DllImport(DLLNAME, CallingConvention = CallingConvention.StdCall)]
-        public static extern int SetAnt(ref byte ComAdr,
-                                       byte AntennaNo,
-                                       int frmComPortindex);
     }
 }
