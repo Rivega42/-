@@ -2,6 +2,22 @@ import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 
+// Global error handlers to prevent app crashes from NFC/PCSC errors
+process.on('uncaughtException', (error) => {
+  console.error('🚨 Uncaught Exception (NFC/PCSC):', error.message);
+  if (error.message.includes('Cannot process ISO 14443-4 tag') || error.message.includes('AID')) {
+    console.log('💡 ISO 14443-4 card detected but AID not configured - continuing...');
+    return; // Don't crash the app
+  }
+  console.error('💥 Application will exit due to uncaught exception');
+  process.exit(1);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('🚨 Unhandled Promise Rejection:', reason);
+  console.log('📍 Promise:', promise);
+});
+
 const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));

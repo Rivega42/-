@@ -100,11 +100,19 @@ export class PcscService extends EventEmitter {
 
   private setupReaderEventHandlers(reader: PcscReader): void {
     reader.on('card', (card: any) => {
-      storage.addSystemLog({
-        level: 'INFO',
-        message: 'NFC card detected on ACR1281U-C',
-      });
-      this.processAutoCard(card);
+      try {
+        storage.addSystemLog({
+          level: 'INFO',
+          message: 'NFC card detected on ACR1281U-C',
+        });
+        this.processAutoCard(card);
+      } catch (error) {
+        storage.addSystemLog({
+          level: 'WARNING',
+          message: `Card processing error (ISO 14443-4 AID issue): ${error instanceof Error ? error.message : 'Unknown error'}`,
+        });
+        // Continue running - don't crash the app
+      }
     });
 
     reader.on('card.off', () => {
@@ -124,12 +132,12 @@ export class PcscService extends EventEmitter {
   }
 
   private processAutoCard(card: any): void {
-    storage.addSystemLog({
-      level: 'INFO',
-      message: `Processing card automatically connected by nfc-pcsc`,
-    });
-
     try {
+      storage.addSystemLog({
+        level: 'INFO',
+        message: `Processing card automatically connected by nfc-pcsc`,
+      });
+
       // nfc-pcsc библиотека автоматически подключается и предоставляет card объект
       let uid = '';
       
