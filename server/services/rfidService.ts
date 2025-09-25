@@ -1253,13 +1253,13 @@ export class RfidService extends EventEmitter {
 
   private initializeIQRFID5102(): void {
     // IQRFID-5102 uses ISO18000-6C protocol with 0xBB header format
-    // Try multiple inventory command: BB 00 27 00 00 27 7E (0x27 = multiple inventory)
-    const inventoryCommand = Buffer.from([0xBB, 0x00, 0x27, 0x00, 0x00, 0x27, 0x7E]);
+    // Try single inventory command: BB 00 22 00 00 22 7E (0x22 = single inventory)  
+    const inventoryCommand = Buffer.from([0xBB, 0x00, 0x22, 0x00, 0x00, 0x22, 0x7E]);
     this.serialPort?.write(inventoryCommand);
     
     storage.addSystemLog({
       level: 'INFO',
-      message: 'Starting IQRFID-5102 multiple inventory with ISO18000-6C protocol (BB 00 27 00 00 27 7E)...',
+      message: 'Starting IQRFID-5102 single inventory with ISO18000-6C protocol (BB 00 22 00 00 22 7E)...',
     });
     
     // Clear any existing interval
@@ -1281,7 +1281,7 @@ export class RfidService extends EventEmitter {
           message: `⚠️ IQRFID-5102 port is closed, skipping inventory`,
         });
       }
-    }, 2000);
+    }, 500); // Попробуем каждые 0.5 секунд для тестирования
     
     storage.addSystemLog({
       level: 'INFO',
