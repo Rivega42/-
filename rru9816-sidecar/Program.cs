@@ -524,8 +524,7 @@ namespace RRU9816Sidecar
                 case 0x36: return "ComPort Closed";
                 case 0x37: return "Invalid Handle";
                 case 0x38: return "Invalid Port";
-                case 0xFA: // 250 in decimal
-                case 250: return "Get Tag,Poor Communication,Inoperable";
+                case 0xFA: return "Get Tag,Poor Communication,Inoperable"; // 250 in decimal
                 case 0xFB: return "No Tag Operable";
                 case 0xFC: return "Tag Return ErrorCode";
                 case 0xFD: return "Command length wrong";
