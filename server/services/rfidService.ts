@@ -1271,14 +1271,17 @@ export class RfidService extends EventEmitter {
   }
 
   private initializeIQRFID5102(): void {
-    // IQRFID-5102 uses ISO18000-6C protocol with 0xBB header format
-    // Try single inventory command: BB 00 22 00 00 22 7E (0x22 = single inventory)  
-    const inventoryCommand = Buffer.from([0xBB, 0x00, 0x22, 0x00, 0x00, 0x22, 0x7E]);
+    // IQRFID-5102 uses [LEN][ADR][CMD][CRC] protocol format
+    // Build inventory command: [0x04][0x00][0x01][CRC_LOW][CRC_HIGH]
+    const cmdData = Buffer.from([0x04, 0x00, 0x01]);
+    const crc = this.calculateIQRFID5102CRC(cmdData, 3);
+    const inventoryCommand = Buffer.concat([cmdData, crc]);
+    
     this.serialPort?.write(inventoryCommand);
     
     storage.addSystemLog({
       level: 'INFO',
-      message: 'Starting IQRFID-5102 single inventory with ISO18000-6C protocol (BB 00 22 00 00 22 7E)...',
+      message: `Starting IQRFID-5102 inventory with command: ${inventoryCommand.toString('hex').toUpperCase()}`,
     });
     
     // Clear any existing interval
@@ -1286,13 +1289,13 @@ export class RfidService extends EventEmitter {
       clearInterval(this.inventoryInterval);
     }
     
-    // Start continuous inventory polling every 2 seconds (slower for stability)  
+    // Start continuous inventory polling
     this.inventoryInterval = setInterval(() => {
       if (this.serialPort?.isOpen) {
         this.serialPort.write(inventoryCommand);
         storage.addSystemLog({
           level: 'INFO',
-          message: `📡 IQRFID-5102 sending inventory command...`,
+          message: `📡 IQRFID-5102 sending inventory command: ${inventoryCommand.toString('hex').toUpperCase()}`,
         });
       } else {
         storage.addSystemLog({
@@ -1300,11 +1303,11 @@ export class RfidService extends EventEmitter {
           message: `⚠️ IQRFID-5102 port is closed, skipping inventory`,
         });
       }
-    }, 500); // Попробуем каждые 0.5 секунд для тестирования
+    }, 500);
     
     storage.addSystemLog({
       level: 'INFO',
-      message: `✅ IQRFID-5102 interval started! Timer ID: ${this.inventoryInterval}`,
+      message: `✅ IQRFID-5102 interval started with 500ms polling`,
     });
   }
 
