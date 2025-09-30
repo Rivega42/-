@@ -1252,29 +1252,36 @@ export class RfidService extends EventEmitter {
 
   private parseIQRFID5102TagData(frame: Buffer): void {
     try {
-      // Frame format: BB 02 22 [LEN_MSB] [LEN_LSB] [RSSI] [PC_MSB] [PC_LSB] [EPC_DATA...] [CRC_MSB] [CRC_LSB] [CHECKSUM] 7E
-      if (frame.length < 10) return;
+      // New protocol format: [LEN][ADR][CMD][TAG_COUNT][RSSI][EPC_LEN][EPC_DATA...][CRC]
+      // Example: 13 00 01 01 01 0C [12 bytes EPC] [2 bytes CRC]
       
-      const parameterLength = (frame[3] << 8) | frame[4];
-      if (parameterLength < 5) return; // Need at least RSSI + PC + some EPC
+      if (frame.length < 8) {
+        storage.addSystemLog({
+          level: 'WARN',
+          message: 'IQRFID-5102 tag frame too short',
+        });
+        return;
+      }
       
-      const rssiRaw = frame[5];
-      // RSSI is complement coded - convert to dBm
-      const rssi = rssiRaw > 127 ? rssiRaw - 256 : rssiRaw;
+      const tagCount = frame[3];
+      const rssiRaw = frame[4];
+      const epcLength = frame[5];
       
-      const pcMsb = frame[6];
-      const pcLsb = frame[7];
-      const pcWord = (pcMsb << 8) | pcLsb;
-      
-      // Calculate EPC length from PC word (bits 15-11)
-      const epcLengthWords = (pcWord >> 11) & 0x1F;
-      const epcLengthBytes = epcLengthWords * 2;
-      
-      if (parameterLength < 3 + epcLengthBytes + 2) return; // RSSI + PC + EPC + CRC
+      // Validate EPC length
+      if (frame.length < 6 + epcLength + 2) {
+        storage.addSystemLog({
+          level: 'WARN',
+          message: `IQRFID-5102 incomplete tag data: expected ${6 + epcLength + 2} bytes, got ${frame.length}`,
+        });
+        return;
+      }
       
       // Extract EPC data
-      const epcData = frame.slice(8, 8 + epcLengthBytes);
+      const epcData = frame.slice(6, 6 + epcLength);
       const epc = epcData.toString('hex').toUpperCase();
+      
+      // RSSI conversion (if needed - may already be signed)
+      const rssi = rssiRaw > 127 ? rssiRaw - 256 : rssiRaw;
       
       if (epc.length > 0) {
         const tagEvent: TagReadEvent = {
@@ -1293,7 +1300,7 @@ export class RfidService extends EventEmitter {
         
         storage.addSystemLog({
           level: 'SUCCESS',
-          message: `🎯 IQRFID-5102 Tag: EPC=${epc}, RSSI=${rssi} dBm, PC=${pcWord.toString(16).toUpperCase().padStart(4, '0')}`,
+          message: `🎯 IQRFID-5102 Tag: EPC=${epc}, RSSI=${rssi} dBm, Count=${tagCount}, EPC_Len=${epcLength}`,
         });
       }
       
