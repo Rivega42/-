@@ -1196,6 +1196,25 @@ export class RfidService extends EventEmitter {
     }
   }
 
+  private calculateIQRFID5102CRC(data: Buffer, length: number): Buffer {
+    // CRC-16 calculation for IQRFID-5102 protocol
+    let crc = 0xFFFF;
+    
+    for (let i = 0; i < length; i++) {
+      crc ^= data[i];
+      for (let j = 0; j < 8; j++) {
+        if (crc & 0x0001) {
+          crc = (crc >> 1) ^ 0x8408;
+        } else {
+          crc >>= 1;
+        }
+      }
+    }
+    
+    // Return CRC as 2-byte buffer (low byte first)
+    return Buffer.from([crc & 0xFF, (crc >> 8) & 0xFF]);
+  }
+
   private parseIQRFID5102TagData(frame: Buffer): void {
     try {
       // Frame format: BB 02 22 [LEN_MSB] [LEN_LSB] [RSSI] [PC_MSB] [PC_LSB] [EPC_DATA...] [CRC_MSB] [CRC_LSB] [CHECKSUM] 7E
