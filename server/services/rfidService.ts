@@ -18,7 +18,7 @@ const READER_CONFIGS: Record<ReaderType, ReaderConfig> = {
   },
   [ReaderType.IQRFID5102]: {
     type: ReaderType.IQRFID5102,
-    baudRate: 115200,
+    baudRate: 57600,
     description: 'IQRFID-5102 Desktop UHF RFID Reader',
     protocol: 'EPC Class 1 Gen2 (ISO18000-6C)',
     frequency: 'UHF 860-960MHz'
