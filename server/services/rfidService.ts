@@ -1189,18 +1189,18 @@ export class RfidService extends EventEmitter {
     const address = data[1];
     const command = data[2];
     
-    // Validate frame length
-    if (length !== data.length) {
+    // Validate frame length (length byte does not include itself)
+    if (length + 1 !== data.length) {
       storage.addSystemLog({
         level: 'WARN',
-        message: `IQRFID-5102 length mismatch: expected ${length}, got ${data.length}`,
+        message: `IQRFID-5102 length mismatch: expected ${length + 1} bytes (including length byte), got ${data.length}`,
       });
       return;
     }
     
-    // Verify CRC
-    const receivedCrc = Buffer.from([data[length - 2], data[length - 1]]);
-    const calculatedCrc = this.calculateIQRFID5102CRC(data, length - 2);
+    // Verify CRC (CRC is last 2 bytes of the frame, length byte is included in CRC calculation)
+    const receivedCrc = Buffer.from([data[length - 1], data[length]]);
+    const calculatedCrc = this.calculateIQRFID5102CRC(data, length - 1);
     
     if (!receivedCrc.equals(calculatedCrc)) {
       storage.addSystemLog({

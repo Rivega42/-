@@ -1,0 +1,349 @@
+[21:47:48] [INFO] 📡 IQRFID-5102 sending inventory command: 040001DB4B
+[21:47:48] [INFO] IQRFID-5102 Raw Data (6 bytes): 050001FBF23D
+[21:47:48] [WARN] IQRFID-5102 length mismatch: expected 5, got 6
+[21:47:48] [INFO] 📡 IQRFID-5102 sending inventory command: 040001DB4B
+[21:47:47] [INFO] IQRFID-5102 Raw Data (6 bytes): 050001FBF23D
+[21:47:47] [WARN] IQRFID-5102 length mismatch: expected 5, got 6
+[21:47:47] [INFO] 📡 IQRFID-5102 sending inventory command: 040001DB4B
+[21:47:47] [INFO] IQRFID-5102 Raw Data (6 bytes): 050001FBF23D
+[21:47:47] [WARN] IQRFID-5102 length mismatch: expected 5, got 6
+[21:47:47] [INFO] 📡 IQRFID-5102 sending inventory command: 040001DB4B
+[21:47:46] [INFO] IQRFID-5102 Raw Data (6 bytes): 050001FBF23D
+[21:47:46] [WARN] IQRFID-5102 length mismatch: expected 5, got 6
+[21:47:46] [INFO] 📡 IQRFID-5102 sending inventory command: 040001DB4B
+[21:47:46] [INFO] IQRFID-5102 Raw Data (6 bytes): 050001FBF23D
+[21:47:46] [WARN] IQRFID-5102 length mismatch: expected 5, got 6
+[21:47:46] [INFO] 📡 IQRFID-5102 sending inventory command: 040001DB4B
+[21:47:45] [INFO] IQRFID-5102 Raw Data (6 bytes): 050001FBF23D
+[21:47:45] [WARN] IQRFID-5102 length mismatch: expected 5, got 6
+[21:47:45] [INFO] 📡 IQRFID-5102 sending inventory command: 040001DB4B
+[21:47:45] [WARN] IQRFID-5102 length mismatch: expected 5, got 6
+[21:47:45] [INFO] IQRFID-5102 Raw Data (6 bytes): 050001FBF23D
+[21:47:45] [INFO] 📡 IQRFID-5102 sending inventory command: 040001DB4B
+[21:47:44] [INFO] IQRFID-5102 Raw Data (6 bytes): 050001FBF23D
+[21:47:44] [WARN] IQRFID-5102 length mismatch: expected 5, got 6
+[21:47:44] [INFO] 📡 IQRFID-5102 sending inventory command: 040001DB4B
+[21:47:44] [INFO] IQRFID-5102 Raw Data (6 bytes): 050001FBF23D
+[21:47:44] [WARN] IQRFID-5102 length mismatch: expected 5, got 6
+[21:47:44] [INFO] 📡 IQRFID-5102 sending inventory command: 040001DB4B
+[21:47:43] [INFO] IQRFID-5102 Raw Data (6 bytes): 050001FBF23D
+[21:47:43] [WARN] IQRFID-5102 length mismatch: expected 5, got 6
+[21:47:43] [INFO] 📡 IQRFID-5102 sending inventory command: 040001DB4B
+[21:47:43] [INFO] IQRFID-5102 Raw Data (6 bytes): 050001FBF23D
+[21:47:43] [WARN] IQRFID-5102 length mismatch: expected 5, got 6
+[21:47:43] [INFO] 📡 IQRFID-5102 sending inventory command: 040001DB4B
+[21:47:42] [INFO] IQRFID-5102 Raw Data (6 bytes): 050001FBF23D
+[21:47:42] [WARN] IQRFID-5102 length mismatch: expected 5, got 6
+[21:47:42] [INFO] 📡 IQRFID-5102 sending inventory command: 040001DB4B
+[21:47:42] [INFO] IQRFID-5102 Raw Data (6 bytes): 050001FBF23D
+[21:47:42] [WARN] IQRFID-5102 length mismatch: expected 5, got 6
+[21:47:42] [INFO] 📡 IQRFID-5102 sending inventory command: 040001DB4B
+[21:47:41] [INFO] IQRFID-5102 Raw Data (6 bytes): 050001FBF23D
+[21:47:41] [WARN] IQRFID-5102 length mismatch: expected 5, got 6
+[21:47:41] [INFO] 📡 IQRFID-5102 sending inventory command: 040001DB4B
+[21:47:41] [INFO] IQRFID-5102 Raw Data (6 bytes): 050001FBF23D
+[21:47:41] [WARN] IQRFID-5102 length mismatch: expected 5, got 6
+[21:47:41] [INFO] 📡 IQRFID-5102 sending inventory command: 040001DB4B
+[21:47:40] [INFO] IQRFID-5102 Raw Data (6 bytes): 050001FBF23D
+[21:47:40] [WARN] IQRFID-5102 length mismatch: expected 5, got 6
+[21:47:40] [INFO] 📡 IQRFID-5102 sending inventory command: 040001DB4B
+[21:47:40] [INFO] IQRFID-5102 Raw Data (6 bytes): 050001FBF23D
+[21:47:40] [WARN] IQRFID-5102 length mismatch: expected 5, got 6
+[21:47:40] [INFO] 📡 IQRFID-5102 sending inventory command: 040001DB4B
+[21:47:39] [INFO] IQRFID-5102 Raw Data (6 bytes): 050001FBF23D
+[21:47:39] [WARN] IQRFID-5102 length mismatch: expected 5, got 6
+[21:47:39] [INFO] 📡 IQRFID-5102 sending inventory command: 040001DB4B
+[21:47:39] [INFO] IQRFID-5102 Raw Data (6 bytes): 050001FBF23D
+[21:47:39] [WARN] IQRFID-5102 length mismatch: expected 5, got 6
+[21:47:39] [INFO] 📡 IQRFID-5102 sending inventory command: 040001DB4B
+[21:47:38] [INFO] IQRFID-5102 Raw Data (6 bytes): 050001FBF23D
+[21:47:38] [WARN] IQRFID-5102 length mismatch: expected 5, got 6
+[21:47:38] [INFO] 📡 IQRFID-5102 sending inventory command: 040001DB4B
+[21:47:38] [INFO] IQRFID-5102 Raw Data (20 bytes): 13000101010C304DB75F19600021F013825029BA
+[21:47:38] [WARN] IQRFID-5102 length mismatch: expected 19, got 20
+[21:47:38] [INFO] 📡 IQRFID-5102 sending inventory command: 040001DB4B
+[21:47:37] [INFO] IQRFID-5102 Raw Data (6 bytes): 050001FBF23D
+[21:47:37] [WARN] IQRFID-5102 length mismatch: expected 5, got 6
+[21:47:37] [INFO] 📡 IQRFID-5102 sending inventory command: 040001DB4B
+[21:47:37] [INFO] IQRFID-5102 Raw Data (6 bytes): 050001FBF23D
+[21:47:37] [WARN] IQRFID-5102 length mismatch: expected 5, got 6
+[21:47:37] [INFO] 📡 IQRFID-5102 sending inventory command: 040001DB4B
+[21:47:36] [INFO] IQRFID-5102 Raw Data (6 bytes): 050001FBF23D
+[21:47:36] [WARN] IQRFID-5102 length mismatch: expected 5, got 6
+[21:47:36] [INFO] 📡 IQRFID-5102 sending inventory command: 040001DB4B
+[21:47:36] [INFO] IQRFID-5102 Raw Data (6 bytes): 050001FBF23D
+[21:47:36] [WARN] IQRFID-5102 length mismatch: expected 5, got 6
+[21:47:36] [INFO] 📡 IQRFID-5102 sending inventory command: 040001DB4B
+[21:47:35] [INFO] IQRFID-5102 Raw Data (6 bytes): 050001FBF23D
+[21:47:35] [WARN] IQRFID-5102 length mismatch: expected 5, got 6
+[21:47:35] [INFO] 📡 IQRFID-5102 sending inventory command: 040001DB4B
+[21:47:35] [INFO] IQRFID-5102 Raw Data (6 bytes): 050001FBF23D
+[21:47:35] [WARN] IQRFID-5102 length mismatch: expected 5, got 6
+[21:47:35] [INFO] 📡 IQRFID-5102 sending inventory command: 040001DB4B
+[21:47:34] [INFO] IQRFID-5102 Raw Data (6 bytes): 050001FBF23D
+[21:47:34] [WARN] IQRFID-5102 length mismatch: expected 5, got 6
+[21:47:34] [INFO] 📡 IQRFID-5102 sending inventory command: 040001DB4B
+[21:47:34] [INFO] IQRFID-5102 Raw Data (6 bytes): 050001FBF23D
+[21:47:34] [WARN] IQRFID-5102 length mismatch: expected 5, got 6
+[21:47:34] [INFO] 📡 IQRFID-5102 sending inventory command: 040001DB4B
+[21:47:33] [INFO] IQRFID-5102 Raw Data (6 bytes): 050001FBF23D
+[21:47:33] [WARN] IQRFID-5102 length mismatch: expected 5, got 6
+[21:47:33] [INFO] 📡 IQRFID-5102 sending inventory command: 040001DB4B
+[21:47:33] [INFO] IQRFID-5102 Raw Data (6 bytes): 050001FBF23D
+[21:47:33] [WARN] IQRFID-5102 length mismatch: expected 5, got 6
+[21:47:33] [INFO] 📡 IQRFID-5102 sending inventory command: 040001DB4B
+[21:47:32] [INFO] IQRFID-5102 Raw Data (6 bytes): 050001FBF23D
+[21:47:32] [WARN] IQRFID-5102 length mismatch: expected 5, got 6
+[21:47:32] [INFO] 📡 IQRFID-5102 sending inventory command: 040001DB4B
+[21:47:32] [INFO] IQRFID-5102 Raw Data (6 bytes): 050001FBF23D
+[21:47:32] [WARN] IQRFID-5102 length mismatch: expected 5, got 6
+[21:47:32] [INFO] 📡 IQRFID-5102 sending inventory command: 040001DB4B
+[21:47:31] [INFO] IQRFID-5102 Raw Data (6 bytes): 050001FBF23D
+[21:47:31] [WARN] IQRFID-5102 length mismatch: expected 5, got 6
+[21:47:31] [INFO] 📡 IQRFID-5102 sending inventory command: 040001DB4B
+[21:47:31] [INFO] IQRFID-5102 Raw Data (6 bytes): 050001FBF23D
+[21:47:31] [WARN] IQRFID-5102 length mismatch: expected 5, got 6
+[21:47:31] [INFO] 📡 IQRFID-5102 sending inventory command: 040001DB4B
+[21:47:30] [INFO] IQRFID-5102 Raw Data (6 bytes): 050001FBF23D
+[21:47:30] [WARN] IQRFID-5102 length mismatch: expected 5, got 6
+[21:47:30] [INFO] 📡 IQRFID-5102 sending inventory command: 040001DB4B
+[21:47:30] [INFO] IQRFID-5102 Raw Data (6 bytes): 050001FBF23D
+[21:47:30] [WARN] IQRFID-5102 length mismatch: expected 5, got 6
+[21:47:30] [INFO] 📡 IQRFID-5102 sending inventory command: 040001DB4B
+[21:47:29] [INFO] IQRFID-5102 Raw Data (6 bytes): 050001FBF23D
+[21:47:29] [WARN] IQRFID-5102 length mismatch: expected 5, got 6
+[21:47:29] [INFO] 📡 IQRFID-5102 sending inventory command: 040001DB4B
+[21:47:29] [INFO] IQRFID-5102 Raw Data (6 bytes): 050001FBF23D
+[21:47:29] [WARN] IQRFID-5102 length mismatch: expected 5, got 6
+[21:47:29] [INFO] 📡 IQRFID-5102 sending inventory command: 040001DB4B
+[21:47:28] [INFO] IQRFID-5102 Raw Data (6 bytes): 050001FBF23D
+[21:47:28] [WARN] IQRFID-5102 length mismatch: expected 5, got 6
+[21:47:28] [INFO] 📡 IQRFID-5102 sending inventory command: 040001DB4B
+[21:47:28] [INFO] IQRFID-5102 Raw Data (6 bytes): 050001FBF23D
+[21:47:28] [WARN] IQRFID-5102 length mismatch: expected 5, got 6
+[21:47:28] [INFO] 📡 IQRFID-5102 sending inventory command: 040001DB4B
+[21:47:27] [INFO] IQRFID-5102 Raw Data (6 bytes): 050001FBF23D
+[21:47:27] [WARN] IQRFID-5102 length mismatch: expected 5, got 6
+[21:47:27] [INFO] 📡 IQRFID-5102 sending inventory command: 040001DB4B
+[21:47:27] [INFO] IQRFID-5102 Raw Data (6 bytes): 050001FBF23D
+[21:47:27] [WARN] IQRFID-5102 length mismatch: expected 5, got 6
+[21:47:27] [INFO] 📡 IQRFID-5102 sending inventory command: 040001DB4B
+[21:47:26] [INFO] IQRFID-5102 Raw Data (6 bytes): 050001FBF23D
+[21:47:26] [WARN] IQRFID-5102 length mismatch: expected 5, got 6
+[21:47:26] [INFO] 📡 IQRFID-5102 sending inventory command: 040001DB4B
+[21:47:26] [INFO] IQRFID-5102 Raw Data (6 bytes): 050001FBF23D
+[21:47:26] [WARN] IQRFID-5102 length mismatch: expected 5, got 6
+[21:47:26] [INFO] 📡 IQRFID-5102 sending inventory command: 040001DB4B
+[21:47:25] [INFO] IQRFID-5102 Raw Data (6 bytes): 050001FBF23D
+[21:47:25] [WARN] IQRFID-5102 length mismatch: expected 5, got 6
+[21:47:25] [INFO] 📡 IQRFID-5102 sending inventory command: 040001DB4B
+[21:47:25] [INFO] IQRFID-5102 Raw Data (6 bytes): 050001FBF23D
+[21:47:25] [WARN] IQRFID-5102 length mismatch: expected 5, got 6
+[21:47:25] [INFO] 📡 IQRFID-5102 sending inventory command: 040001DB4B
+[21:47:24] [INFO] IQRFID-5102 Raw Data (6 bytes): 050001FBF23D
+[21:47:24] [WARN] IQRFID-5102 length mismatch: expected 5, got 6
+[21:47:24] [INFO] 📡 IQRFID-5102 sending inventory command: 040001DB4B
+[21:47:24] [INFO] IQRFID-5102 Raw Data (6 bytes): 050001FBF23D
+[21:47:24] [WARN] IQRFID-5102 length mismatch: expected 5, got 6
+[21:47:24] [INFO] 📡 IQRFID-5102 sending inventory command: 040001DB4B
+[21:47:23] [INFO] IQRFID-5102 Raw Data (6 bytes): 050001FBF23D
+[21:47:23] [WARN] IQRFID-5102 length mismatch: expected 5, got 6
+[21:47:23] [INFO] 📡 IQRFID-5102 sending inventory command: 040001DB4B
+[21:47:23] [INFO] IQRFID-5102 Raw Data (6 bytes): 050001FBF23D
+[21:47:23] [WARN] IQRFID-5102 length mismatch: expected 5, got 6
+[21:47:23] [INFO] 📡 IQRFID-5102 sending inventory command: 040001DB4B
+[21:47:22] [INFO] IQRFID-5102 Raw Data (6 bytes): 050001FBF23D
+[21:47:22] [WARN] IQRFID-5102 length mismatch: expected 5, got 6
+[21:47:22] [INFO] 📡 IQRFID-5102 sending inventory command: 040001DB4B
+[21:47:22] [INFO] IQRFID-5102 Raw Data (6 bytes): 050001FBF23D
+[21:47:22] [WARN] IQRFID-5102 length mismatch: expected 5, got 6
+[21:47:22] [INFO] 📡 IQRFID-5102 sending inventory command: 040001DB4B
+[21:47:21] [INFO] IQRFID-5102 Raw Data (6 bytes): 050001FBF23D
+[21:47:21] [WARN] IQRFID-5102 length mismatch: expected 5, got 6
+[21:47:21] [INFO] 📡 IQRFID-5102 sending inventory command: 040001DB4B
+[21:47:21] [INFO] IQRFID-5102 Raw Data (6 bytes): 050001FBF23D
+[21:47:21] [WARN] IQRFID-5102 length mismatch: expected 5, got 6
+[21:47:21] [INFO] 📡 IQRFID-5102 sending inventory command: 040001DB4B
+[21:47:20] [INFO] IQRFID-5102 Raw Data (6 bytes): 050001FBF23D
+[21:47:20] [WARN] IQRFID-5102 length mismatch: expected 5, got 6
+[21:47:20] [INFO] 📡 IQRFID-5102 sending inventory command: 040001DB4B
+[21:47:20] [WARN] IQRFID-5102 length mismatch: expected 5, got 6
+[21:47:20] [INFO] IQRFID-5102 Raw Data (6 bytes): 050001FBF23D
+[21:47:20] [INFO] 📡 IQRFID-5102 sending inventory command: 040001DB4B
+[21:47:19] [INFO] IQRFID-5102 Raw Data (6 bytes): 050001FBF23D
+[21:47:19] [WARN] IQRFID-5102 length mismatch: expected 5, got 6
+[21:47:19] [INFO] 📡 IQRFID-5102 sending inventory command: 040001DB4B
+[21:47:19] [INFO] IQRFID-5102 Raw Data (6 bytes): 050001FBF23D
+[21:47:19] [WARN] IQRFID-5102 length mismatch: expected 5, got 6
+[21:47:19] [INFO] 📡 IQRFID-5102 sending inventory command: 040001DB4B
+[21:47:18] [INFO] IQRFID-5102 Raw Data (6 bytes): 050001FBF23D
+[21:47:18] [WARN] IQRFID-5102 length mismatch: expected 5, got 6
+[21:47:18] [INFO] 📡 IQRFID-5102 sending inventory command: 040001DB4B
+[21:47:18] [INFO] IQRFID-5102 Raw Data (6 bytes): 050001FBF23D
+[21:47:18] [WARN] IQRFID-5102 length mismatch: expected 5, got 6
+[21:47:18] [INFO] 📡 IQRFID-5102 sending inventory command: 040001DB4B
+[21:47:17] [INFO] IQRFID-5102 Raw Data (6 bytes): 050001FBF23D
+[21:47:17] [WARN] IQRFID-5102 length mismatch: expected 5, got 6
+[21:47:17] [INFO] 📡 IQRFID-5102 sending inventory command: 040001DB4B
+[21:47:17] [INFO] IQRFID-5102 Raw Data (6 bytes): 050001FBF23D
+[21:47:17] [WARN] IQRFID-5102 length mismatch: expected 5, got 6
+[21:47:17] [INFO] 📡 IQRFID-5102 sending inventory command: 040001DB4B
+[21:47:16] [INFO] IQRFID-5102 Raw Data (6 bytes): 050001FBF23D
+[21:47:16] [WARN] IQRFID-5102 length mismatch: expected 5, got 6
+[21:47:16] [INFO] 📡 IQRFID-5102 sending inventory command: 040001DB4B
+[21:47:16] [INFO] IQRFID-5102 Raw Data (6 bytes): 050001FBF23D
+[21:47:16] [WARN] IQRFID-5102 length mismatch: expected 5, got 6
+[21:47:16] [INFO] 📡 IQRFID-5102 sending inventory command: 040001DB4B
+[21:47:15] [INFO] IQRFID-5102 Raw Data (6 bytes): 050001FBF23D
+[21:47:15] [WARN] IQRFID-5102 length mismatch: expected 5, got 6
+[21:47:15] [INFO] 📡 IQRFID-5102 sending inventory command: 040001DB4B
+[21:47:14] [INFO] IQRFID-5102 Raw Data (6 bytes): 050001FBF23D
+[21:47:14] [WARN] IQRFID-5102 length mismatch: expected 5, got 6
+[21:47:14] [INFO] 📡 IQRFID-5102 sending inventory command: 040001DB4B
+[21:47:14] [INFO] IQRFID-5102 Raw Data (20 bytes): 13000101010C304DB75F19600021F01382496937
+[21:47:14] [WARN] IQRFID-5102 length mismatch: expected 19, got 20
+[21:47:14] [INFO] 📡 IQRFID-5102 sending inventory command: 040001DB4B
+[21:47:13] [INFO] IQRFID-5102 Raw Data (6 bytes): 050001FBF23D
+[21:47:13] [WARN] IQRFID-5102 length mismatch: expected 5, got 6
+[21:47:13] [INFO] 📡 IQRFID-5102 sending inventory command: 040001DB4B
+[21:47:13] [INFO] IQRFID-5102 Raw Data (6 bytes): 050001FBF23D
+[21:47:13] [WARN] IQRFID-5102 length mismatch: expected 5, got 6
+[21:47:13] [INFO] 📡 IQRFID-5102 sending inventory command: 040001DB4B
+[21:47:12] [INFO] IQRFID-5102 Raw Data (6 bytes): 050001FBF23D
+[21:47:12] [WARN] IQRFID-5102 length mismatch: expected 5, got 6
+[21:47:12] [INFO] 📡 IQRFID-5102 sending inventory command: 040001DB4B
+[21:47:12] [INFO] IQRFID-5102 Raw Data (6 bytes): 050001FBF23D
+[21:47:12] [WARN] IQRFID-5102 length mismatch: expected 5, got 6
+[21:47:12] [INFO] 📡 IQRFID-5102 sending inventory command: 040001DB4B
+[21:47:11] [INFO] IQRFID-5102 Raw Data (6 bytes): 050001FBF23D
+[21:47:11] [WARN] IQRFID-5102 length mismatch: expected 5, got 6
+[21:47:11] [INFO] 📡 IQRFID-5102 sending inventory command: 040001DB4B
+[21:47:11] [WARN] IQRFID-5102 length mismatch: expected 5, got 6
+[21:47:11] [INFO] IQRFID-5102 Raw Data (6 bytes): 050001FBF23D
+[21:47:11] [INFO] 📡 IQRFID-5102 sending inventory command: 040001DB4B
+[21:47:10] [INFO] IQRFID-5102 Raw Data (6 bytes): 050001FBF23D
+[21:47:10] [WARN] IQRFID-5102 length mismatch: expected 5, got 6
+[21:47:10] [INFO] 📡 IQRFID-5102 sending inventory command: 040001DB4B
+[21:47:10] [INFO] IQRFID-5102 Raw Data (6 bytes): 050001FBF23D
+[21:47:10] [WARN] IQRFID-5102 length mismatch: expected 5, got 6
+[21:47:10] [INFO] 📡 IQRFID-5102 sending inventory command: 040001DB4B
+[21:47:09] [INFO] IQRFID-5102 Raw Data (6 bytes): 050001FBF23D
+[21:47:09] [WARN] IQRFID-5102 length mismatch: expected 5, got 6
+[21:47:09] [INFO] 📡 IQRFID-5102 sending inventory command: 040001DB4B
+[21:47:09] [INFO] IQRFID-5102 Raw Data (6 bytes): 050001FBF23D
+[21:47:09] [WARN] IQRFID-5102 length mismatch: expected 5, got 6
+[21:47:09] [INFO] 📡 IQRFID-5102 sending inventory command: 040001DB4B
+[21:47:08] [INFO] IQRFID-5102 Raw Data (6 bytes): 050001FBF23D
+[21:47:08] [WARN] IQRFID-5102 length mismatch: expected 5, got 6
+[21:47:08] [INFO] 📡 IQRFID-5102 sending inventory command: 040001DB4B
+[21:47:08] [INFO] IQRFID-5102 Raw Data (6 bytes): 050001FBF23D
+[21:47:08] [WARN] IQRFID-5102 length mismatch: expected 5, got 6
+[21:47:08] [INFO] 📡 IQRFID-5102 sending inventory command: 040001DB4B
+[21:47:07] [INFO] IQRFID-5102 Raw Data (6 bytes): 050001FBF23D
+[21:47:07] [WARN] IQRFID-5102 length mismatch: expected 5, got 6
+[21:47:07] [INFO] 📡 IQRFID-5102 sending inventory command: 040001DB4B
+[21:47:07] [INFO] IQRFID-5102 Raw Data (6 bytes): 050001FBF23D
+[21:47:07] [WARN] IQRFID-5102 length mismatch: expected 5, got 6
+[21:47:07] [INFO] 📡 IQRFID-5102 sending inventory command: 040001DB4B
+[21:47:06] [INFO] IQRFID-5102 Raw Data (6 bytes): 050001FBF23D
+[21:47:06] [WARN] IQRFID-5102 length mismatch: expected 5, got 6
+[21:47:06] [INFO] 📡 IQRFID-5102 sending inventory command: 040001DB4B
+[21:47:06] [INFO] IQRFID-5102 Raw Data (6 bytes): 050001FBF23D
+[21:47:06] [WARN] IQRFID-5102 length mismatch: expected 5, got 6
+[21:47:06] [INFO] 📡 IQRFID-5102 sending inventory command: 040001DB4B
+[21:47:05] [INFO] IQRFID-5102 Raw Data (6 bytes): 050001FBF23D
+[21:47:05] [WARN] IQRFID-5102 length mismatch: expected 5, got 6
+[21:47:05] [INFO] 📡 IQRFID-5102 sending inventory command: 040001DB4B
+[21:47:05] [INFO] IQRFID-5102 Raw Data (6 bytes): 050001FBF23D
+[21:47:05] [WARN] IQRFID-5102 length mismatch: expected 5, got 6
+[21:47:05] [INFO] 📡 IQRFID-5102 sending inventory command: 040001DB4B
+[21:47:04] [INFO] IQRFID-5102 Raw Data (6 bytes): 050001FBF23D
+[21:47:04] [WARN] IQRFID-5102 length mismatch: expected 5, got 6
+[21:47:04] [INFO] 📡 IQRFID-5102 sending inventory command: 040001DB4B
+[21:47:04] [INFO] IQRFID-5102 Raw Data (6 bytes): 050001FBF23D
+[21:47:04] [WARN] IQRFID-5102 length mismatch: expected 5, got 6
+[21:47:04] [INFO] 📡 IQRFID-5102 sending inventory command: 040001DB4B
+[21:47:03] [INFO] IQRFID-5102 Raw Data (6 bytes): 050001FBF23D
+[21:47:03] [WARN] IQRFID-5102 length mismatch: expected 5, got 6
+[21:47:03] [INFO] 📡 IQRFID-5102 sending inventory command: 040001DB4B
+[21:47:03] [INFO] IQRFID-5102 Raw Data (6 bytes): 050001FBF23D
+[21:47:03] [WARN] IQRFID-5102 length mismatch: expected 5, got 6
+[21:47:03] [INFO] 📡 IQRFID-5102 sending inventory command: 040001DB4B
+[21:47:02] [INFO] IQRFID-5102 Raw Data (6 bytes): 050001FBF23D
+[21:47:02] [WARN] IQRFID-5102 length mismatch: expected 5, got 6
+[21:47:02] [INFO] 📡 IQRFID-5102 sending inventory command: 040001DB4B
+[21:47:02] [INFO] IQRFID-5102 Raw Data (6 bytes): 050001FBF23D
+[21:47:02] [WARN] IQRFID-5102 length mismatch: expected 5, got 6
+[21:47:02] [INFO] 📡 IQRFID-5102 sending inventory command: 040001DB4B
+[21:47:01] [INFO] IQRFID-5102 Raw Data (6 bytes): 050001FBF23D
+[21:47:01] [WARN] IQRFID-5102 length mismatch: expected 5, got 6
+[21:47:01] [INFO] 📡 IQRFID-5102 sending inventory command: 040001DB4B
+[21:47:01] [INFO] IQRFID-5102 Raw Data (6 bytes): 050001FBF23D
+[21:47:01] [WARN] IQRFID-5102 length mismatch: expected 5, got 6
+[21:47:01] [INFO] 📡 IQRFID-5102 sending inventory command: 040001DB4B
+[21:47:00] [INFO] IQRFID-5102 Raw Data (6 bytes): 050001FBF23D
+[21:47:00] [WARN] IQRFID-5102 length mismatch: expected 5, got 6
+[21:47:00] [INFO] 📡 IQRFID-5102 sending inventory command: 040001DB4B
+[21:47:00] [INFO] IQRFID-5102 Raw Data (6 bytes): 050001FBF23D
+[21:47:00] [WARN] IQRFID-5102 length mismatch: expected 5, got 6
+[21:47:00] [INFO] 📡 IQRFID-5102 sending inventory command: 040001DB4B
+[21:46:59] [INFO] IQRFID-5102 Raw Data (33 bytes): 20000101020C304DB75F19600021F01382500C304DB75F19600021F0138249374D
+[21:46:59] [WARN] IQRFID-5102 length mismatch: expected 32, got 33
+[21:46:59] [INFO] 📡 IQRFID-5102 sending inventory command: 040001DB4B
+[21:46:59] [WARN] IQRFID-5102 length mismatch: expected 5, got 6
+[21:46:59] [INFO] IQRFID-5102 Raw Data (6 bytes): 050001FBF23D
+[21:46:59] [INFO] 📡 IQRFID-5102 sending inventory command: 040001DB4B
+[21:46:58] [INFO] IQRFID-5102 Raw Data (33 bytes): 20000101020C304DB75F19600021F01382500C304DB75F19600021F0138249374D
+[21:46:58] [WARN] IQRFID-5102 length mismatch: expected 32, got 33
+[21:46:58] [INFO] 📡 IQRFID-5102 sending inventory command: 040001DB4B
+[21:46:58] [INFO] IQRFID-5102 Raw Data (6 bytes): 050001FBF23D
+[21:46:58] [WARN] IQRFID-5102 length mismatch: expected 5, got 6
+[21:46:58] [INFO] 📡 IQRFID-5102 sending inventory command: 040001DB4B
+[21:46:57] [INFO] IQRFID-5102 Raw Data (20 bytes): 13000101010C304DB75F19600021F013825029BA
+[21:46:57] [WARN] IQRFID-5102 length mismatch: expected 19, got 20
+[21:46:57] [INFO] 📡 IQRFID-5102 sending inventory command: 040001DB4B
+[21:46:57] [INFO] IQRFID-5102 Raw Data (6 bytes): 050001FBF23D
+[21:46:57] [WARN] IQRFID-5102 length mismatch: expected 5, got 6
+[21:46:57] [INFO] 📡 IQRFID-5102 sending inventory command: 040001DB4B
+[21:46:56] [WARN] IQRFID-5102 length mismatch: expected 5, got 6
+[21:46:56] [INFO] IQRFID-5102 Raw Data (6 bytes): 050001FBF23D
+[21:46:56] [INFO] 📡 IQRFID-5102 sending inventory command: 040001DB4B
+[21:46:56] [INFO] IQRFID-5102 Raw Data (6 bytes): 050001FBF23D
+[21:46:56] [WARN] IQRFID-5102 length mismatch: expected 5, got 6
+[21:46:56] [INFO] 📡 IQRFID-5102 sending inventory command: 040001DB4B
+[21:46:55] [INFO] IQRFID-5102 Raw Data (6 bytes): 050001FBF23D
+[21:46:55] [WARN] IQRFID-5102 length mismatch: expected 5, got 6
+[21:46:55] [INFO] 📡 IQRFID-5102 sending inventory command: 040001DB4B
+[21:46:55] [INFO] IQRFID-5102 Raw Data (6 bytes): 050001FBF23D
+[21:46:55] [WARN] IQRFID-5102 length mismatch: expected 5, got 6
+[21:46:55] [INFO] 📡 IQRFID-5102 sending inventory command: 040001DB4B
+[21:46:54] [INFO] IQRFID-5102 Raw Data (6 bytes): 050001FBF23D
+[21:46:54] [WARN] IQRFID-5102 length mismatch: expected 5, got 6
+[21:46:54] [INFO] 📡 IQRFID-5102 sending inventory command: 040001DB4B
+[21:46:54] [INFO] IQRFID-5102 Raw Data (6 bytes): 050001FBF23D
+[21:46:54] [WARN] IQRFID-5102 length mismatch: expected 5, got 6
+[21:46:54] [INFO] 📡 IQRFID-5102 sending inventory command: 040001DB4B
+[21:46:53] [INFO] IQRFID-5102 Raw Data (33 bytes): 20000101020C304DB75F19600021F01382500C304DB75F19600021F0138249374D
+[21:46:53] [WARN] IQRFID-5102 length mismatch: expected 32, got 33
+[21:46:53] [INFO] 📡 IQRFID-5102 sending inventory command: 040001DB4B
+[21:46:53] [INFO] IQRFID-5102 Raw Data (6 bytes): 050001FBF23D
+[21:46:53] [WARN] IQRFID-5102 length mismatch: expected 5, got 6
+[21:46:53] [INFO] 📡 IQRFID-5102 sending inventory command: 040001DB4B
+[21:46:52] [INFO] IQRFID-5102 Raw Data (6 bytes): 050001FBF23D
+[21:46:52] [WARN] IQRFID-5102 length mismatch: expected 5, got 6
+[21:46:52] [INFO] 📡 IQRFID-5102 sending inventory command: 040001DB4B
+[21:46:52] [INFO] IQRFID-5102 Raw Data (6 bytes): 050001FBF23D
+[21:46:52] [WARN] IQRFID-5102 length mismatch: expected 5, got 6
+[21:46:52] [INFO] 📡 IQRFID-5102 sending inventory command: 040001DB4B
+[21:46:51] [INFO] IQRFID-5102 Raw Data (6 bytes): 050001FBF23D
+[21:46:51] [WARN] IQRFID-5102 length mismatch: expected 5, got 6
+[21:46:51] [INFO] 📡 IQRFID-5102 sending inventory command: 040001DB4B
+[21:46:51] [INFO] IQRFID-5102 Raw Data (6 bytes): 050001FBF23D
+[21:46:51] [WARN] IQRFID-5102 length mismatch: expected 5, got 6
+[21:46:51] [INFO] 📡 IQRFID-5102 sending inventory command: 040001DB4B
+[21:46:50] [INFO] IQRFID-5102 Raw Data (6 bytes): 050001FBF23D
+[21:46:50] [WARN] IQRFID-5102 length mismatch: expected 5, got 6
+[21:46:50] [INFO] ✅ IQRFID-5102 interval started with 500ms polling
+[21:46:50] [INFO] Starting IQRFID-5102 inventory with command: 040001DB4B
+[21:46:50] [SUCCESS] Connected to IQRFID-5102 Desktop UHF RFID Reader on port COM2 @ 57600 baud
+[21:46:28] [INFO] PC/SC service created (will initialize on demand)
