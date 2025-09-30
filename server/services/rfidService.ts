@@ -1168,31 +1168,66 @@ export class RfidService extends EventEmitter {
 
   // NEW: Handle IQRFID-5102 binary responses with 0xBB protocol
   private handleIQRFID5102BinaryData(data: Buffer): void {
-    // Log raw response for debugging - even if it's just status/ack
+    // Log raw response for debugging
     storage.addSystemLog({
       level: 'INFO', 
       message: `IQRFID-5102 Raw Data (${data.length} bytes): ${data.toString('hex').toUpperCase()}`,
     });
 
-    // IQRFID-5102 uses 0xBB protocol format
-    // Response format: BB 02 22 [LEN_MSB] [LEN_LSB] [RSSI] [PC_MSB] [PC_LSB] [EPC_DATA...] [CRC_MSB] [CRC_LSB] [CHECKSUM] 7E
+    // IQRFID-5102 protocol format: [LEN][ADR][CMD][DATA...][CRC_LOW][CRC_HIGH]
+    // Minimum response is 5 bytes: LEN + ADR + CMD + CRC(2)
     
-    if (data.length < 7) return; // Minimum frame size
+    if (data.length < 5) {
+      storage.addSystemLog({
+        level: 'WARN',
+        message: `IQRFID-5102 response too short: ${data.length} bytes`,
+      });
+      return;
+    }
     
-    // Look for complete frames starting with 0xBB (handle both 0x22 and 0x27 commands)
-    for (let i = 0; i < data.length - 6; i++) {
-      if (data[i] === 0xBB && data[i + 1] === 0x02 && (data[i + 2] === 0x22 || data[i + 2] === 0x27)) {
-        // Found notice frame for inventory response
-        const lenMsb = data[i + 3];
-        const lenLsb = data[i + 4];
-        const parameterLength = (lenMsb << 8) | lenLsb;
-        
-        // Check if we have complete frame
-        const totalFrameLength = 6 + parameterLength + 1; // Header(3) + Len(2) + Parameters + Checksum(1) + End(1)
-        if (i + totalFrameLength <= data.length && data[i + totalFrameLength - 1] === 0x7E) {
-          this.parseIQRFID5102TagData(data.slice(i, i + totalFrameLength));
-        }
+    const length = data[0];
+    const address = data[1];
+    const command = data[2];
+    
+    // Validate frame length
+    if (length !== data.length) {
+      storage.addSystemLog({
+        level: 'WARN',
+        message: `IQRFID-5102 length mismatch: expected ${length}, got ${data.length}`,
+      });
+      return;
+    }
+    
+    // Verify CRC
+    const receivedCrc = Buffer.from([data[length - 2], data[length - 1]]);
+    const calculatedCrc = this.calculateIQRFID5102CRC(data, length - 2);
+    
+    if (!receivedCrc.equals(calculatedCrc)) {
+      storage.addSystemLog({
+        level: 'ERROR',
+        message: `IQRFID-5102 CRC error: received ${receivedCrc.toString('hex').toUpperCase()}, calculated ${calculatedCrc.toString('hex').toUpperCase()}`,
+      });
+      return;
+    }
+    
+    // Check if this is inventory response (command 0x01)
+    if (command === 0x01) {
+      // Check status byte
+      if (length === 5 && data[3] === 0xFB) {
+        // No tags found (status 0xFB)
+        storage.addSystemLog({
+          level: 'INFO',
+          message: 'IQRFID-5102: No tags in range',
+        });
+      } else if (length > 5) {
+        // Tags found - parse tag data
+        this.parseIQRFID5102TagData(data);
       }
+    } else {
+      storage.addSystemLog({
+        level: 'INFO',
+        message: `IQRFID-5102 response - Cmd: 0x${command.toString(16).toUpperCase()}, Len: ${length}`,
+      });
     }
   }
 
