@@ -325,9 +325,9 @@ export class RfidService extends EventEmitter {
       return;
     }
     
-    // Пробуем разные baud rates для IQRFID-5102: 115200, 57600, 9600, 38400, 19200  
+    // Пробуем разные baud rates для IQRFID-5102: 57600 first (confirmed working), then fallbacks  
     const baudRates = readerType === ReaderType.IQRFID5102 
-      ? [115200, 57600, 9600, 38400, 19200]
+      ? [57600, 115200, 9600, 38400, 19200]
       : [9600, 57600, 115200, 38400, 19200];
     
     for (const baudRate of baudRates) {

@@ -14,11 +14,20 @@ This is a full-stack RFID reader dashboard application built with React, Express
 - **Tag Detection Working**: Successfully detecting RFID tags with proper EPC parsing and real-time display
 - **Windows Compatibility**: Full Windows 10/11 support with .NET 6.0 sidecar bridge
 
-### Technical Breakthrough
-- **Problem Solved**: RRU9816 DLL documentation discrepancy resolved through official User Guide analysis
-- **Error Handling**: Proper handling of firmware-specific error codes including communication warnings
-- **Direct Mode**: When buffer mode returns 0 tags, system automatically switches to 200ms direct polling
-- **EPC Parsing**: Fixed bounds checking and PC-word extraction for direct mode, preventing zero-padding corruption
+### ✅ IQRFID-5102 Protocol Discovery & Integration Completed
+- **Protocol Reverse-Engineered**: Used COM Port Monitor and DLL decompilation to discover actual protocol
+- **Correct Protocol Format**: `[LEN][ADR][CMD][DATA...][CRC_LOW][CRC_HIGH]` instead of assumed 0xBB format
+- **Baud Rate Corrected**: Changed from 115200 to 57600 baud (confirmed via demo application monitoring)
+- **Inventory Command Fixed**: Now using `04 00 01 [CRC]` instead of incorrect `BB 00 22 00 00 22 7E`
+- **CRC-16 Implementation**: Added proper CRC calculation matching Basic.dll algorithm (polynomial 0x8408)
+- **Response Parsing Updated**: Correctly handles both "no tags" (status 0xFB) and tag data responses
+- **EPC Extraction Working**: Properly extracts EPC data from format: `[LEN][ADR][CMD][COUNT][RSSI][EPC_LEN][EPC...][CRC]`
+
+### Technical Breakthrough - IQRFID-5102
+- **Problem Solved**: Demo app used Basic.dll (different protocol than assumed UHFReader09 0xBB format)
+- **Key Discovery**: IQRFID-5102 uses simple length-prefixed protocol with CRC-16, NOT 0xBB framed protocol
+- **COM Port Monitoring**: Captured actual byte sequences from working demo: inventory=`04 00 01 DB 4B`, response=`13 00 01 01 01 0C [EPC] [CRC]`
+- **Address Byte**: Uses 0x00 (not 0xFF) for device address in this specific implementation
 
 ## User Preferences
 
