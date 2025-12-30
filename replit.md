@@ -2,115 +2,332 @@
 
 ## Overview
 
-This is a full-stack RFID reader dashboard application built with React, Express, and TypeScript. The application provides real-time monitoring and management of multiple RFID reader types through a web interface. It successfully integrates RRU9816, IQRFID-5102, and ACR1281U-C RFID readers with real-time tag display, connection status, and system logs in a modern dashboard interface.
-
-## Recent Changes (September 2025)
-
-### ✅ RRU9816 Integration Completed
-- **Successful Hardware Connection**: RRU9816 v03.01 firmware properly connects via COM port at 57600 baud
-- **DLL Integration Resolved**: Fixed function naming issues by using correct RRU9816.dll functions (InventoryBuffer_G2, not SetAntenna/StartBufferInventory)
-- **Firmware Compatibility**: Bypassed unsupported SetWorkMode/SetAntennaMultiplexing commands specific to v03.01 firmware
-- **Dual-Mode Inventory**: Implemented buffer-first approach with automatic fallback to direct Inventory_G2 mode
-- **Tag Detection Working**: Successfully detecting RFID tags with proper EPC parsing and real-time display
-- **Windows Compatibility**: Full Windows 10/11 support with .NET 6.0 sidecar bridge
-
-### ✅ IQRFID-5102 Protocol Discovery & Integration Completed
-- **Protocol Reverse-Engineered**: Used COM Port Monitor and DLL decompilation to discover actual protocol
-- **Correct Protocol Format**: `[LEN][ADR][CMD][DATA...][CRC_LOW][CRC_HIGH]` instead of assumed 0xBB format
-- **Baud Rate Corrected**: Changed from 115200 to 57600 baud (confirmed via demo application monitoring)
-- **Inventory Command Fixed**: Now using `04 00 01 [CRC]` instead of incorrect `BB 00 22 00 00 22 7E`
-- **CRC-16 Implementation**: Added proper CRC calculation matching Basic.dll algorithm (polynomial 0x8408)
-- **Response Parsing Updated**: Correctly handles both "no tags" (status 0xFB) and tag data responses
-- **EPC Extraction Working**: Properly extracts EPC data from format: `[LEN][ADR][CMD][COUNT][RSSI][EPC_LEN][EPC...][CRC]`
-
-### Technical Breakthrough - IQRFID-5102
-- **Problem Solved**: Demo app used Basic.dll (different protocol than assumed UHFReader09 0xBB format)
-- **Key Discovery**: IQRFID-5102 uses simple length-prefixed protocol with CRC-16, NOT 0xBB framed protocol
-- **COM Port Monitoring**: Captured actual byte sequences from working demo: inventory=`04 00 01 DB 4B`, response=`13 00 01 01 01 0C [EPC] [CRC]`
-- **Address Byte**: Uses 0x00 (not 0xFF) for device address in this specific implementation
+Локальное Windows веб-приложение для интеграции нескольких RFID считывателей разных типов. Приложение обеспечивает мониторинг и управление в реальном времени через веб-интерфейс на localhost. Поддерживает три типа считывателей: RRU9816 (UHF), IQRFID-5102 (UHF), ACR1281U-C (NFC/HF).
 
 ## User Preferences
 
-Preferred communication style: Simple, everyday language.
+Preferred communication style: Simple, everyday language (Русский).
 
-## System Architecture
+---
 
-### Frontend Architecture
-- **Framework**: React with TypeScript and Vite for build tooling
-- **UI Library**: Radix UI components with shadcn/ui design system
-- **Styling**: Tailwind CSS with CSS variables for theming
-- **State Management**: TanStack Query for server state management
-- **Routing**: Wouter for lightweight client-side routing
-- **Real-time Communication**: WebSocket connection for live RFID data updates
+## Поддерживаемые RFID Считыватели
 
-### Backend Architecture
-- **Runtime**: Node.js with Express.js framework
-- **Language**: TypeScript with ES modules
-- **Database**: PostgreSQL with Drizzle ORM for type-safe database operations
-- **Hardware Integration**: SerialPort library for RFID reader communication
-- **Real-time Features**: WebSocket server for broadcasting tag reads and status updates
-- **Storage Abstraction**: Interface-based storage layer with in-memory fallback
+### 1. RRU9816 (UHF RFID Reader)
 
-### Data Storage Solutions
-- **Primary Database**: PostgreSQL via Neon serverless platform
-- **ORM**: Drizzle with schema-first approach and automatic migrations
-- **Schema Design**: 
-  - RFID tags table with EPC, RSSI, read counts, and timestamps
-  - System logs table for application events and errors
-- **Fallback Storage**: In-memory storage implementation for development/testing
+**Технология подключения:**
+```
+[Node.js Backend] ←WebSocket→ [C# Sidecar] ←DLL→ [COM Port] ←→ [RRU9816 Reader]
+```
 
-### Authentication and Authorization
-- **Current State**: No authentication implemented
-- **Session Management**: Express sessions configured with PostgreSQL store (connect-pg-simple)
-- **Architecture Ready**: Session infrastructure in place for future auth implementation
+**Технические характеристики:**
+| Параметр | Значение |
+|----------|----------|
+| Тип | UHF RFID (860-960 MHz) |
+| Протокол | EPC Gen2 / ISO 18000-6C |
+| Подключение | COM Port через C# Sidecar Bridge |
+| Baud Rate | 57600 |
+| Firmware | v03.01 |
+| Требования | Windows 10/11, .NET 6.0 Runtime |
 
-### Hardware Integration
-- **Multi-Reader Support**: Successfully integrates RRU9816, IQRFID-5102, and ACR1281U-C RFID readers
-- **RRU9816 Sidecar Bridge**: .NET 6.0 C# bridge connects RRU9816.dll to Node.js application via WebSocket (ws://localhost:8081)
-- **RFID Communication**: Direct DLL calls for RRU9816, Serial port communication for other readers with configurable baud rates
-- **Event-Driven Architecture**: EventEmitter pattern for handling tag reads and status changes
-- **Connection Management**: Automatic reconnection and error handling for hardware connections
-- **Dual-Mode Inventory**: Buffer mode with automatic fallback to direct polling for maximum compatibility
-- **Supported Operations**: Tag inventory scanning, real-time tag detection, connection monitoring, PC/SC support for ACR1281U-C
+**Архитектура взаимодействия:**
+1. **Node.js Backend** отправляет JSON команды через WebSocket (ws://localhost:8081)
+2. **C# Sidecar** (rru9816-sidecar/) принимает команды и вызывает RRU9816.dll
+3. **RRU9816.dll** общается с железом через COM порт
+4. Теги возвращаются обратно в JSON формате через WebSocket
 
-### Real-time Features
-- **WebSocket Server**: Dedicated WebSocket endpoint (/ws) for real-time communication
-- **Event Broadcasting**: Real-time updates for tag reads, reader status, and system events
-- **Client Synchronization**: Automatic reconnection and state synchronization for WebSocket clients
+**DLL Функции (RWDev.cs):**
+```csharp
+OpenComPort()           // Открытие COM порта
+InventoryBuffer_G2()    // Inventory в буферном режиме (15 параметров)
+Inventory_G2()          // Прямой inventory (fallback)
+ReadTagBuffer()         // Чтение тегов из буфера
+ClearBuffer_G2()        // Очистка буфера
+```
 
-### API Design
-- **RESTful Endpoints**: Standard CRUD operations for tags, logs, and statistics
-- **Hardware Control**: API endpoints for connecting to RFID readers and managing inventory scans
-- **Data Export**: Endpoints for exporting tag data and system logs
-- **Status Monitoring**: Real-time status endpoints for system health and reader connectivity
+**Два режима Inventory:**
+1. **Buffer Mode**: `InventoryBuffer_G2` → `ReadTagBuffer` каждые 500ms
+2. **Direct Mode (Fallback)**: `Inventory_G2` каждые 200ms (если буфер пустой)
 
-## External Dependencies
+**Параметры Inventory:**
+```
+QValue=4, Session=1, InAnt=0x01 (antenna 1), Scantime=10
+```
 
-### Database Services
-- **Neon PostgreSQL**: Serverless PostgreSQL database hosting
-- **Connection**: Database URL-based connection with connection pooling
+---
 
-### Development Tools
-- **Replit Integration**: Vite plugins for Replit development environment
-- **Build Tools**: ESBuild for server bundling, Vite for client bundling
-- **Type Safety**: TypeScript with strict configuration across frontend and backend
+### 2. IQRFID-5102 (UHF RFID Reader)
 
-### Hardware Dependencies
-- **Serial Communication**: @serialport/parser-readline for RFID reader communication  
-- **Windows Compatibility**: .NET 6.0 runtime for RRU9816 sidecar bridge
-- **DLL Integration**: RRU9816.dll with proper function mapping (InventoryBuffer_G2, GetTagBufferInfo)
-- **Supported Platforms**: Cross-platform serial port support for Windows, macOS, and Linux
-- **WebSocket Bridge**: ws://localhost:8081 for RRU9816 hardware communication
+**Технология подключения:**
+```
+[Node.js Backend] ←Serial Port→ [COM Port] ←→ [IQRFID-5102 Reader]
+```
 
-### Frontend Libraries
-- **Component Library**: Comprehensive Radix UI component set with shadcn/ui styling
-- **Data Fetching**: TanStack Query for caching and synchronization
-- **Styling**: Tailwind CSS with custom design tokens
-- **Form Handling**: React Hook Form with Zod validation
-- **Date Handling**: date-fns for timestamp formatting
+**Технические характеристики:**
+| Параметр | Значение |
+|----------|----------|
+| Тип | UHF RFID (860-960 MHz) |
+| Протокол | EPC Gen2 |
+| Подключение | Прямой Serial Port |
+| Baud Rate | 57600 |
+| Data Bits | 8 |
+| Stop Bits | 1 |
+| Parity | None |
 
-### Backend Libraries
-- **Web Framework**: Express.js with TypeScript support
-- **Database**: Drizzle ORM with Zod schema validation
-- **WebSocket**: ws library for real-time communication
-- **Session Storage**: connect-pg-simple for PostgreSQL session store
+**Протокол связи (Reverse-Engineered):**
+```
+Формат фрейма: [LEN][ADR][CMD][DATA...][CRC_LOW][CRC_HIGH]
+```
+- **LEN** - длина данных после байта длины (не включает сам LEN)
+- **ADR** - адрес устройства (0x00)
+- **CMD** - код команды
+- **CRC** - CRC-16 (polynomial 0x8408, LSB first)
+
+**Команда Inventory:**
+```
+Отправка: 04 00 01 DB 4B
+          │  │  │  └─ CRC
+          │  │  └─ CMD (0x01 = Inventory)
+          │  └─ ADR (0x00)
+          └─ LEN (4 байта после)
+```
+
+**Форматы ответов:**
+```
+Нет тегов:  05 00 01 FB F2 3D
+                     └─ Status 0xFB = "No tags"
+
+Тег найден: 13 00 01 01 01 0C [12 bytes EPC] [CRC]
+                  │  │  │  └─ EPC Length (12 bytes)
+                  │  │  └─ RSSI
+                  │  └─ Tag Count
+                  └─ CMD
+```
+
+**Алгоритм CRC-16:**
+```javascript
+Polynomial: 0x8408
+Initial: 0xFFFF
+LSB First (Little Endian)
+```
+
+**Логика считывания:**
+- Polling каждые 500ms через setInterval
+- Прямой опрос без буферизации
+
+---
+
+### 3. ACR1281U-C (NFC/HF Reader)
+
+**Технология подключения:**
+```
+[Node.js Backend] ←PC/SC API→ [Smart Card Service] ←USB→ [ACR1281U-C Reader]
+```
+
+**Технические характеристики:**
+| Параметр | Значение |
+|----------|----------|
+| Тип | NFC/HF (13.56 MHz) |
+| Протокол | ISO 14443A/B, MIFARE, FeliCa |
+| Подключение | PC/SC (Personal Computer/Smart Card) |
+| Интерфейс | USB |
+| Требования | Windows Smart Card Service |
+
+**Особенности:**
+- Использует системный PC/SC API вместо прямого serial port
+- Автоматическое определение карт через Smart Card Service
+- Поддержка MIFARE Classic, MIFARE Ultralight, NTAG и других NFC форматов
+
+**Логика считывания:**
+- PC/SC автоматически обнаруживает карты при поднесении
+- Нет необходимости в polling - событийная модель
+
+---
+
+## Сравнение паттернов считывания
+
+| Параметр | RRU9816 | IQRFID-5102 | ACR1281U-C |
+|----------|---------|-------------|------------|
+| **Транспорт** | WebSocket + DLL | Serial Port | PC/SC API |
+| **Формат данных** | JSON | Binary + CRC | PC/SC Events |
+| **Режимы работы** | Buffer + Direct | Direct polling | Event-driven |
+| **Polling** | 500ms / 200ms | 500ms | Автоматический |
+| **Сложность** | Высокая | Средняя | Низкая |
+| **Зависимости** | .NET 6.0, DLL | serialport lib | Smart Card Service |
+
+---
+
+## Архитектура системы
+
+### Общая схема
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                        WEB BROWSER (localhost:5000)                 │
+│  ┌─────────────────────────────────────────────────────────────┐   │
+│  │     React Frontend (Vite + TypeScript + TailwindCSS)        │   │
+│  │     • Dashboard с тегами и логами                            │   │
+│  │     • WebSocket для real-time обновлений                     │   │
+│  │     • TanStack Query для данных                              │   │
+│  └───────────────────────────┬─────────────────────────────────┘   │
+└──────────────────────────────│──────────────────────────────────────┘
+                               │ HTTP + WebSocket
+                               ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│                   EXPRESS.JS BACKEND (Node.js + TypeScript)         │
+│  ┌─────────────────────────────────────────────────────────────┐   │
+│  │  RfidService (server/services/rfidService.ts)               │   │
+│  │  • Маршрутизация по типу ридера                              │   │
+│  │  • EventEmitter для событий тегов                            │   │
+│  └───────┬─────────────────────┬─────────────────────┬─────────┘   │
+│          │                     │                     │              │
+│          ▼                     ▼                     ▼              │
+│    ┌───────────┐        ┌───────────┐         ┌───────────┐        │
+│    │ WebSocket │        │Serial Port│         │ PC/SC     │        │
+│    │ Client    │        │ Direct    │         │ Service   │        │
+│    └─────┬─────┘        └─────┬─────┘         └─────┬─────┘        │
+└──────────│────────────────────│─────────────────────│───────────────┘
+           │                    │                     │
+           ▼                    ▼                     ▼
+    ┌──────────────┐     ┌──────────────┐     ┌──────────────┐
+    │ C# Sidecar   │     │   COM Port   │     │ Smart Card   │
+    │ (ws:8081)    │     │   Direct     │     │ Service      │
+    └──────┬───────┘     └──────┬───────┘     └──────┬───────┘
+           │                    │                     │
+           ▼                    ▼                     ▼
+    ┌──────────────┐     ┌──────────────┐     ┌──────────────┐
+    │ RRU9816.dll  │     │ IQRFID-5102  │     │ ACR1281U-C   │
+    └──────┬───────┘     └──────────────┘     └──────────────┘
+           │                                         
+           ▼                                         
+    ┌──────────────┐                                 
+    │   RRU9816    │                                 
+    │   Hardware   │                                 
+    └──────────────┘                                 
+```
+
+### Технологический стек
+
+**Frontend:**
+| Технология | Назначение |
+|------------|------------|
+| React 18 | UI Framework |
+| TypeScript | Типизация |
+| Vite | Сборка и HMR |
+| TailwindCSS | Стилизация |
+| shadcn/ui + Radix UI | Компоненты |
+| TanStack Query | Кэширование данных |
+| Wouter | Роутинг |
+| WebSocket | Real-time обновления |
+
+**Backend:**
+| Технология | Назначение |
+|------------|------------|
+| Node.js | Рантайм |
+| Express.js | Web Framework |
+| TypeScript | Типизация |
+| ws | WebSocket сервер |
+| serialport | Serial Port коммуникация |
+| EventEmitter | События тегов |
+
+**Sidecar (RRU9816):**
+| Технология | Назначение |
+|------------|------------|
+| C# / .NET 6.0 | Рантайм |
+| WebSocket | Связь с Node.js |
+| DllImport | Вызовы RRU9816.dll |
+
+**Хранение данных:**
+- In-memory storage (без базы данных)
+- Сессионное хранение тегов и логов
+
+---
+
+## Структура проекта
+
+```
+/
+├── client/                      # Frontend (React)
+│   ├── src/
+│   │   ├── components/         # UI компоненты
+│   │   ├── pages/              # Страницы приложения
+│   │   ├── hooks/              # React hooks
+│   │   └── lib/                # Утилиты
+│   └── index.html
+│
+├── server/                      # Backend (Express)
+│   ├── services/
+│   │   ├── rfidService.ts      # Главный RFID сервис
+│   │   └── pcscService.ts      # PC/SC для ACR1281U-C
+│   ├── routes.ts               # API endpoints
+│   ├── storage.ts              # In-memory хранение
+│   └── index.ts                # Entry point
+│
+├── rru9816-sidecar/            # C# Bridge для RRU9816
+│   ├── Program.cs              # WebSocket сервер + DLL логика
+│   ├── RWDev.cs                # DLL функции импорт
+│   └── RRU9816.dll             # Драйвер ридера
+│
+├── shared/
+│   └── schema.ts               # Общие типы данных
+│
+└── IQRFID-5102_Connection_Guide.md  # Инструкция IQRFID-5102
+```
+
+---
+
+## API Endpoints
+
+| Метод | Endpoint | Описание |
+|-------|----------|----------|
+| GET | /api/ports | Список COM портов |
+| POST | /api/connect | Подключение к ридеру |
+| POST | /api/disconnect | Отключение |
+| GET | /api/status | Статус подключения |
+| GET | /api/tags | Список считанных тегов |
+| GET | /api/logs | Системные логи |
+| DELETE | /api/tags | Очистка тегов |
+| DELETE | /api/logs | Очистка логов |
+
+**WebSocket:** `ws://localhost:5000/ws`
+- События: `tag_read`, `status`, `log`
+
+---
+
+## Запуск на Windows
+
+1. **Установить зависимости:**
+   ```bash
+   npm install
+   ```
+
+2. **Для RRU9816 - собрать и запустить Sidecar:**
+   ```bash
+   cd rru9816-sidecar
+   dotnet build
+   dotnet run
+   ```
+
+3. **Запустить приложение:**
+   ```bash
+   npm run dev
+   ```
+
+4. **Открыть в браузере:** http://localhost:5000
+
+---
+
+## Troubleshooting
+
+### RRU9816
+- Убедитесь что .NET 6.0 установлен
+- Sidecar должен быть запущен ДО подключения
+- Проверьте что COM порт не занят другим приложением
+
+### IQRFID-5102
+- Baud rate должен быть 57600 (не 115200!)
+- Если нет ответа - проверьте питание ридера
+- Ридер должен пикнуть при обнаружении карты
+
+### ACR1281U-C
+- Убедитесь что Smart Card Service запущен (Windows Service)
+- Драйверы ACR должны быть установлены
+- Ридер определяется как PC/SC устройство
