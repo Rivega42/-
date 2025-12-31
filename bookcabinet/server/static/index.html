@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Библиотечный шкаф книговыдачи</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <div id="app">
+        <div id="welcome-screen" class="screen active">
+            <div class="logo">📚</div>
+            <h1>Добро пожаловать!</h1>
+            <p class="subtitle">Автоматический шкаф книговыдачи</p>
+            
+            <div class="card-prompt">
+                <div class="card-icon">💳</div>
+                <p>Приложите карту читателя</p>
+                <p class="hint">или выберите тестового пользователя</p>
+            </div>
+            
+            <div class="test-buttons">
+                <button class="btn btn-primary btn-lg" onclick="authenticate('CARD001')">
+                    👤 Читатель
+                </button>
+                <button class="btn btn-secondary btn-lg" onclick="authenticate('ADMIN01')">
+                    📖 Библиотекарь
+                </button>
+                <button class="btn btn-outline btn-lg" onclick="authenticate('ADMIN99')">
+                    🔧 Администратор
+                </button>
+            </div>
+        </div>
+        
+        <div id="reader-menu" class="screen">
+            <header>
+                <button class="btn-back" onclick="logout()">← Выход</button>
+                <h2>Меню читателя</h2>
+                <div class="user-info" id="user-info"></div>
+            </header>
+            
+            <div class="menu-grid">
+                <div class="menu-card" onclick="showScreen('book-list')">
+                    <div class="icon">📖</div>
+                    <h3>Забрать книгу</h3>
+                    <p id="reserved-count">0 забронировано</p>
+                </div>
+                <div class="menu-card" onclick="showScreen('return-book')">
+                    <div class="icon">↩️</div>
+                    <h3>Вернуть книгу</h3>
+                    <p>Положите книгу в окно</p>
+                </div>
+            </div>
+        </div>
+        
+        <div id="librarian-menu" class="screen">
+            <header>
+                <button class="btn-back" onclick="logout()">← Выход</button>
+                <h2>Меню библиотекаря</h2>
+                <div class="user-info" id="librarian-info"></div>
+            </header>
+            
+            <div id="extraction-alert" class="alert alert-warning hidden">
+                <span id="extraction-count">0</span> книг требуют изъятия
+                <button class="btn btn-sm" onclick="extractAll()">Изъять все</button>
+            </div>
+            
+            <div class="menu-grid cols-3">
+                <div class="menu-card" onclick="showScreen('load-books')">
+                    <div class="icon">➕</div>
+                    <h3>Загрузить книги</h3>
+                    <p>Добавить в шкаф</p>
+                </div>
+                <div class="menu-card" onclick="showScreen('extract-books')">
+                    <div class="icon">📦</div>
+                    <h3>Изъять книги</h3>
+                    <p>Забрать возвращённые</p>
+                </div>
+                <div class="menu-card" onclick="runInventory()">
+                    <div class="icon">🔍</div>
+                    <h3>Инвентаризация</h3>
+                    <p>Проверить содержимое</p>
+                </div>
+            </div>
+        </div>
+        
+        <div id="book-list" class="screen">
+            <header>
+                <button class="btn-back" onclick="goBack()">← Назад</button>
+                <h2>Ваши забронированные книги</h2>
+            </header>
+            <div id="books-container" class="list-container"></div>
+        </div>
+        
+        <div id="return-book" class="screen">
+            <header>
+                <button class="btn-back" onclick="goBack()">← Назад</button>
+                <h2>Возврат книги</h2>
+            </header>
+            <div class="center-content">
+                <div class="icon-lg">📦</div>
+                <p class="instruction">Положите книгу в окно приёма</p>
+                <div class="progress-bar">
+                    <div class="progress-fill" style="width: 30%"></div>
+                </div>
+                <p class="hint">Ожидание книги...</p>
+            </div>
+        </div>
+        
+        <div id="load-books" class="screen">
+            <header>
+                <button class="btn-back" onclick="goBack()">← Назад</button>
+                <h2>Загрузка книги</h2>
+            </header>
+            <div class="form-container">
+                <div class="form-group">
+                    <label>RFID-метка книги *</label>
+                    <input type="text" id="load-rfid" placeholder="Сканируйте или введите RFID">
+                </div>
+                <div class="form-group">
+                    <label>Название книги *</label>
+                    <input type="text" id="load-title" placeholder="Введите название">
+                </div>
+                <div class="form-group">
+                    <label>Автор</label>
+                    <input type="text" id="load-author" placeholder="Введите автора (необязательно)">
+                </div>
+                <button class="btn btn-primary btn-block" onclick="loadBook()">
+                    ➕ Загрузить книгу
+                </button>
+            </div>
+        </div>
+        
+        <div id="extract-books" class="screen">
+            <header>
+                <button class="btn-back" onclick="goBack()">← Назад</button>
+                <h2>Изъятие книг</h2>
+            </header>
+            <div id="extraction-list" class="list-container"></div>
+        </div>
+        
+        <div id="progress-screen" class="screen">
+            <div class="center-content">
+                <div class="spinner"></div>
+                <h2 id="progress-message">Выполняется операция...</h2>
+                <div class="progress-bar">
+                    <div class="progress-fill" id="progress-fill"></div>
+                </div>
+                <p class="hint">Пожалуйста, подождите</p>
+            </div>
+        </div>
+        
+        <div id="success-screen" class="screen">
+            <div class="center-content success">
+                <div class="icon-lg">✅</div>
+                <h2>Успешно!</h2>
+                <p id="success-message"></p>
+                <button class="btn btn-primary btn-lg" onclick="goBack()">Продолжить</button>
+            </div>
+        </div>
+        
+        <div id="error-screen" class="screen">
+            <div class="center-content error">
+                <div class="icon-lg">❌</div>
+                <h2>Ошибка</h2>
+                <p id="error-message"></p>
+                <button class="btn btn-danger btn-lg" onclick="goBack()">Назад</button>
+            </div>
+        </div>
+    </div>
+    
+    <script src="/static/js/app.js"></script>
+</body>
+</html>
