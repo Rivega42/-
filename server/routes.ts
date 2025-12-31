@@ -3,19 +3,42 @@ import { createServer, type Server } from "http";
 import { WebSocketServer, WebSocket } from "ws";
 import { storage } from "./storage";
 import { rfidService } from "./services/rfidService";
-import type { WebSocketMessage, TagReadEvent, RfidReaderStatus, SystemLog } from "@shared/schema";
+import type { 
+  WebSocketMessage, TagReadEvent, RfidReaderStatus, SystemLog,
+  SystemStatus, User, Cell, Book
+} from "@shared/schema";
 import { ReaderType } from "@shared/schema";
+
+// Состояние системы (будет управляться механикой)
+let systemStatus: SystemStatus = {
+  state: 'idle',
+  position: { x: 0, y: 0, tray: 0 },
+  sensors: {
+    x_begin: true,
+    x_end: false,
+    y_begin: true,
+    y_end: false,
+    tray_begin: true,
+    tray_end: false,
+  },
+  shutters: { inner: false, outer: false },
+  locks: { front: false, back: false },
+  irbisConnected: false,
+  autonomousMode: true,
+  maintenanceMode: false,
+};
+
+// Текущая сессия авторизации
+let currentSession: { user: User | null; expiresAt: Date | null } = {
+  user: null,
+  expiresAt: null,
+};
 
 export async function registerRoutes(app: Express): Promise<Server> {
   const httpServer = createServer(app);
-
-  // WebSocket server on /ws path
   const wss = new WebSocketServer({ server: httpServer, path: '/ws' });
-
-  // Store active WebSocket connections
   const clients = new Set<WebSocket>();
 
-  // Broadcast to all connected clients
   const broadcast = (message: WebSocketMessage) => {
     const messageStr = JSON.stringify(message);
     clients.forEach(client => {
@@ -27,17 +50,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // RFID Service event handlers
   rfidService.on('tagRead', (tagEvent: TagReadEvent) => {
-    broadcast({
-      type: 'tag_read',
-      data: tagEvent,
-    });
+    broadcast({ type: 'tag_read', data: tagEvent });
   });
 
   rfidService.on('status', (status: RfidReaderStatus) => {
-    broadcast({
-      type: 'reader_status',
-      data: status,
-    });
+    broadcast({ type: 'reader_status', data: status });
   });
 
   // WebSocket connection handler
@@ -45,12 +62,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
     clients.add(ws);
     console.log('WebSocket client connected');
 
-    // Send current status to new client
-    const currentStatus = rfidService.getConnectionStatus();
-    ws.send(JSON.stringify({
-      type: 'reader_status',
-      data: currentStatus,
-    }));
+    ws.send(JSON.stringify({ type: 'status', data: systemStatus }));
+    ws.send(JSON.stringify({ type: 'reader_status', data: rfidService.getConnectionStatus() }));
+
+    ws.on('message', async (data) => {
+      try {
+        const message = JSON.parse(data.toString());
+        await handleWebSocketMessage(message, ws, broadcast);
+      } catch (error) {
+        console.error('WebSocket message error:', error);
+      }
+    });
 
     ws.on('close', () => {
       clients.delete(ws);
@@ -63,202 +85,570 @@ export async function registerRoutes(app: Express): Promise<Server> {
     });
   });
 
-  // REST API routes
+  // ==================== СИСТЕМА ====================
   
-  // Get available COM ports
+  app.get("/api/status", (req, res) => {
+    res.json(systemStatus);
+  });
+
+  app.post("/api/maintenance", async (req, res) => {
+    const { enabled } = req.body;
+    systemStatus.maintenanceMode = Boolean(enabled);
+    broadcast({ type: 'status', data: systemStatus });
+    await storage.addSystemLog({
+      level: enabled ? 'WARNING' : 'INFO',
+      message: enabled ? 'Режим обслуживания включён' : 'Режим обслуживания отключён',
+      component: 'SYSTEM',
+    });
+    res.json({ success: true, maintenanceMode: systemStatus.maintenanceMode });
+  });
+
+  // ==================== ЯЧЕЙКИ ====================
+
+  app.get("/api/cells", async (req, res) => {
+    try {
+      const cells = await storage.getAllCells();
+      res.json(cells);
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to get cells' });
+    }
+  });
+
+  app.get("/api/cells/:id", async (req, res) => {
+    try {
+      const cell = await storage.getCell(parseInt(req.params.id));
+      if (!cell) return res.status(404).json({ error: 'Cell not found' });
+      res.json(cell);
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to get cell' });
+    }
+  });
+
+  app.patch("/api/cells/:id", async (req, res) => {
+    try {
+      const cell = await storage.updateCell(parseInt(req.params.id), req.body);
+      if (!cell) return res.status(404).json({ error: 'Cell not found' });
+      res.json(cell);
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to update cell' });
+    }
+  });
+
+  app.get("/api/cells/available/:row?", async (req, res) => {
+    try {
+      const cells = await storage.getAvailableCells(req.params.row);
+      res.json(cells);
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to get available cells' });
+    }
+  });
+
+  app.get("/api/cells/extraction", async (req, res) => {
+    try {
+      const cells = await storage.getCellsNeedingExtraction();
+      res.json(cells);
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to get cells' });
+    }
+  });
+
+  // ==================== ПОЛЬЗОВАТЕЛИ ====================
+
+  app.get("/api/users", async (req, res) => {
+    try {
+      const users = await storage.getAllUsers();
+      res.json(users);
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to get users' });
+    }
+  });
+
+  app.get("/api/users/:id", async (req, res) => {
+    try {
+      const user = await storage.getUser(req.params.id);
+      if (!user) return res.status(404).json({ error: 'User not found' });
+      res.json(user);
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to get user' });
+    }
+  });
+
+  app.get("/api/users/rfid/:rfid", async (req, res) => {
+    try {
+      const user = await storage.getUserByRfid(req.params.rfid);
+      if (!user) return res.status(404).json({ error: 'User not found' });
+      res.json(user);
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to get user' });
+    }
+  });
+
+  app.post("/api/users", async (req, res) => {
+    try {
+      const user = await storage.createUser(req.body);
+      res.status(201).json(user);
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to create user' });
+    }
+  });
+
+  // ==================== КНИГИ ====================
+
+  app.get("/api/books", async (req, res) => {
+    try {
+      const books = await storage.getAllBooks();
+      res.json(books);
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to get books' });
+    }
+  });
+
+  app.get("/api/books/:id", async (req, res) => {
+    try {
+      const book = await storage.getBook(req.params.id);
+      if (!book) return res.status(404).json({ error: 'Book not found' });
+      res.json(book);
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to get book' });
+    }
+  });
+
+  app.get("/api/books/rfid/:rfid", async (req, res) => {
+    try {
+      const book = await storage.getBookByRfid(req.params.rfid);
+      if (!book) return res.status(404).json({ error: 'Book not found' });
+      res.json(book);
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to get book' });
+    }
+  });
+
+  app.get("/api/books/reserved/:userRfid", async (req, res) => {
+    try {
+      const books = await storage.getReservedBooks(req.params.userRfid);
+      res.json(books);
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to get reserved books' });
+    }
+  });
+
+  app.post("/api/books", async (req, res) => {
+    try {
+      const book = await storage.createBook(req.body);
+      res.status(201).json(book);
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to create book' });
+    }
+  });
+
+  app.patch("/api/books/:id", async (req, res) => {
+    try {
+      const book = await storage.updateBook(req.params.id, req.body);
+      if (!book) return res.status(404).json({ error: 'Book not found' });
+      res.json(book);
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to update book' });
+    }
+  });
+
+  // ==================== ОПЕРАЦИИ ====================
+
+  app.get("/api/operations", async (req, res) => {
+    try {
+      const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
+      const operations = await storage.getAllOperations(limit);
+      res.json(operations);
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to get operations' });
+    }
+  });
+
+  app.get("/api/operations/today", async (req, res) => {
+    try {
+      const operations = await storage.getOperationsToday();
+      res.json(operations);
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to get operations' });
+    }
+  });
+
+  app.post("/api/operations", async (req, res) => {
+    try {
+      const operation = await storage.createOperation(req.body);
+      res.status(201).json(operation);
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to create operation' });
+    }
+  });
+
+  // ==================== АВТОРИЗАЦИЯ ====================
+
+  app.post("/api/auth/card", async (req, res) => {
+    try {
+      const { rfid } = req.body;
+      if (!rfid) return res.status(400).json({ error: 'RFID is required' });
+
+      if (systemStatus.maintenanceMode) {
+        return res.status(503).json({ error: 'Шкаф временно недоступен' });
+      }
+
+      const user = await storage.getUserByRfid(rfid);
+      if (!user) {
+        await storage.addSystemLog({
+          level: 'WARNING',
+          message: `Неизвестная карта: ${rfid}`,
+          component: 'RFID',
+        });
+        return res.status(404).json({ error: 'Карта не зарегистрирована' });
+      }
+
+      if (user.blocked) {
+        return res.status(403).json({ error: 'Обратитесь к библиотекарю' });
+      }
+
+      currentSession = {
+        user,
+        expiresAt: new Date(Date.now() + 5 * 60 * 1000), // 5 минут
+      };
+
+      await storage.addSystemLog({
+        level: 'INFO',
+        message: `Авторизация: ${user.name} (${user.role})`,
+        component: 'SYSTEM',
+      });
+
+      broadcast({ type: 'card_read', data: { uid: rfid, cardType: 'library', timestamp: new Date().toISOString() } });
+
+      const reservedBooks = await storage.getReservedBooks(rfid);
+      const needsExtraction = await storage.getCellsNeedingExtraction();
+
+      res.json({ 
+        success: true, 
+        user,
+        reservedBooks,
+        needsExtraction: needsExtraction.length,
+      });
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : 'Auth failed' });
+    }
+  });
+
+  app.post("/api/auth/logout", (req, res) => {
+    currentSession = { user: null, expiresAt: null };
+    res.json({ success: true });
+  });
+
+  app.get("/api/auth/session", (req, res) => {
+    if (!currentSession.user || !currentSession.expiresAt || currentSession.expiresAt < new Date()) {
+      currentSession = { user: null, expiresAt: null };
+      return res.json({ authenticated: false });
+    }
+    res.json({ authenticated: true, user: currentSession.user });
+  });
+
+  // ==================== БИЗНЕС-ОПЕРАЦИИ ====================
+
+  app.post("/api/issue", async (req, res) => {
+    try {
+      const { bookRfid, userRfid } = req.body;
+      if (!bookRfid || !userRfid) {
+        return res.status(400).json({ error: 'bookRfid and userRfid are required' });
+      }
+
+      const book = await storage.getBookByRfid(bookRfid);
+      if (!book) return res.status(404).json({ error: 'Book not found' });
+      
+      if (book.reservedForRfid && book.reservedForRfid !== userRfid) {
+        return res.status(403).json({ error: 'Книга забронирована другим читателем' });
+      }
+
+      const startTime = Date.now();
+
+      // Обновляем книгу
+      await storage.updateBook(book.id, {
+        status: 'issued',
+        issuedToRfid: userRfid,
+        reservedForRfid: null,
+        cellId: null,
+      });
+
+      // Очищаем ячейку
+      if (book.cellId !== null) {
+        await storage.updateCell(book.cellId, {
+          status: 'empty',
+          bookRfid: null,
+          bookTitle: null,
+          reservedFor: null,
+        });
+      }
+
+      // Записываем операцию
+      const cell = book.cellId !== null ? await storage.getCell(book.cellId) : null;
+      await storage.createOperation({
+        operation: 'ISSUE',
+        cellRow: cell?.row,
+        cellX: cell?.x,
+        cellY: cell?.y,
+        bookRfid,
+        userRfid,
+        result: 'OK',
+        durationMs: Date.now() - startTime,
+      });
+
+      await storage.addSystemLog({
+        level: 'SUCCESS',
+        message: `Выдана книга: ${book.title}`,
+        component: 'SYSTEM',
+      });
+
+      res.json({ success: true, book });
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : 'Issue failed' });
+    }
+  });
+
+  app.post("/api/return", async (req, res) => {
+    try {
+      const { bookRfid, userRfid } = req.body;
+      if (!bookRfid) return res.status(400).json({ error: 'bookRfid is required' });
+
+      const book = await storage.getBookByRfid(bookRfid);
+      if (!book) return res.status(404).json({ error: 'Book not found' });
+
+      const startTime = Date.now();
+
+      // Находим свободную ячейку
+      const availableCells = await storage.getAvailableCells();
+      if (availableCells.length === 0) {
+        return res.status(503).json({ error: 'Нет свободных ячеек' });
+      }
+
+      const targetCell = availableCells[0];
+
+      // Обновляем ячейку
+      await storage.updateCell(targetCell.id, {
+        status: 'occupied',
+        bookRfid,
+        bookTitle: book.title,
+        needsExtraction: true,
+      });
+
+      // Обновляем книгу
+      await storage.updateBook(book.id, {
+        status: 'in_cabinet',
+        issuedToRfid: null,
+        cellId: targetCell.id,
+      });
+
+      await storage.createOperation({
+        operation: 'RETURN',
+        cellRow: targetCell.row,
+        cellX: targetCell.x,
+        cellY: targetCell.y,
+        bookRfid,
+        userRfid,
+        result: 'OK',
+        durationMs: Date.now() - startTime,
+      });
+
+      await storage.addSystemLog({
+        level: 'SUCCESS',
+        message: `Возвращена книга: ${book.title}`,
+        component: 'SYSTEM',
+      });
+
+      res.json({ success: true, book, cell: targetCell });
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : 'Return failed' });
+    }
+  });
+
+  // ==================== RFID (существующие) ====================
+
   app.get("/api/ports", async (req, res) => {
     try {
       const ports = await rfidService.getAvailablePorts();
       res.json({ ports });
     } catch (error) {
-      res.status(500).json({ 
-        error: error instanceof Error ? error.message : 'Failed to get ports' 
-      });
+      res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to get ports' });
     }
   });
 
-  // Get RFID reader configurations
   app.get("/api/reader-configs", (req, res) => {
     try {
       const configs = rfidService.getReaderConfigs();
       res.json({ configs });
     } catch (error) {
-      res.status(500).json({ 
-        error: error instanceof Error ? error.message : 'Failed to get reader configs' 
-      });
+      res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to get reader configs' });
     }
   });
 
-  // Connect to RFID reader
   app.post("/api/connect", async (req, res) => {
     try {
       const { port, readerType, baudRate } = req.body;
-      
-      if (!port) {
-        return res.status(400).json({ error: 'Port is required' });
-      }
-      
-      if (!readerType) {
-        return res.status(400).json({ error: 'Reader type is required' });
-      }
-
-      // Validate reader type
+      if (!port) return res.status(400).json({ error: 'Port is required' });
+      if (!readerType) return res.status(400).json({ error: 'Reader type is required' });
       if (!Object.values(ReaderType).includes(readerType)) {
         return res.status(400).json({ error: 'Invalid reader type' });
       }
-
       await rfidService.connect(port, readerType, baudRate);
       res.json({ success: true, message: `Connected to ${readerType} successfully` });
     } catch (error) {
-      res.status(500).json({ 
-        error: error instanceof Error ? error.message : 'Failed to connect' 
-      });
+      res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to connect' });
     }
   });
 
-  // Disconnect from RFID reader
   app.post("/api/disconnect", async (req, res) => {
     try {
       await rfidService.disconnect();
       res.json({ success: true, message: 'Disconnected successfully' });
     } catch (error) {
-      res.status(500).json({ 
-        error: error instanceof Error ? error.message : 'Failed to disconnect' 
-      });
+      res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to disconnect' });
     }
   });
 
-  // Start manual inventory
   app.post("/api/inventory", async (req, res) => {
     try {
       rfidService.manualInventory();
       res.json({ success: true, message: 'Inventory started' });
     } catch (error) {
-      res.status(500).json({ 
-        error: error instanceof Error ? error.message : 'Failed to start inventory' 
-      });
+      res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to start inventory' });
     }
   });
 
-  // Get all RFID tags
+  // ==================== ТЕГИ И ЛОГИ ====================
+
   app.get("/api/tags", async (req, res) => {
     try {
       const tags = await storage.getAllRfidTags();
       res.json(tags);
     } catch (error) {
-      res.status(500).json({ 
-        error: error instanceof Error ? error.message : 'Failed to get tags' 
-      });
+      res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to get tags' });
     }
   });
 
-  // Clear all RFID tags
   app.delete("/api/tags", async (req, res) => {
     try {
       await storage.clearAllRfidTags();
       res.json({ success: true, message: 'All tags cleared' });
     } catch (error) {
-      res.status(500).json({ 
-        error: error instanceof Error ? error.message : 'Failed to clear tags' 
-      });
+      res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to clear tags' });
     }
   });
 
-  // Get system logs
   app.get("/api/logs", async (req, res) => {
     try {
-      const logs = await storage.getAllSystemLogs();
+      const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
+      const logs = await storage.getAllSystemLogs(limit);
       res.json(logs);
     } catch (error) {
-      res.status(500).json({ 
-        error: error instanceof Error ? error.message : 'Failed to get logs' 
-      });
+      res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to get logs' });
     }
   });
 
-  // Clear system logs
   app.delete("/api/logs", async (req, res) => {
     try {
       await storage.clearSystemLogs();
       res.json({ success: true, message: 'Logs cleared' });
     } catch (error) {
-      res.status(500).json({ 
-        error: error instanceof Error ? error.message : 'Failed to clear logs' 
-      });
+      res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to clear logs' });
     }
   });
 
-  // Get statistics
   app.get("/api/statistics", async (req, res) => {
     try {
       const stats = await storage.getStatistics();
       res.json(stats);
-      
-      // Also broadcast via WebSocket
-      broadcast({
-        type: 'statistics',
-        data: stats,
-      });
+      broadcast({ type: 'statistics', data: stats });
     } catch (error) {
-      res.status(500).json({ 
-        error: error instanceof Error ? error.message : 'Failed to get statistics' 
-      });
+      res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to get statistics' });
     }
   });
 
-  // TEMPORARY: Simulate RFID tag reading for testing (remove in production)
+  // ==================== СИМУЛЯЦИЯ (для тестирования) ====================
+
   app.post("/api/simulate-tag-read", async (req, res) => {
     try {
       const { epc, rssi, timestamp } = req.body;
-      
-      if (!epc) {
-        return res.status(400).json({ error: 'EPC is required' });
-      }
+      if (!epc) return res.status(400).json({ error: 'EPC is required' });
 
-      // Store in database
       const tag = await storage.createOrUpdateRfidTag({
         epc,
         rssi: rssi?.toString() || '-50',
       });
 
-      // Emit tag read event
       const tagEvent = {
         epc: tag.epc,
         rssi: parseFloat(tag.rssi || '0'),
         timestamp: timestamp || new Date().toISOString(),
       };
 
-      broadcast({
-        type: 'tag_read',
-        data: tagEvent,
-      });
+      broadcast({ type: 'tag_read', data: tagEvent });
 
-      // Add system log
       await storage.addSystemLog({
         level: 'INFO',
         message: `Simulated tag read: ${epc}, RSSI: ${rssi || -50} dBm`,
+        component: 'RFID',
       });
 
       res.json({ success: true, message: 'Tag simulated successfully', tag });
     } catch (error) {
-      res.status(500).json({ 
-        error: error instanceof Error ? error.message : 'Failed to simulate tag' 
-      });
+      res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to simulate tag' });
     }
   });
 
-  // Periodically broadcast statistics
+  app.post("/api/simulate-card-read", async (req, res) => {
+    try {
+      const { rfid } = req.body;
+      if (!rfid) return res.status(400).json({ error: 'RFID is required' });
+
+      broadcast({ 
+        type: 'card_read', 
+        data: { uid: rfid, cardType: 'library', timestamp: new Date().toISOString() } 
+      });
+
+      res.json({ success: true, message: 'Card simulated successfully' });
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to simulate card' });
+    }
+  });
+
+  // Периодическая трансляция статистики
   setInterval(async () => {
     try {
       const stats = await storage.getStatistics();
-      broadcast({
-        type: 'statistics',
-        data: stats,
-      });
+      broadcast({ type: 'statistics', data: stats });
     } catch (error) {
       console.error('Error broadcasting statistics:', error);
     }
-  }, 5000); // Every 5 seconds
+  }, 5000);
 
   return httpServer;
+}
+
+async function handleWebSocketMessage(
+  message: any, 
+  ws: WebSocket, 
+  broadcast: (msg: WebSocketMessage) => void
+) {
+  switch (message.action) {
+    case 'authenticate':
+      if (message.card_rfid) {
+        const user = await storage.getUserByRfid(message.card_rfid);
+        if (user) {
+          broadcast({ 
+            type: 'card_read', 
+            data: { uid: message.card_rfid, cardType: 'library', timestamp: new Date().toISOString() } 
+          });
+        }
+      }
+      break;
+      
+    case 'get_status':
+      ws.send(JSON.stringify({ type: 'status', data: systemStatus }));
+      break;
+      
+    default:
+      console.log('Unknown WebSocket action:', message.action);
+  }
 }
