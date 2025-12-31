@@ -240,6 +240,21 @@ export interface PositionEvent {
   timestamp: string;
 }
 
+export interface CabinetState {
+  state: 'idle' | 'moving' | 'busy' | 'error' | 'maintenance';
+  position: { x: number; y: number; row: string };
+  trayOpen: boolean;
+  bookOnTray: string | null;
+  sensors: {
+    tray_sensor: boolean;
+    book_sensor: boolean;
+    door_closed: boolean;
+    emergency_stop: boolean;
+  };
+  currentOperation: string | null;
+  lastError: string | null;
+}
+
 export type WebSocketMessage = 
   | { type: 'tag_read'; data: TagReadEvent }
   | { type: 'card_read'; data: CardReadEvent }
@@ -249,7 +264,13 @@ export type WebSocketMessage =
   | { type: 'sensors'; data: SensorEvent }
   | { type: 'position'; data: PositionEvent }
   | { type: 'status'; data: SystemStatus }
-  | { type: 'statistics'; data: Statistics };
+  | { type: 'statistics'; data: Statistics }
+  | { type: 'cabinet_state'; data: CabinetState }
+  | { type: 'operation_started'; data: any }
+  | { type: 'operation_completed'; data: any }
+  | { type: 'operation_failed'; data: any }
+  | { type: 'cell_opened'; data: any }
+  | { type: 'book_detected'; data: { rfid: string } };
 
 // ==================== СТАТИСТИКА ====================
 export interface Statistics {

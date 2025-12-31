@@ -5,10 +5,12 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import type { User, Book, SystemStatus } from "@shared/schema";
+import type { User, Book, Cell, SystemStatus } from "@shared/schema";
 import { 
   BookOpen, 
   Undo2, 
@@ -22,17 +24,21 @@ import {
   ArrowLeft,
   Library,
   Package,
-  AlertTriangle
+  AlertTriangle,
+  Search,
+  Plus
 } from "lucide-react";
 
 type Screen = 
   | 'welcome' 
-  | 'role_select' 
   | 'reader_menu' 
   | 'librarian_menu' 
   | 'admin_menu'
   | 'book_list' 
   | 'return_book' 
+  | 'load_books'
+  | 'extract_books'
+  | 'inventory'
   | 'progress' 
   | 'success' 
   | 'error'
@@ -51,18 +57,27 @@ export default function KioskPage() {
   const [progressValue, setProgressValue] = useState(0);
   const [errorMessage, setErrorMessage] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
+  const [newBookRfid, setNewBookRfid] = useState('');
+  const [newBookTitle, setNewBookTitle] = useState('');
+  const [newBookAuthor, setNewBookAuthor] = useState('');
+  const [, setLocation] = useLocation();
   const { toast } = useToast();
 
   const { data: systemStatus } = useQuery<SystemStatus>({
     queryKey: ['/api/status'],
-    refetchInterval: 5000,
+    refetchInterval: 3000,
+  });
+
+  const { data: cellsNeedingExtraction = [] } = useQuery<Cell[]>({
+    queryKey: ['/api/cells/extraction'],
+    enabled: session?.user.role === 'librarian' || session?.user.role === 'admin',
   });
 
   useEffect(() => {
-    if (systemStatus?.maintenanceMode && screen !== 'maintenance') {
+    if (systemStatus?.maintenanceMode && screen !== 'maintenance' && session?.user.role !== 'admin') {
       setScreen('maintenance');
     }
-  }, [systemStatus?.maintenanceMode, screen]);
+  }, [systemStatus?.maintenanceMode, screen, session]);
 
   const authMutation = useMutation({
     mutationFn: async (rfid: string) => {
@@ -114,6 +129,76 @@ export default function KioskPage() {
     },
   });
 
+  const loadBookMutation = useMutation({
+    mutationFn: async ({ bookRfid, title, author }: { bookRfid: string; title: string; author?: string }) => {
+      const response = await apiRequest('POST', '/api/load-book', { bookRfid, title, author });
+      return response.json();
+    },
+    onSuccess: (data) => {
+      if (data.success) {
+        setSuccessMessage(`Книга загружена в ячейку`);
+        setScreen('success');
+        setNewBookRfid('');
+        setNewBookTitle('');
+        setNewBookAuthor('');
+        queryClient.invalidateQueries({ queryKey: ['/api/books'] });
+        queryClient.invalidateQueries({ queryKey: ['/api/cells'] });
+      }
+    },
+    onError: (error: any) => {
+      setErrorMessage(error.message || 'Ошибка загрузки книги');
+      setScreen('error');
+    },
+  });
+
+  const extractMutation = useMutation({
+    mutationFn: async (cellId: number) => {
+      const response = await apiRequest('POST', '/api/extract', { cellId });
+      return response.json();
+    },
+    onSuccess: (data) => {
+      if (data.success) {
+        toast({ title: 'Успешно', description: `Книга "${data.book?.title}" изъята` });
+        queryClient.invalidateQueries({ queryKey: ['/api/cells'] });
+        queryClient.invalidateQueries({ queryKey: ['/api/cells/extraction'] });
+      }
+    },
+    onError: (error: any) => {
+      toast({ title: 'Ошибка', description: error.message, variant: 'destructive' });
+    },
+  });
+
+  const extractAllMutation = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest('POST', '/api/extract-all', {});
+      return response.json();
+    },
+    onSuccess: (data) => {
+      setSuccessMessage(`Изъято ${data.extracted} книг`);
+      setScreen('success');
+      queryClient.invalidateQueries({ queryKey: ['/api/cells'] });
+    },
+    onError: (error: any) => {
+      setErrorMessage(error.message || 'Ошибка изъятия');
+      setScreen('error');
+    },
+  });
+
+  const inventoryMutation = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest('POST', '/api/run-inventory', {});
+      return response.json();
+    },
+    onSuccess: (data) => {
+      setSuccessMessage(`Инвентаризация завершена: найдено ${data.found} книг, отсутствует ${data.missing}`);
+      setScreen('success');
+    },
+    onError: (error: any) => {
+      setErrorMessage(error.message || 'Ошибка инвентаризации');
+      setScreen('error');
+    },
+  });
+
   const handleCardScan = useCallback((rfid: string) => {
     authMutation.mutate(rfid);
   }, [authMutation]);
@@ -151,17 +236,29 @@ export default function KioskPage() {
     }, 1000);
   };
 
+  const handleLoadBook = () => {
+    if (!newBookRfid || !newBookTitle) {
+      toast({ title: 'Ошибка', description: 'Заполните RFID и название книги', variant: 'destructive' });
+      return;
+    }
+    setProgressMessage(`Загрузка книги: ${newBookTitle}`);
+    setProgressValue(30);
+    setScreen('progress');
+    
+    loadBookMutation.mutate({ bookRfid: newBookRfid, title: newBookTitle, author: newBookAuthor || undefined });
+  };
+
   const renderHeader = () => {
     if (screen === 'welcome' || screen === 'maintenance') return null;
     
     return (
-      <div className="fixed top-0 left-0 right-0 h-24 bg-slate-900 text-white flex items-center justify-between px-8 z-50" data-testid="header">
+      <div className="fixed top-0 left-0 right-0 h-20 bg-slate-900 text-white flex items-center justify-between px-6 z-50" data-testid="header">
         <div className="flex items-center gap-4">
-          {screen !== 'role_select' && (
+          {!['reader_menu', 'librarian_menu', 'admin_menu'].includes(screen) && (
             <Button 
               variant="ghost" 
               size="lg"
-              className="text-white hover:bg-slate-800"
+              className="text-white hover:bg-slate-800 h-14 px-6 text-lg"
               onClick={handleBack}
               data-testid="button-back"
             >
@@ -169,20 +266,20 @@ export default function KioskPage() {
               Назад
             </Button>
           )}
-          <Library className="w-10 h-10" />
-          <span className="text-2xl font-bold">Библиотечный шкаф</span>
+          <Library className="w-8 h-8" />
+          <span className="text-xl font-bold">Библиотечный шкаф</span>
         </div>
         
-        <div className="flex items-center gap-6">
+        <div className="flex items-center gap-4">
           {session && (
-            <div className="flex items-center gap-3">
-              <UserIcon className="w-6 h-6" />
-              <span className="text-xl">{session.user.name}</span>
+            <div className="flex items-center gap-2">
+              <UserIcon className="w-5 h-5" />
+              <span className="text-lg">{session.user.name}</span>
               <Badge variant={
                 session.user.role === 'admin' ? 'destructive' : 
                 session.user.role === 'librarian' ? 'secondary' : 'default'
               }>
-                {session.user.role === 'admin' ? 'Администратор' : 
+                {session.user.role === 'admin' ? 'Админ' : 
                  session.user.role === 'librarian' ? 'Библиотекарь' : 'Читатель'}
               </Badge>
             </div>
@@ -196,8 +293,7 @@ export default function KioskPage() {
             }`} />
             <span className="text-sm">
               {systemStatus?.state === 'idle' ? 'Готов' :
-               systemStatus?.state === 'busy' ? 'Занят' :
-               systemStatus?.state === 'error' ? 'Ошибка' : 'Инициализация'}
+               systemStatus?.state === 'busy' ? 'Занят' : 'Ошибка'}
             </span>
           </div>
           
@@ -205,7 +301,7 @@ export default function KioskPage() {
             <Button 
               variant="outline" 
               onClick={handleLogout}
-              className="border-white text-white hover:bg-white hover:text-slate-900"
+              className="border-white text-white hover:bg-white hover:text-slate-900 h-12 px-6"
               data-testid="button-logout"
             >
               Выход
@@ -218,47 +314,50 @@ export default function KioskPage() {
 
   const renderWelcome = () => (
     <div className="min-h-screen bg-gradient-to-br from-slate-800 to-slate-900 flex flex-col items-center justify-center text-white p-8" data-testid="screen-welcome">
-      <Library className="w-32 h-32 mb-8 text-blue-400" />
-      <h1 className="text-6xl font-bold mb-4">Добро пожаловать!</h1>
-      <p className="text-3xl text-slate-300 mb-16">Автоматический шкаф книговыдачи</p>
+      <Library className="w-28 h-28 mb-6 text-blue-400" />
+      <h1 className="text-5xl font-bold mb-3">Добро пожаловать!</h1>
+      <p className="text-2xl text-slate-300 mb-12">Автоматический шкаф книговыдачи</p>
       
-      <div className="bg-slate-700/50 rounded-3xl p-12 flex flex-col items-center">
-        <CreditCard className="w-24 h-24 mb-6 text-blue-400 animate-pulse" />
-        <p className="text-2xl mb-4">Приложите карту читателя</p>
-        <p className="text-lg text-slate-400">или введите номер карты</p>
+      <div className="bg-slate-700/50 rounded-2xl p-10 flex flex-col items-center max-w-2xl w-full">
+        <CreditCard className="w-20 h-20 mb-4 text-blue-400 animate-pulse" />
+        <p className="text-xl mb-2">Приложите карту читателя</p>
+        <p className="text-base text-slate-400 mb-6">или выберите тестового пользователя</p>
         
-        <div className="mt-8 flex gap-4">
+        <div className="flex flex-wrap gap-3 justify-center">
           <Button 
             size="lg" 
-            className="h-16 px-8 text-xl"
+            className="h-20 px-8 text-xl min-w-[200px]"
             onClick={() => handleCardScan('CARD001')}
             data-testid="button-test-reader"
           >
-            Тест: Читатель
+            <UserIcon className="w-6 h-6 mr-2" />
+            Читатель
           </Button>
           <Button 
             size="lg" 
             variant="secondary"
-            className="h-16 px-8 text-xl"
+            className="h-20 px-8 text-xl min-w-[200px]"
             onClick={() => handleCardScan('ADMIN01')}
             data-testid="button-test-librarian"
           >
-            Тест: Библиотекарь
+            <BookOpen className="w-6 h-6 mr-2" />
+            Библиотекарь
           </Button>
           <Button 
             size="lg" 
             variant="outline"
-            className="h-16 px-8 text-xl border-white text-white hover:bg-white hover:text-slate-900"
+            className="h-20 px-8 text-xl min-w-[200px] border-white text-white hover:bg-white hover:text-slate-900"
             onClick={() => handleCardScan('ADMIN99')}
             data-testid="button-test-admin"
           >
-            Тест: Админ
+            <Shield className="w-6 h-6 mr-2" />
+            Администратор
           </Button>
         </div>
       </div>
       
       {authMutation.isPending && (
-        <div className="mt-8 flex items-center gap-3">
+        <div className="mt-6 flex items-center gap-3">
           <Loader2 className="w-6 h-6 animate-spin" />
           <span>Авторизация...</span>
         </div>
@@ -267,26 +366,26 @@ export default function KioskPage() {
   );
 
   const renderReaderMenu = () => (
-    <div className="min-h-screen bg-slate-100 pt-32 p-8" data-testid="screen-reader-menu">
+    <div className="min-h-screen bg-slate-100 pt-28 p-6" data-testid="screen-reader-menu">
       <div className="max-w-4xl mx-auto">
-        <h2 className="text-4xl font-bold text-slate-800 mb-8 text-center">Выберите действие</h2>
+        <h2 className="text-3xl font-bold text-slate-800 mb-6 text-center">Выберите действие</h2>
         
-        <div className="grid grid-cols-2 gap-8">
+        <div className="grid grid-cols-2 gap-6">
           <Card 
-            className="cursor-pointer hover:shadow-lg transition-shadow border-2 hover:border-blue-500"
+            className="cursor-pointer hover:shadow-xl transition-all border-2 hover:border-blue-500 active:scale-[0.98]"
             onClick={() => setScreen('book_list')}
             data-testid="card-get-book"
           >
-            <CardContent className="p-12 flex flex-col items-center text-center">
-              <BookOpen className="w-24 h-24 text-blue-500 mb-6" />
-              <h3 className="text-3xl font-bold mb-3">Забрать книгу</h3>
-              <p className="text-xl text-slate-500">
+            <CardContent className="p-10 flex flex-col items-center text-center">
+              <BookOpen className="w-20 h-20 text-blue-500 mb-4" />
+              <h3 className="text-2xl font-bold mb-2">Забрать книгу</h3>
+              <p className="text-lg text-slate-500">
                 {session?.reservedBooks.length 
-                  ? `У вас ${session.reservedBooks.length} забронированных книг`
-                  : 'Нет забронированных книг'}
+                  ? `${session.reservedBooks.length} забронировано`
+                  : 'Нет бронирований'}
               </p>
               {session && session.reservedBooks.length > 0 && (
-                <Badge className="mt-4 text-lg px-4 py-2" variant="default">
+                <Badge className="mt-3 text-base px-4 py-1" variant="default">
                   {session.reservedBooks.length} книг
                 </Badge>
               )}
@@ -294,14 +393,14 @@ export default function KioskPage() {
           </Card>
 
           <Card 
-            className="cursor-pointer hover:shadow-lg transition-shadow border-2 hover:border-green-500"
+            className="cursor-pointer hover:shadow-xl transition-all border-2 hover:border-green-500 active:scale-[0.98]"
             onClick={() => setScreen('return_book')}
             data-testid="card-return-book"
           >
-            <CardContent className="p-12 flex flex-col items-center text-center">
-              <Undo2 className="w-24 h-24 text-green-500 mb-6" />
-              <h3 className="text-3xl font-bold mb-3">Вернуть книгу</h3>
-              <p className="text-xl text-slate-500">
+            <CardContent className="p-10 flex flex-col items-center text-center">
+              <Undo2 className="w-20 h-20 text-green-500 mb-4" />
+              <h3 className="text-2xl font-bold mb-2">Вернуть книгу</h3>
+              <p className="text-lg text-slate-500">
                 Положите книгу в окно приёма
               </p>
             </CardContent>
@@ -312,45 +411,75 @@ export default function KioskPage() {
   );
 
   const renderLibrarianMenu = () => (
-    <div className="min-h-screen bg-slate-100 pt-32 p-8" data-testid="screen-librarian-menu">
+    <div className="min-h-screen bg-slate-100 pt-28 p-6" data-testid="screen-librarian-menu">
       <div className="max-w-5xl mx-auto">
-        <h2 className="text-4xl font-bold text-slate-800 mb-8 text-center">Меню библиотекаря</h2>
+        <h2 className="text-3xl font-bold text-slate-800 mb-6 text-center">Меню библиотекаря</h2>
         
         {session && session.needsExtraction > 0 && (
-          <div className="mb-8 p-6 bg-yellow-100 border-2 border-yellow-400 rounded-xl flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <AlertTriangle className="w-8 h-8 text-yellow-600" />
-              <span className="text-xl font-medium">
+          <div className="mb-6 p-5 bg-yellow-100 border-2 border-yellow-400 rounded-xl flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <AlertTriangle className="w-7 h-7 text-yellow-600" />
+              <span className="text-lg font-medium">
                 {session.needsExtraction} книг требуют изъятия
               </span>
             </div>
-            <Button size="lg" variant="default" data-testid="button-extract-all">
+            <Button 
+              size="lg" 
+              variant="default" 
+              className="h-14 px-6 text-lg"
+              onClick={() => {
+                setProgressMessage('Изъятие всех книг...');
+                setProgressValue(20);
+                setScreen('progress');
+                extractAllMutation.mutate();
+              }}
+              disabled={extractAllMutation.isPending}
+              data-testid="button-extract-all"
+            >
+              {extractAllMutation.isPending ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : null}
               Изъять все
             </Button>
           </div>
         )}
         
-        <div className="grid grid-cols-3 gap-6">
-          <Card className="cursor-pointer hover:shadow-lg transition-shadow" data-testid="card-load-books">
-            <CardContent className="p-8 flex flex-col items-center text-center">
-              <Package className="w-16 h-16 text-blue-500 mb-4" />
-              <h3 className="text-2xl font-bold mb-2">Загрузить книги</h3>
-              <p className="text-slate-500">Добавить книги в шкаф</p>
+        <div className="grid grid-cols-3 gap-5">
+          <Card 
+            className="cursor-pointer hover:shadow-xl transition-all active:scale-[0.98]"
+            onClick={() => setScreen('load_books')}
+            data-testid="card-load-books"
+          >
+            <CardContent className="p-7 flex flex-col items-center text-center">
+              <Plus className="w-14 h-14 text-blue-500 mb-3" />
+              <h3 className="text-xl font-bold mb-1">Загрузить книги</h3>
+              <p className="text-slate-500">Добавить в шкаф</p>
             </CardContent>
           </Card>
 
-          <Card className="cursor-pointer hover:shadow-lg transition-shadow" data-testid="card-unload-books">
-            <CardContent className="p-8 flex flex-col items-center text-center">
-              <Undo2 className="w-16 h-16 text-orange-500 mb-4" />
-              <h3 className="text-2xl font-bold mb-2">Изъять книги</h3>
-              <p className="text-slate-500">Забрать возвращённые книги</p>
+          <Card 
+            className="cursor-pointer hover:shadow-xl transition-all active:scale-[0.98]"
+            onClick={() => setScreen('extract_books')}
+            data-testid="card-unload-books"
+          >
+            <CardContent className="p-7 flex flex-col items-center text-center">
+              <Package className="w-14 h-14 text-orange-500 mb-3" />
+              <h3 className="text-xl font-bold mb-1">Изъять книги</h3>
+              <p className="text-slate-500">Забрать возвращённые</p>
             </CardContent>
           </Card>
 
-          <Card className="cursor-pointer hover:shadow-lg transition-shadow" data-testid="card-inventory">
-            <CardContent className="p-8 flex flex-col items-center text-center">
-              <BookOpen className="w-16 h-16 text-green-500 mb-4" />
-              <h3 className="text-2xl font-bold mb-2">Инвентаризация</h3>
+          <Card 
+            className="cursor-pointer hover:shadow-xl transition-all active:scale-[0.98]"
+            onClick={() => {
+              setProgressMessage('Инвентаризация...');
+              setProgressValue(10);
+              setScreen('progress');
+              inventoryMutation.mutate();
+            }}
+            data-testid="card-inventory"
+          >
+            <CardContent className="p-7 flex flex-col items-center text-center">
+              <Search className="w-14 h-14 text-green-500 mb-3" />
+              <h3 className="text-xl font-bold mb-1">Инвентаризация</h3>
               <p className="text-slate-500">Проверить содержимое</p>
             </CardContent>
           </Card>
@@ -359,75 +488,78 @@ export default function KioskPage() {
     </div>
   );
 
-  const renderAdminMenu = () => {
-    const [, setLocation] = useLocation();
-    
-    return (
-      <div className="min-h-screen bg-slate-100 pt-32 p-8" data-testid="screen-admin-menu">
-        <div className="max-w-5xl mx-auto">
-          <h2 className="text-4xl font-bold text-slate-800 mb-8 text-center">Администрирование</h2>
-          
-          <div className="grid grid-cols-3 gap-6">
-            <Card 
-              className="cursor-pointer hover:shadow-lg transition-shadow"
-              onClick={() => setLocation('/admin')}
-              data-testid="card-admin-dashboard"
-            >
-              <CardContent className="p-8 flex flex-col items-center text-center">
-                <Settings className="w-16 h-16 text-slate-600 mb-4" />
-                <h3 className="text-2xl font-bold mb-2">Dashboard</h3>
-                <p className="text-slate-500">Статистика и мониторинг</p>
-              </CardContent>
-            </Card>
+  const renderAdminMenu = () => (
+    <div className="min-h-screen bg-slate-100 pt-28 p-6" data-testid="screen-admin-menu">
+      <div className="max-w-5xl mx-auto">
+        <h2 className="text-3xl font-bold text-slate-800 mb-6 text-center">Администрирование</h2>
+        
+        <div className="grid grid-cols-3 gap-5">
+          <Card 
+            className="cursor-pointer hover:shadow-xl transition-all active:scale-[0.98]"
+            onClick={() => setLocation('/admin')}
+            data-testid="card-admin-dashboard"
+          >
+            <CardContent className="p-7 flex flex-col items-center text-center">
+              <Settings className="w-14 h-14 text-slate-600 mb-3" />
+              <h3 className="text-xl font-bold mb-1">Dashboard</h3>
+              <p className="text-slate-500">Статистика и мониторинг</p>
+            </CardContent>
+          </Card>
 
-            <Card className="cursor-pointer hover:shadow-lg transition-shadow" data-testid="card-diagnostics">
-              <CardContent className="p-8 flex flex-col items-center text-center">
-                <Shield className="w-16 h-16 text-blue-500 mb-4" />
-                <h3 className="text-2xl font-bold mb-2">Диагностика</h3>
-                <p className="text-slate-500">Проверка оборудования</p>
-              </CardContent>
-            </Card>
+          <Card 
+            className="cursor-pointer hover:shadow-xl transition-all active:scale-[0.98]"
+            onClick={() => setScreen('librarian_menu')}
+            data-testid="card-librarian-functions"
+          >
+            <CardContent className="p-7 flex flex-col items-center text-center">
+              <BookOpen className="w-14 h-14 text-blue-500 mb-3" />
+              <h3 className="text-xl font-bold mb-1">Функции библиотекаря</h3>
+              <p className="text-slate-500">Загрузка, изъятие</p>
+            </CardContent>
+          </Card>
 
-            <Card className="cursor-pointer hover:shadow-lg transition-shadow" data-testid="card-calibration">
-              <CardContent className="p-8 flex flex-col items-center text-center">
-                <Settings className="w-16 h-16 text-purple-500 mb-4" />
-                <h3 className="text-2xl font-bold mb-2">Калибровка</h3>
-                <p className="text-slate-500">Настройка механики</p>
-              </CardContent>
-            </Card>
-          </div>
+          <Card 
+            className="cursor-pointer hover:shadow-xl transition-all active:scale-[0.98]"
+            data-testid="card-diagnostics"
+          >
+            <CardContent className="p-7 flex flex-col items-center text-center">
+              <Shield className="w-14 h-14 text-purple-500 mb-3" />
+              <h3 className="text-xl font-bold mb-1">Диагностика</h3>
+              <p className="text-slate-500">Проверка оборудования</p>
+            </CardContent>
+          </Card>
         </div>
       </div>
-    );
-  };
+    </div>
+  );
 
   const renderBookList = () => (
-    <div className="min-h-screen bg-slate-100 pt-32 p-8" data-testid="screen-book-list">
+    <div className="min-h-screen bg-slate-100 pt-28 p-6" data-testid="screen-book-list">
       <div className="max-w-4xl mx-auto">
-        <h2 className="text-4xl font-bold text-slate-800 mb-8">Ваши забронированные книги</h2>
+        <h2 className="text-3xl font-bold text-slate-800 mb-6">Ваши забронированные книги</h2>
         
         {session?.reservedBooks.length === 0 ? (
-          <Card className="p-12 text-center">
+          <Card className="p-10 text-center">
             <BookOpen className="w-16 h-16 text-slate-300 mx-auto mb-4" />
-            <p className="text-2xl text-slate-500">Нет забронированных книг</p>
+            <p className="text-xl text-slate-500">Нет забронированных книг</p>
           </Card>
         ) : (
           <div className="space-y-4">
             {session?.reservedBooks.map((book) => (
-              <Card key={book.id} className="p-6" data-testid={`card-book-${book.rfid}`}>
+              <Card key={book.id} className="p-5" data-testid={`card-book-${book.rfid}`}>
                 <div className="flex items-center justify-between">
                   <div>
-                    <h3 className="text-2xl font-bold">{book.title}</h3>
-                    <p className="text-lg text-slate-500">{book.author}</p>
-                    {book.isbn && <p className="text-sm text-slate-400">ISBN: {book.isbn}</p>}
+                    <h3 className="text-xl font-bold">{book.title}</h3>
+                    <p className="text-base text-slate-500">{book.author}</p>
                   </div>
                   <Button 
                     size="lg" 
-                    className="h-16 px-8 text-xl"
+                    className="h-14 px-8 text-lg"
                     onClick={() => handleIssueBook(book)}
+                    disabled={issueMutation.isPending}
                     data-testid={`button-issue-${book.rfid}`}
                   >
-                    <BookOpen className="w-6 h-6 mr-2" />
+                    <BookOpen className="w-5 h-5 mr-2" />
                     Забрать
                   </Button>
                 </div>
@@ -439,19 +571,142 @@ export default function KioskPage() {
     </div>
   );
 
-  const renderReturnBook = () => (
-    <div className="min-h-screen bg-slate-100 pt-32 p-8" data-testid="screen-return-book">
-      <div className="max-w-3xl mx-auto text-center">
-        <h2 className="text-4xl font-bold text-slate-800 mb-8">Возврат книги</h2>
+  const renderLoadBooks = () => (
+    <div className="min-h-screen bg-slate-100 pt-28 p-6" data-testid="screen-load-books">
+      <div className="max-w-2xl mx-auto">
+        <h2 className="text-3xl font-bold text-slate-800 mb-6">Загрузка книги в шкаф</h2>
         
-        <Card className="p-12">
-          <Package className="w-24 h-24 text-green-500 mx-auto mb-6" />
-          <p className="text-2xl mb-4">Положите книгу в окно приёма</p>
-          <p className="text-lg text-slate-500 mb-8">
+        <Card className="p-6">
+          <div className="space-y-5">
+            <div>
+              <Label htmlFor="rfid" className="text-lg">RFID-метка книги *</Label>
+              <Input 
+                id="rfid"
+                value={newBookRfid}
+                onChange={(e) => setNewBookRfid(e.target.value)}
+                placeholder="Сканируйте или введите RFID"
+                className="h-14 text-lg mt-2"
+                data-testid="input-book-rfid"
+              />
+            </div>
+            
+            <div>
+              <Label htmlFor="title" className="text-lg">Название книги *</Label>
+              <Input 
+                id="title"
+                value={newBookTitle}
+                onChange={(e) => setNewBookTitle(e.target.value)}
+                placeholder="Введите название"
+                className="h-14 text-lg mt-2"
+                data-testid="input-book-title"
+              />
+            </div>
+            
+            <div>
+              <Label htmlFor="author" className="text-lg">Автор</Label>
+              <Input 
+                id="author"
+                value={newBookAuthor}
+                onChange={(e) => setNewBookAuthor(e.target.value)}
+                placeholder="Введите автора (необязательно)"
+                className="h-14 text-lg mt-2"
+                data-testid="input-book-author"
+              />
+            </div>
+            
+            <Button 
+              size="lg" 
+              className="w-full h-16 text-xl"
+              onClick={handleLoadBook}
+              disabled={loadBookMutation.isPending || !newBookRfid || !newBookTitle}
+              data-testid="button-load-book"
+            >
+              {loadBookMutation.isPending ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : <Plus className="w-5 h-5 mr-2" />}
+              Загрузить книгу
+            </Button>
+          </div>
+        </Card>
+      </div>
+    </div>
+  );
+
+  const renderExtractBooks = () => {
+    const { data: cells = [] } = useQuery<Cell[]>({
+      queryKey: ['/api/cells'],
+    });
+    
+    const extractionCells = cells.filter(c => c.needsExtraction);
+
+    return (
+      <div className="min-h-screen bg-slate-100 pt-28 p-6" data-testid="screen-extract-books">
+        <div className="max-w-4xl mx-auto">
+          <h2 className="text-3xl font-bold text-slate-800 mb-6">Изъятие книг</h2>
+          
+          {extractionCells.length === 0 ? (
+            <Card className="p-10 text-center">
+              <CheckCircle2 className="w-16 h-16 text-green-500 mx-auto mb-4" />
+              <p className="text-xl text-slate-500">Нет книг для изъятия</p>
+            </Card>
+          ) : (
+            <>
+              <div className="mb-4 flex justify-between items-center">
+                <span className="text-lg">{extractionCells.length} книг для изъятия</span>
+                <Button
+                  onClick={() => {
+                    setProgressMessage('Изъятие всех книг...');
+                    setScreen('progress');
+                    extractAllMutation.mutate();
+                  }}
+                  disabled={extractAllMutation.isPending}
+                  data-testid="button-extract-all-page"
+                >
+                  Изъять все
+                </Button>
+              </div>
+              
+              <ScrollArea className="h-96">
+                <div className="space-y-3">
+                  {extractionCells.map((cell) => (
+                    <Card key={cell.id} className="p-4" data-testid={`card-cell-${cell.id}`}>
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <h3 className="text-lg font-bold">{cell.bookTitle}</h3>
+                          <p className="text-sm text-slate-500">
+                            Ячейка: {cell.row} X{cell.x} Y{cell.y}
+                          </p>
+                        </div>
+                        <Button 
+                          onClick={() => extractMutation.mutate(cell.id)}
+                          disabled={extractMutation.isPending}
+                          data-testid={`button-extract-${cell.id}`}
+                        >
+                          Изъять
+                        </Button>
+                      </div>
+                    </Card>
+                  ))}
+                </div>
+              </ScrollArea>
+            </>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  const renderReturnBook = () => (
+    <div className="min-h-screen bg-slate-100 pt-28 p-6" data-testid="screen-return-book">
+      <div className="max-w-3xl mx-auto text-center">
+        <h2 className="text-3xl font-bold text-slate-800 mb-6">Возврат книги</h2>
+        
+        <Card className="p-10">
+          <Package className="w-20 h-20 text-green-500 mx-auto mb-4" />
+          <p className="text-xl mb-3">Положите книгу в окно приёма</p>
+          <p className="text-base text-slate-500 mb-6">
             Книга будет автоматически распознана по RFID-метке
           </p>
           
-          <div className="h-2 bg-slate-200 rounded-full overflow-hidden mb-8">
+          <div className="h-2 bg-slate-200 rounded-full overflow-hidden mb-6">
             <div className="h-full bg-green-500 animate-pulse" style={{ width: '30%' }} />
           </div>
           
@@ -462,25 +717,25 @@ export default function KioskPage() {
   );
 
   const renderProgress = () => (
-    <div className="min-h-screen bg-slate-100 pt-32 flex items-center justify-center" data-testid="screen-progress">
-      <Card className="p-12 w-full max-w-2xl text-center">
-        <Loader2 className="w-24 h-24 text-blue-500 mx-auto mb-6 animate-spin" />
-        <h2 className="text-3xl font-bold mb-4">{progressMessage}</h2>
-        <Progress value={progressValue} className="h-4 mb-4" />
+    <div className="min-h-screen bg-slate-100 pt-28 flex items-center justify-center" data-testid="screen-progress">
+      <Card className="p-10 w-full max-w-xl text-center">
+        <Loader2 className="w-20 h-20 text-blue-500 mx-auto mb-4 animate-spin" />
+        <h2 className="text-2xl font-bold mb-3">{progressMessage}</h2>
+        <Progress value={progressValue} className="h-3 mb-3" />
         <p className="text-slate-500">Пожалуйста, подождите...</p>
       </Card>
     </div>
   );
 
   const renderSuccess = () => (
-    <div className="min-h-screen bg-green-50 pt-32 flex items-center justify-center" data-testid="screen-success">
-      <Card className="p-12 w-full max-w-2xl text-center border-green-500 border-2">
-        <CheckCircle2 className="w-32 h-32 text-green-500 mx-auto mb-6" />
-        <h2 className="text-4xl font-bold text-green-700 mb-4">Успешно!</h2>
-        <p className="text-2xl text-slate-600 mb-8">{successMessage}</p>
+    <div className="min-h-screen bg-green-50 pt-28 flex items-center justify-center" data-testid="screen-success">
+      <Card className="p-10 w-full max-w-xl text-center border-green-500 border-2">
+        <CheckCircle2 className="w-24 h-24 text-green-500 mx-auto mb-4" />
+        <h2 className="text-3xl font-bold text-green-700 mb-3">Успешно!</h2>
+        <p className="text-xl text-slate-600 mb-6">{successMessage}</p>
         <Button 
           size="lg" 
-          className="h-16 px-12 text-xl"
+          className="h-14 px-10 text-lg"
           onClick={handleBack}
           data-testid="button-continue"
         >
@@ -491,15 +746,15 @@ export default function KioskPage() {
   );
 
   const renderError = () => (
-    <div className="min-h-screen bg-red-50 pt-32 flex items-center justify-center" data-testid="screen-error">
-      <Card className="p-12 w-full max-w-2xl text-center border-red-500 border-2">
-        <XCircle className="w-32 h-32 text-red-500 mx-auto mb-6" />
-        <h2 className="text-4xl font-bold text-red-700 mb-4">Ошибка</h2>
-        <p className="text-2xl text-slate-600 mb-8">{errorMessage}</p>
+    <div className="min-h-screen bg-red-50 pt-28 flex items-center justify-center" data-testid="screen-error">
+      <Card className="p-10 w-full max-w-xl text-center border-red-500 border-2">
+        <XCircle className="w-24 h-24 text-red-500 mx-auto mb-4" />
+        <h2 className="text-3xl font-bold text-red-700 mb-3">Ошибка</h2>
+        <p className="text-xl text-slate-600 mb-6">{errorMessage}</p>
         <Button 
           size="lg" 
           variant="destructive"
-          className="h-16 px-12 text-xl"
+          className="h-14 px-10 text-lg"
           onClick={handleBack}
           data-testid="button-back-error"
         >
@@ -511,10 +766,10 @@ export default function KioskPage() {
 
   const renderMaintenance = () => (
     <div className="min-h-screen bg-yellow-50 flex items-center justify-center" data-testid="screen-maintenance">
-      <Card className="p-12 w-full max-w-2xl text-center border-yellow-500 border-2">
-        <AlertTriangle className="w-32 h-32 text-yellow-500 mx-auto mb-6" />
-        <h2 className="text-4xl font-bold text-yellow-700 mb-4">Шкаф временно недоступен</h2>
-        <p className="text-2xl text-slate-600">Ведутся технические работы</p>
+      <Card className="p-10 w-full max-w-xl text-center border-yellow-500 border-2">
+        <AlertTriangle className="w-24 h-24 text-yellow-500 mx-auto mb-4" />
+        <h2 className="text-3xl font-bold text-yellow-700 mb-3">Шкаф временно недоступен</h2>
+        <p className="text-xl text-slate-600">Ведутся технические работы</p>
       </Card>
     </div>
   );
@@ -528,6 +783,8 @@ export default function KioskPage() {
       {screen === 'admin_menu' && renderAdminMenu()}
       {screen === 'book_list' && renderBookList()}
       {screen === 'return_book' && renderReturnBook()}
+      {screen === 'load_books' && renderLoadBooks()}
+      {screen === 'extract_books' && renderExtractBooks()}
       {screen === 'progress' && renderProgress()}
       {screen === 'success' && renderSuccess()}
       {screen === 'error' && renderError()}

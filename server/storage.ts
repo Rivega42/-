@@ -14,11 +14,13 @@ import { randomUUID } from "crypto";
 export interface IStorage {
   // Cells
   getCell(id: number): Promise<Cell | undefined>;
+  getCellById(id: number): Promise<Cell | undefined>;
   getCellByPosition(row: string, x: number, y: number): Promise<Cell | undefined>;
   getAllCells(): Promise<Cell[]>;
   updateCell(id: number, data: Partial<Cell>): Promise<Cell | undefined>;
   getAvailableCells(row?: string): Promise<Cell[]>;
   getCellsNeedingExtraction(): Promise<Cell[]>;
+  getEmptyCell(): Promise<Cell | undefined>;
 
   // Users
   getUser(id: string): Promise<User | undefined>;
@@ -32,6 +34,7 @@ export interface IStorage {
   getBookByRfid(rfid: string): Promise<Book | undefined>;
   getAllBooks(): Promise<Book[]>;
   createBook(book: InsertBook): Promise<Book>;
+  addBook(book: InsertBook): Promise<Book>;
   updateBook(id: string, data: Partial<Book>): Promise<Book | undefined>;
   getReservedBooks(userRfid: string): Promise<Book[]>;
   getBooksInCabinet(): Promise<Book[]>;
@@ -40,6 +43,7 @@ export interface IStorage {
   getOperation(id: string): Promise<Operation | undefined>;
   getAllOperations(limit?: number): Promise<Operation[]>;
   createOperation(op: InsertOperation): Promise<Operation>;
+  addOperation(op: InsertOperation): Promise<Operation>;
   getOperationsToday(): Promise<Operation[]>;
 
   // Settings
@@ -55,6 +59,7 @@ export interface IStorage {
   
   // System Logs
   addSystemLog(log: InsertSystemLog): Promise<SystemLog>;
+  addLog(level: string, message: string, component?: string): Promise<SystemLog>;
   getAllSystemLogs(limit?: number): Promise<SystemLog[]>;
   clearSystemLogs(): Promise<void>;
   
@@ -237,6 +242,14 @@ export class MemStorage implements IStorage {
     return Array.from(this.cells.values()).filter(c => c.needsExtraction);
   }
 
+  async getCellById(id: number): Promise<Cell | undefined> {
+    return this.cells.get(id);
+  }
+
+  async getEmptyCell(): Promise<Cell | undefined> {
+    return Array.from(this.cells.values()).find(c => c.status === 'empty');
+  }
+
   // === USERS ===
   async getUser(id: string): Promise<User | undefined> {
     return this.users.get(id);
@@ -277,6 +290,10 @@ export class MemStorage implements IStorage {
   }
 
   async createBook(book: InsertBook): Promise<Book> {
+    return this.createBookSync(book);
+  }
+
+  async addBook(book: InsertBook): Promise<Book> {
     return this.createBookSync(book);
   }
 
@@ -329,6 +346,10 @@ export class MemStorage implements IStorage {
     };
     this.operations.set(newOp.id, newOp);
     return newOp;
+  }
+
+  async addOperation(op: InsertOperation): Promise<Operation> {
+    return this.createOperation(op);
   }
 
   async getOperationsToday(): Promise<Operation[]> {
@@ -410,6 +431,10 @@ export class MemStorage implements IStorage {
   // === SYSTEM LOGS ===
   async addSystemLog(log: InsertSystemLog): Promise<SystemLog> {
     return this.addSystemLogSync(log);
+  }
+
+  async addLog(level: string, message: string, component?: string): Promise<SystemLog> {
+    return this.addSystemLogSync({ level, message, component });
   }
 
   async getAllSystemLogs(limit?: number): Promise<SystemLog[]> {

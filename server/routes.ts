@@ -3,6 +3,8 @@ import { createServer, type Server } from "http";
 import { WebSocketServer, WebSocket } from "ws";
 import { storage } from "./storage";
 import { rfidService } from "./services/rfidService";
+import { cabinetService } from "./services/cabinetService";
+import { irbisService } from "./services/irbisService";
 import type { 
   WebSocketMessage, TagReadEvent, RfidReaderStatus, SystemLog,
   SystemStatus, User, Cell, Book
@@ -55,6 +57,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   rfidService.on('status', (status: RfidReaderStatus) => {
     broadcast({ type: 'reader_status', data: status });
+  });
+
+  // Cabinet Service event handlers
+  cabinetService.on('state_changed', (state) => {
+    broadcast({ type: 'cabinet_state', data: state });
+  });
+
+  cabinetService.on('operation_started', (data) => {
+    broadcast({ type: 'operation_started', data });
+  });
+
+  cabinetService.on('operation_completed', (data) => {
+    broadcast({ type: 'operation_completed', data });
+  });
+
+  cabinetService.on('operation_failed', (data) => {
+    broadcast({ type: 'operation_failed', data });
+  });
+
+  cabinetService.on('cell_opened', (position) => {
+    broadcast({ type: 'cell_opened', data: position });
+  });
+
+  cabinetService.on('book_detected', (rfid) => {
+    broadcast({ type: 'book_detected', data: { rfid } });
   });
 
   // WebSocket connection handler
@@ -460,6 +487,116 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({ success: true, book, cell: targetCell });
     } catch (error) {
       res.status(500).json({ error: error instanceof Error ? error.message : 'Return failed' });
+    }
+  });
+
+  // ==================== ОПЕРАЦИИ БИБЛИОТЕКАРЯ ====================
+
+  app.post("/api/reserve", async (req, res) => {
+    try {
+      const { bookRfid, userRfid } = req.body;
+      if (!bookRfid || !userRfid) {
+        return res.status(400).json({ error: 'bookRfid and userRfid are required' });
+      }
+
+      const result = await cabinetService.reserveBook(bookRfid, userRfid);
+      if (!result.success) {
+        return res.status(400).json({ error: result.message });
+      }
+
+      res.json(result);
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : 'Reserve failed' });
+    }
+  });
+
+  app.post("/api/cancel-reservation", async (req, res) => {
+    try {
+      const { bookRfid, userRfid } = req.body;
+      if (!bookRfid || !userRfid) {
+        return res.status(400).json({ error: 'bookRfid and userRfid are required' });
+      }
+
+      const result = await cabinetService.cancelReservation(bookRfid, userRfid);
+      if (!result.success) {
+        return res.status(400).json({ error: result.message });
+      }
+
+      res.json(result);
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : 'Cancel reservation failed' });
+    }
+  });
+
+  app.post("/api/load-book", async (req, res) => {
+    try {
+      const { bookRfid, title, author } = req.body;
+      if (!bookRfid || !title) {
+        return res.status(400).json({ error: 'bookRfid and title are required' });
+      }
+
+      const result = await cabinetService.loadBook(bookRfid, title, author);
+      if (!result.success) {
+        return res.status(400).json({ error: result.message });
+      }
+
+      res.json(result);
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : 'Load book failed' });
+    }
+  });
+
+  app.post("/api/extract", async (req, res) => {
+    try {
+      const { cellId } = req.body;
+      if (cellId === undefined) {
+        return res.status(400).json({ error: 'cellId is required' });
+      }
+
+      const result = await cabinetService.extractBook(cellId);
+      if (!result.success) {
+        return res.status(400).json({ error: result.message });
+      }
+
+      res.json(result);
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : 'Extract failed' });
+    }
+  });
+
+  app.post("/api/extract-all", async (req, res) => {
+    try {
+      const result = await cabinetService.extractAllReturned();
+      res.json(result);
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : 'Extract all failed' });
+    }
+  });
+
+  app.post("/api/run-inventory", async (req, res) => {
+    try {
+      const result = await cabinetService.runInventory();
+      res.json(result);
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : 'Inventory failed' });
+    }
+  });
+
+  app.get("/api/cabinet/state", (req, res) => {
+    try {
+      const state = cabinetService.getState();
+      res.json(state);
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : 'Get state failed' });
+    }
+  });
+
+  app.post("/api/cabinet/clear-error", (req, res) => {
+    try {
+      cabinetService.clearError();
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : 'Clear error failed' });
     }
   });
 
