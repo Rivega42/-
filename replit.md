@@ -1,7 +1,7 @@
-# RFID Reader Dashboard
+# RFID Library Self-Service Kiosk
 
 ## Overview
-This project is a local Windows web application designed to integrate and manage multiple RFID readers of different types in real-time via a web interface accessible on localhost. It supports three primary RFID reader types: RRU9816 (UHF), IQRFID-5102 (UHF), and ACR1281U-C (NFC/HF). The application provides monitoring and control functionalities, offering a unified dashboard for various RFID technologies. The business vision is to provide a versatile and robust solution for RFID tag tracking and data acquisition in various industrial and commercial settings.
+Веб-приложение для автоматического шкафа книговыдачи в библиотеке. Система управляет 126-ячеечным шкафом (2 ряда × 3 колонки × 21 позиция) с тремя ролями пользователей (читатели, библиотекари, администраторы), интеграцией RFID для книг и читательских билетов, mock-интеграцией с IRBIS64 и полной симуляцией механических операций шкафа.
 
 ## User Preferences
 Preferred communication style: Simple, everyday language (Русский).
@@ -9,41 +9,67 @@ Preferred communication style: Simple, everyday language (Русский).
 ## System Architecture
 
 ### UI/UX Decisions
-The frontend is built using React 18, TypeScript, Vite, and TailwindCSS, providing a modern and responsive user interface. shadcn/ui and Radix UI are used for UI components, ensuring a consistent and accessible design. TanStack Query handles data caching and synchronization, while Wouter manages routing. Real-time updates are facilitated via WebSockets.
+- Touch-оптимизированный интерфейс для экрана 1920×1080
+- Кнопки высотой 56-80px для удобства касания
+- shadcn/ui + TailwindCSS для компонентов
+- Анимации active:scale для обратной связи
 
 ### Technical Implementations
-The system is divided into a frontend (React), a backend (Express.js on Node.js), and a C# sidecar for specific reader integrations.
 
-**Reader Integration Details:**
--   **RRU9816 (UHF RFID Reader):** Communicates via a C# Sidecar using WebSockets, which in turn interacts with a `RRU9816.dll` through a COM Port. It supports both buffer and direct inventory modes.
--   **IQRFID-5102 (UHF RFID Reader):** Connects directly to the Node.js backend via a Serial Port. Communication uses a custom binary protocol with CRC-16 for data integrity, employing a polling mechanism.
--   **ACR1281U-C (NFC/HF Reader):** Integrates with the Node.js backend through the PC/SC API, leveraging the Windows Smart Card Service for USB-connected readers. This reader operates on an event-driven model, automatically detecting cards.
+**Роли пользователей:**
+- **Читатель**: забрать забронированные книги, вернуть книги
+- **Библиотекарь**: загрузка книг, изъятие возвращённых, инвентаризация
+- **Администратор**: все функции + настройки, диагностика
 
-**Core Features:**
--   Real-time display of read tags and system logs on the dashboard.
--   API endpoints for managing reader connections, status, tags, and logs.
--   In-memory storage for session-based tag and log data (no persistent database).
+**Cabinet Service (server/services/cabinetService.ts):**
+- Симуляция механики: перемещение лотка, открытие/закрытие ячеек
+- Настраиваемые таймауты: move (1500ms), tray (800ms), cell (1000ms)
+- События: state_changed, operation_started/completed/failed, book_detected
+- Полная цепочка операций: reserve → issue → return → extract
 
-**Interaction Patterns:**
-| Parameter | RRU9816 | IQRFID-5102 | ACR1281U-C |
-|-----------|---------|-------------|------------|
-| **Transport** | WebSocket + DLL | Serial Port | PC/SC API |
-| **Data Format** | JSON | Binary + CRC | PC/SC Events |
-| **Operating Modes** | Buffer + Direct | Direct polling | Event-driven |
-
-### System Design Choices
-The backend utilizes Express.js with TypeScript, providing a robust API layer and managing WebSocket connections for real-time data push to the frontend. An `RfidService` centralizes reader management, abstracting the communication differences between various reader types using an `EventEmitter` for tag events. The C# sidecar for RRU9816 acts as a bridge, translating WebSocket commands from Node.js into DLL calls for hardware interaction.
+**API Endpoints:**
+| Endpoint | Описание |
+|----------|----------|
+| `POST /api/auth/card` | Авторизация по читательскому билету |
+| `POST /api/reserve` | Бронирование книги |
+| `POST /api/issue` | Выдача книги читателю |
+| `POST /api/return` | Возврат книги |
+| `POST /api/load-book` | Загрузка книги в шкаф (библиотекарь) |
+| `POST /api/extract` | Изъятие книги из ячейки |
+| `POST /api/extract-all` | Изъятие всех возвращённых книг |
+| `POST /api/run-inventory` | Запуск инвентаризации |
 
 ### Project Structure
--   `/client`: Frontend React application.
--   `/server`: Node.js Express backend.
--   `/rru9816-sidecar`: C# bridge application for RRU9816.
--   `/shared`: Shared TypeScript types and schemas.
+```
+/client                   # React frontend
+  /src/pages
+    - kiosk.tsx          # Киоск самообслуживания
+    - admin.tsx          # Административная панель
+/server
+  /services
+    - cabinetService.ts  # Логика механики шкафа
+    - irbisService.ts    # Mock интеграция IRBIS64
+    - rfidService.ts     # RFID читатели
+  - routes.ts            # API endpoints
+  - storage.ts           # In-memory хранилище
+/shared
+  - schema.ts            # Типы и схемы данных
+```
+
+### WebSocket Events
+- `cabinet_state` - текущее состояние шкафа
+- `operation_started/completed/failed` - жизненный цикл операций
+- `book_detected` - обнаружение книги на лотке
+- `tag_read`, `card_read` - события RFID
+
+## Design Decisions
+- **In-memory storage** вместо SQLite для разработки
+- **Mock IRBIS64** для тестирования без реальной библиотечной системы
+- **Симуляция механики** с реалистичными задержками для демонстрации
+- **WebSocket** для real-time обновлений состояния
 
 ## External Dependencies
-
--   **RRU9816 Reader:** Requires .NET 6.0 Runtime for the C# Sidecar and the proprietary `RRU9816.dll` for hardware interaction.
--   **IQRFID-5102 Reader:** Uses the `serialport` Node.js library for direct serial communication.
--   **ACR1281U-C Reader:** Relies on the Windows Smart Card Service (PC/SC API) for communication.
--   **Frontend:** React 18, TypeScript, Vite, TailwindCSS, shadcn/ui, Radix UI, TanStack Query, Wouter, WebSocket API.
--   **Backend:** Node.js, Express.js, TypeScript, `ws` (WebSocket library), `serialport` (for IQRFID-5102), `EventEmitter`.
+- React 18, TypeScript, Vite, TailwindCSS
+- shadcn/ui, Radix UI, TanStack Query
+- Express.js, WebSocket (ws)
+- lucide-react для иконок
