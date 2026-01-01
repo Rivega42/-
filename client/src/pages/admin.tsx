@@ -9,6 +9,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import CalibrationWizard from "@/components/CalibrationWizard";
 import type { Cell, Book, User, Operation, SystemLog, Statistics, SystemStatus } from "@shared/schema";
 import {
   LayoutDashboard,
@@ -25,6 +26,7 @@ import {
   Wifi,
   WifiOff,
   Database,
+  Crosshair,
 } from "lucide-react";
 
 export default function AdminPage() {
@@ -425,7 +427,7 @@ export default function AdminPage() {
 
       <div className="max-w-7xl mx-auto p-6">
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="grid grid-cols-6 w-full max-w-3xl mb-6">
+          <TabsList className="grid grid-cols-7 w-full max-w-4xl mb-6">
             <TabsTrigger value="dashboard" className="flex items-center gap-2" data-testid="tab-dashboard">
               <LayoutDashboard className="w-4 h-4" />
               Dashboard
@@ -446,6 +448,10 @@ export default function AdminPage() {
               <History className="w-4 h-4" />
               Операции
             </TabsTrigger>
+            <TabsTrigger value="calibration" className="flex items-center gap-2" data-testid="tab-calibration">
+              <Crosshair className="w-4 h-4" />
+              Калибровка
+            </TabsTrigger>
             <TabsTrigger value="settings" className="flex items-center gap-2" data-testid="tab-settings">
               <Settings className="w-4 h-4" />
               Настройки
@@ -457,6 +463,9 @@ export default function AdminPage() {
           <TabsContent value="books">{renderBooks()}</TabsContent>
           <TabsContent value="users">{renderUsers()}</TabsContent>
           <TabsContent value="operations">{renderOperations()}</TabsContent>
+          <TabsContent value="calibration">
+            <CalibrationWizard />
+          </TabsContent>
           <TabsContent value="settings">
             <Card>
               <CardHeader>
