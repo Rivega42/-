@@ -7,7 +7,7 @@ import { cabinetService } from "./services/cabinetService";
 import { irbisService } from "./services/irbisService";
 import type { 
   WebSocketMessage, TagReadEvent, RfidReaderStatus, SystemLog,
-  SystemStatus, User, Cell, Book
+  SystemStatus, User, Cell, Book, CalibrationData
 } from "@shared/schema";
 import { ReaderType } from "@shared/schema";
 
@@ -775,6 +775,199 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({ success: true, message: 'Card simulated successfully' });
     } catch (error) {
       res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to simulate card' });
+    }
+  });
+
+  // ==================== ТЕСТИРОВАНИЕ МЕХАНИКИ ====================
+
+  app.post("/api/test/motor", async (req, res) => {
+    try {
+      const { command, axis, steps, speed } = req.body;
+      
+      await storage.addSystemLog({
+        level: 'INFO',
+        message: `Тест мотора: ${command} ${axis || ''} steps=${steps || 0} speed=${speed || 1000}`,
+        component: 'MOTOR',
+      });
+
+      // Симуляция движения мотора
+      if (command === 'move') {
+        const currentPos = systemStatus.position;
+        if (axis === 'x') {
+          systemStatus.position = { ...currentPos, x: currentPos.x + (steps || 0) };
+        } else if (axis === 'y') {
+          systemStatus.position = { ...currentPos, y: currentPos.y + (steps || 0) };
+        }
+        broadcast({ type: 'position', data: systemStatus.position });
+      } else if (command === 'home') {
+        systemStatus.position = { x: 0, y: 0, tray: 0 };
+        broadcast({ type: 'position', data: systemStatus.position });
+      }
+
+      res.json({ success: true, position: systemStatus.position });
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : 'Motor test failed' });
+    }
+  });
+
+  app.post("/api/test/tray", async (req, res) => {
+    try {
+      const { command } = req.body;
+      
+      await storage.addSystemLog({
+        level: 'INFO',
+        message: `Тест лотка: ${command}`,
+        component: 'MOTOR',
+      });
+
+      // Симуляция движения лотка
+      if (command === 'extend') {
+        systemStatus.position = { ...systemStatus.position, tray: 1000 };
+      } else if (command === 'retract') {
+        systemStatus.position = { ...systemStatus.position, tray: 0 };
+      }
+      broadcast({ type: 'position', data: systemStatus.position });
+
+      res.json({ success: true, position: systemStatus.position });
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : 'Tray test failed' });
+    }
+  });
+
+  app.post("/api/test/servo", async (req, res) => {
+    try {
+      const { servo, command } = req.body;
+      
+      await storage.addSystemLog({
+        level: 'INFO',
+        message: `Тест сервопривода: ${servo} ${command}`,
+        component: 'SERVO',
+      });
+
+      // Симуляция сервопривода
+      if (servo === 'lock1' || servo === 'front') {
+        systemStatus.locks.front = command === 'open';
+      } else if (servo === 'lock2' || servo === 'back') {
+        systemStatus.locks.back = command === 'open';
+      }
+      broadcast({ type: 'status', data: systemStatus });
+
+      res.json({ success: true, locks: systemStatus.locks });
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : 'Servo test failed' });
+    }
+  });
+
+  app.post("/api/test/shutter", async (req, res) => {
+    try {
+      const { shutter, command } = req.body;
+      
+      await storage.addSystemLog({
+        level: 'INFO',
+        message: `Тест шторки: ${shutter} ${command}`,
+        component: 'SHUTTER',
+      });
+
+      // Симуляция шторки
+      if (shutter === 'inner') {
+        systemStatus.shutters.inner = command === 'open';
+      } else if (shutter === 'outer') {
+        systemStatus.shutters.outer = command === 'open';
+      }
+      broadcast({ type: 'status', data: systemStatus });
+
+      res.json({ success: true, shutters: systemStatus.shutters });
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : 'Shutter test failed' });
+    }
+  });
+
+  app.post("/api/test/sensors", async (req, res) => {
+    try {
+      await storage.addSystemLog({
+        level: 'INFO',
+        message: 'Проверка всех датчиков',
+        component: 'SENSOR',
+      });
+
+      // Симуляция чтения датчиков
+      res.json({ 
+        success: true, 
+        sensors: systemStatus.sensors,
+        message: 'Все датчики проверены'
+      });
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : 'Sensor test failed' });
+    }
+  });
+
+  // ==================== КАЛИБРОВКА ====================
+
+  const defaultCalibration: CalibrationData = {
+    kinematics: { x_plus_dir_a: 1, x_plus_dir_b: -1, y_plus_dir_a: 1, y_plus_dir_b: 1 },
+    positions: { 
+      x: [0, 5000, 10000], // 3 колонки
+      y: [0, 500, 1000, 1500, 2000, 2500, 3000, 3500, 4000, 4500, 5000, 5500, 6000, 6500, 7000, 7500, 8000, 8500, 9000, 9500, 10000] // 21 ряд
+    },
+    window: { x: 5000, y: 5000 },
+    grab_front: { extend1: 1000, retract: 500, extend2: 1500 },
+    grab_back: { extend1: 1000, retract: 500, extend2: 1500 },
+    speeds: { xy: 3000, tray: 2000, acceleration: 5000 },
+    servos: { lock1_open: 90, lock1_close: 0, lock2_open: 90, lock2_close: 0 }
+  };
+
+  let calibrationData: CalibrationData = { ...defaultCalibration };
+
+  app.get("/api/calibration", async (req, res) => {
+    try {
+      res.json(calibrationData);
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to get calibration' });
+    }
+  });
+
+  app.post("/api/calibration", async (req, res) => {
+    try {
+      const newData = req.body;
+      
+      // Мержим новые данные с существующими
+      calibrationData = {
+        ...calibrationData,
+        ...newData,
+        kinematics: { ...calibrationData.kinematics, ...newData.kinematics },
+        positions: { ...calibrationData.positions, ...newData.positions },
+        window: { ...calibrationData.window, ...newData.window },
+        grab_front: { ...calibrationData.grab_front, ...newData.grab_front },
+        grab_back: { ...calibrationData.grab_back, ...newData.grab_back },
+        speeds: { ...calibrationData.speeds, ...newData.speeds },
+        servos: { ...calibrationData.servos, ...newData.servos },
+      };
+
+      await storage.addSystemLog({
+        level: 'SUCCESS',
+        message: 'Калибровочные данные обновлены',
+        component: 'CALIBRATION',
+      });
+
+      res.json({ success: true, calibration: calibrationData });
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to update calibration' });
+    }
+  });
+
+  app.post("/api/calibration/reset", async (req, res) => {
+    try {
+      calibrationData = { ...defaultCalibration };
+      
+      await storage.addSystemLog({
+        level: 'WARNING',
+        message: 'Калибровка сброшена к значениям по умолчанию',
+        component: 'CALIBRATION',
+      });
+
+      res.json({ success: true, calibration: calibrationData });
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to reset calibration' });
     }
   });
 
