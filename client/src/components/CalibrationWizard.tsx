@@ -687,12 +687,14 @@ export default function CalibrationWizard() {
                       key={row}
                       variant="outline"
                       size="sm"
-                      className={`w-full h-8 ${blocked ? 'bg-red-100 border-red-300 hover:bg-red-200' : 'bg-green-50 hover:bg-green-100'}`}
+                      className={`w-full h-10 font-medium ${blocked 
+                        ? 'bg-red-200 border-red-400 hover:bg-red-300 text-red-800' 
+                        : 'bg-green-200 border-green-400 hover:bg-green-300 text-green-800'}`}
                       onClick={() => toggleBlockedCell(blockedSide, col, row)}
                       data-testid={`btn-cell-${blockedSide}-${col}-${row}`}
                     >
-                      <span className="text-xs">
-                        {blocked ? <Lock className="w-3 h-3 inline mr-1" /> : <Unlock className="w-3 h-3 inline mr-1" />}
+                      <span className="text-sm flex items-center">
+                        {blocked ? <Lock className="w-4 h-4 mr-1" /> : <Unlock className="w-4 h-4 mr-1" />}
                         Y{row}
                       </span>
                     </Button>
