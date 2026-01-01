@@ -61,7 +61,7 @@ class Motors:
         finally:
             self.is_moving = False
     
-    async def move_tray(self, direction: str, steps: int = None) -> bool:
+    async def move_tray(self, direction: str, steps: int = 3000) -> bool:
         if self.is_moving:
             return False
         
@@ -74,7 +74,6 @@ class Motors:
                 timeout = TIMEOUTS['tray_extend'] if is_extend else TIMEOUTS['tray_retract']
                 await asyncio.sleep(timeout / 1000)
             else:
-                steps = steps or 3000
                 delay_us = int(1_000_000 / MOTOR_SPEEDS['tray'])
                 for _ in range(steps):
                     gpio.write(GPIO_PINS['TRAY_STEP'], 1)
@@ -88,10 +87,10 @@ class Motors:
         finally:
             self.is_moving = False
     
-    async def extend_tray(self, steps: int = None) -> bool:
+    async def extend_tray(self, steps: int = 3000) -> bool:
         return await self.move_tray('extend', steps)
     
-    async def retract_tray(self, steps: int = None) -> bool:
+    async def retract_tray(self, steps: int = 3000) -> bool:
         return await self.move_tray('retract', steps)
     
     def get_position(self) -> dict:
@@ -102,6 +101,46 @@ class Motors:
         gpio.write(GPIO_PINS['MOTOR_A_STEP'], 0)
         gpio.write(GPIO_PINS['MOTOR_B_STEP'], 0)
         gpio.write(GPIO_PINS['TRAY_STEP'], 0)
+    
+    async def home(self) -> bool:
+        """Движение в домашнюю позицию (0, 0)"""
+        result = await self.move_xy(0, 0)
+        if result:
+            await self.retract_tray()
+        return result
+    
+    async def test_motor(self, motor: str, direction: int, steps: int = 500) -> bool:
+        """Тест отдельного мотора для калибровки кинематики"""
+        if self.is_moving:
+            return False
+        
+        self.is_moving = True
+        try:
+            motor = motor.upper()
+            if motor == 'A':
+                step_pin = GPIO_PINS['MOTOR_A_STEP']
+                dir_pin = GPIO_PINS['MOTOR_A_DIR']
+            elif motor == 'B':
+                step_pin = GPIO_PINS['MOTOR_B_STEP']
+                dir_pin = GPIO_PINS['MOTOR_B_DIR']
+            else:
+                return False
+            
+            gpio.write(dir_pin, 1 if direction > 0 else 0)
+            
+            if self.mock_mode:
+                await asyncio.sleep(0.5)
+            else:
+                delay_us = int(1_000_000 / MOTOR_SPEEDS['xy'])
+                for _ in range(abs(steps)):
+                    gpio.write(step_pin, 1)
+                    await asyncio.sleep(delay_us / 1_000_000)
+                    gpio.write(step_pin, 0)
+                    await asyncio.sleep(delay_us / 1_000_000)
+            
+            return True
+        finally:
+            self.is_moving = False
 
 
 motors = Motors()

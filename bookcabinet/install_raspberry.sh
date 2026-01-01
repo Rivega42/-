@@ -211,9 +211,11 @@ systemctl daemon-reload
 systemctl enable bookcabinet
 systemctl enable bookcabinet-backup.timer
 
-# Создать дефолтный calibration.json
+# Создать дефолтный calibration.json v2.1
 cat > $INSTALL_DIR/calibration.json << 'EOF'
 {
+  "version": "2.1",
+  "timestamp": "",
   "kinematics": {
     "x_plus_dir_a": 1,
     "x_plus_dir_b": -1,
@@ -221,8 +223,8 @@ cat > $INSTALL_DIR/calibration.json << 'EOF'
     "y_plus_dir_b": 1
   },
   "positions": {
-    "x": [0, 4500, 9000],
-    "y": [0, 450, 900, 1350, 1800, 2250, 2700, 3150, 3600, 4050, 4500, 4950, 5400, 5850, 6300, 6750, 7200, 7650, 8100, 8550, 9000]
+    "x": [1891, 6392, 10894],
+    "y": [0, 423, 846, 1269, 1692, 2115, 2538, 2961, 3384, 3807, 4230, 4653, 5076, 5499, 5922, 6345, 6768, 7191, 7614, 8037, 8460]
   },
   "speeds": {
     "xy": 4000,
@@ -236,14 +238,28 @@ cat > $INSTALL_DIR/calibration.json << 'EOF'
     "lock2_close": 95
   },
   "grab_front": {
-    "extend1": 1500,
+    "extend1": 1900,
     "retract": 1500,
-    "extend2": 3000
+    "extend2": 3100
   },
   "grab_back": {
-    "extend1": 1500,
+    "extend1": 1900,
     "retract": 1500,
-    "extend2": 3000
+    "extend2": 3100
+  },
+  "tray": {
+    "extend_steps": 5000,
+    "retract_steps": 5000
+  },
+  "blocked_cells": {
+    "front": {
+      "1": [7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18]
+    },
+    "back": {
+      "0": [19, 20],
+      "1": [19, 20],
+      "2": [20]
+    }
   }
 }
 EOF

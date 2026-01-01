@@ -79,10 +79,45 @@ Preferred communication style: Simple, everyday language (Русский).
 | `POST /api/extract-all` | Изъятие всех возвращённых книг |
 | `POST /api/run-inventory` | Запуск инвентаризации |
 | `GET/POST /api/calibration` | Калибровка позиций |
+| `GET /api/calibration/export` | Экспорт калибровки JSON |
+| `POST /api/calibration/import` | Импорт калибровки JSON |
+| `POST /api/calibration/reset` | Сброс калибровки |
+| `GET/POST /api/blocked-cells` | Управление заблокированными ячейками |
 | `GET /api/diagnostics` | Диагностика оборудования |
 | `GET/POST /api/settings` | Настройки системы |
 | `POST /api/backup/create` | Создание бэкапа |
 | `POST /api/test/*` | Тестирование компонентов |
+| `POST /api/quick-test` | Быстрый тест ячейки |
+
+### Calibration Wizard API
+
+| Endpoint | Описание |
+|----------|----------|
+| `POST /api/wizard/kinematics/start` | Запуск wizard кинематики CoreXY |
+| `POST /api/wizard/kinematics/step` | Шаг теста кинематики (action: run/response) |
+| `POST /api/wizard/points10/start` | Запуск калибровки 10 точек |
+| `POST /api/wizard/points10/save` | Сохранение текущей точки |
+| `POST /api/wizard/move` | Движение каретки (direction: WASD, stepIndex) |
+| `POST /api/wizard/grab/start` | Запуск калибровки захвата (side: front/back) |
+| `POST /api/wizard/grab/adjust` | Регулировка параметра (param, delta) |
+| `POST /api/wizard/grab/test` | Тест параметра захвата |
+
+### CalibrationData v2.1 Structure
+
+```json
+{
+  "version": "2.1",
+  "timestamp": "ISO datetime",
+  "kinematics": { "x_plus_dir_a": ±1, "x_plus_dir_b": ±1, "y_plus_dir_a": ±1, "y_plus_dir_b": ±1 },
+  "positions": { "x": [3 cols], "y": [21 rows] },
+  "grab_front": { "extend1": ms, "retract": ms, "extend2": ms },
+  "grab_back": { "extend1": ms, "retract": ms, "extend2": ms },
+  "speeds": { "xy": steps/s, "tray": steps/s, "acceleration": steps/s² },
+  "servos": { "lock1_open": deg, "lock1_close": deg, "lock2_open": deg, "lock2_close": deg },
+  "tray": { "extend_steps": int, "retract_steps": int },
+  "blocked_cells": { "front": { "col": [rows] }, "back": { "col": [rows] } }
+}
+```
 
 ### Path Planning
 
