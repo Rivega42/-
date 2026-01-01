@@ -102,24 +102,26 @@ export type Setting = typeof settings.$inferSelect;
 
 // ==================== КАЛИБРОВОЧНЫЕ ДАННЫЕ ====================
 export interface CalibrationData {
+  version: string;
+  timestamp?: string;
   kinematics: {
-    x_plus_dir_a: number;
-    x_plus_dir_b: number;
-    y_plus_dir_a: number;
-    y_plus_dir_b: number;
+    x_plus_dir_a: number;  // +1 или -1
+    x_plus_dir_b: number;  // +1 или -1
+    y_plus_dir_a: number;  // +1 или -1
+    y_plus_dir_b: number;  // +1 или -1
   };
   positions: {
-    x: number[];
-    y: number[];
+    x: number[];  // 3 колонки: X[0], X[1], X[2]
+    y: number[];  // 21 ряд: Y[0]...Y[20]
   };
   window: {
-    x: number;
-    y: number;
+    x: number;  // 0-2
+    y: number;  // 0-20
   };
   grab_front: {
-    extend1: number;
-    retract: number;
-    extend2: number;
+    extend1: number;  // первое выдвижение до 1-го пропила
+    retract: number;  // втягивание
+    extend2: number;  // второе выдвижение до 2-го пропила
   };
   grab_back: {
     extend1: number;
@@ -127,9 +129,9 @@ export interface CalibrationData {
     extend2: number;
   };
   speeds: {
-    xy: number;
-    tray: number;
-    acceleration: number;
+    xy: number;          // шаг/сек для XY
+    tray: number;        // шаг/сек для лотка
+    acceleration: number; // шаг/сек²
   };
   servos: {
     lock1_open: number;
@@ -137,6 +139,31 @@ export interface CalibrationData {
     lock2_open: number;
     lock2_close: number;
   };
+  tray?: {
+    maxFront: number;  // максимальное выдвижение вперёд
+    maxBack: number;   // максимальное выдвижение назад
+  };
+  blocked_cells: {
+    front: { [column: string]: number[] };  // колонка -> массив заблокированных Y
+    back: { [column: string]: number[] };
+  };
+}
+
+// Состояние калибровки для wizard
+export interface CalibrationWizardState {
+  mode: 'kinematics' | 'points10' | 'allY' | 'grab' | 'tray' | 'blocked' | null;
+  step: number;
+  totalSteps: number;
+  currentPosition: { x: number; y: number };
+  stepSize: number;  // 1-9 -> 1,2,5,10,15,20,30,50,100 мм
+  data: Partial<CalibrationData>;
+}
+
+// Результат шага калибровки кинематики
+export interface KinematicsTestStep {
+  motor: 'A' | 'B';
+  direction: 'CW' | 'CCW';  // по часовой / против часовой
+  response?: 'W' | 'A' | 'S' | 'D';  // куда поехала каретка
 }
 
 // ==================== СИСТЕМА СОСТОЯНИЕ ====================
