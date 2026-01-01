@@ -1,9 +1,7 @@
 import { useState, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { BookOpen, Package, RotateCcw, ZoomIn, ZoomOut } from 'lucide-react';
+import { BookOpen, Package } from 'lucide-react';
 
 interface Cell {
   id: number;
@@ -27,8 +25,6 @@ const POSITIONS = 21;
 
 export function CabinetViewer({ cells, onCellClick }: CabinetViewerProps) {
   const [selectedCell, setSelectedCell] = useState<Cell | null>(null);
-  const [zoom, setZoom] = useState(1);
-  const [rotation, setRotation] = useState(0);
 
   const cellMap = useMemo(() => {
     const map = new Map<string, Cell>();
@@ -45,11 +41,11 @@ export function CabinetViewer({ cells, onCellClick }: CabinetViewerProps) {
 
   const getCellColor = (status: string) => {
     switch (status) {
-      case 'empty': return '#e2e8f0';
-      case 'occupied': return '#22c55e';
-      case 'reserved': return '#3b82f6';
-      case 'needs_extraction': return '#f59e0b';
-      default: return '#94a3b8';
+      case 'empty': return 'bg-slate-200 dark:bg-slate-700';
+      case 'occupied': return 'bg-green-500';
+      case 'reserved': return 'bg-blue-500';
+      case 'needs_extraction': return 'bg-amber-500';
+      default: return 'bg-slate-400';
     }
   };
 
@@ -63,179 +59,99 @@ export function CabinetViewer({ cells, onCellClick }: CabinetViewerProps) {
     }
   };
 
-  const handleCellClick = (cell: Cell) => {
-    setSelectedCell(cell);
-    onCellClick?.(cell);
+  const handleCellClick = (cell: Cell | undefined, row: string, col: number, pos: number) => {
+    const cellData = cell || {
+      id: row === 'A' ? col * POSITIONS + pos : COLUMNS * POSITIONS + col * POSITIONS + pos,
+      row,
+      x: col,
+      y: pos,
+      status: 'empty' as const
+    };
+    setSelectedCell(cellData);
+    onCellClick?.(cellData);
   };
 
-  const cellWidth = 35;
-  const cellHeight = 25;
-  const cellGap = 4;
-  const rowGap = 60;
-  const columnGap = 20;
-
-  const svgWidth = (COLUMNS * (POSITIONS * (cellWidth + cellGap) + columnGap)) + 100;
-  const svgHeight = (ROWS.length * (cellHeight + rowGap)) + 100;
+  const stats = useMemo(() => {
+    let empty = 0, occupied = 0, reserved = 0, needsExtraction = 0;
+    cells.forEach(cell => {
+      switch (cell.status) {
+        case 'empty': empty++; break;
+        case 'occupied': occupied++; break;
+        case 'reserved': reserved++; break;
+        case 'needs_extraction': needsExtraction++; break;
+      }
+    });
+    const total = ROWS.length * COLUMNS * POSITIONS;
+    return { empty: total - occupied - reserved - needsExtraction, occupied, reserved, needsExtraction, total };
+  }, [cells]);
 
   return (
     <div className="flex gap-4 h-full" data-testid="cabinet-viewer">
-      <div className="flex-1 bg-slate-900 rounded-xl p-4 overflow-hidden">
+      <div className="flex-1 bg-slate-900 rounded-xl p-4 overflow-auto">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-white text-lg font-bold">3D-модель шкафа</h3>
-          <div className="flex gap-2">
-            <Button 
-              variant="outline" 
-              size="sm" 
-              onClick={() => setZoom(z => Math.min(z + 0.2, 2))}
-              data-testid="button-zoom-in"
-            >
-              <ZoomIn className="w-4 h-4" />
-            </Button>
-            <Button 
-              variant="outline" 
-              size="sm" 
-              onClick={() => setZoom(z => Math.max(z - 0.2, 0.5))}
-              data-testid="button-zoom-out"
-            >
-              <ZoomOut className="w-4 h-4" />
-            </Button>
-            <Button 
-              variant="outline" 
-              size="sm" 
-              onClick={() => setRotation(r => (r + 15) % 360)}
-              data-testid="button-rotate"
-            >
-              <RotateCcw className="w-4 h-4" />
-            </Button>
+          <h3 className="text-white text-lg font-bold">Схема шкафа (126 ячеек)</h3>
+          <div className="flex gap-3 text-xs">
+            <div className="flex items-center gap-1">
+              <div className="w-3 h-3 rounded bg-slate-400"></div>
+              <span className="text-slate-400">Пусто ({stats.empty})</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <div className="w-3 h-3 rounded bg-green-500"></div>
+              <span className="text-slate-400">Занято ({stats.occupied})</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <div className="w-3 h-3 rounded bg-blue-500"></div>
+              <span className="text-slate-400">Забронировано ({stats.reserved})</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <div className="w-3 h-3 rounded bg-amber-500"></div>
+              <span className="text-slate-400">Изъятие ({stats.needsExtraction})</span>
+            </div>
           </div>
         </div>
 
-        <div 
-          className="overflow-auto"
-          style={{ 
-            transform: `scale(${zoom}) perspective(1000px) rotateX(${rotation > 180 ? rotation - 360 : rotation}deg)`,
-            transformOrigin: 'center center',
-            transition: 'transform 0.3s ease'
-          }}
-        >
-          <svg 
-            width={svgWidth} 
-            height={svgHeight} 
-            viewBox={`0 0 ${svgWidth} ${svgHeight}`}
-            className="mx-auto"
-          >
-            <defs>
-              <linearGradient id="cabinetGrad" x1="0%" y1="0%" x2="0%" y2="100%">
-                <stop offset="0%" stopColor="#475569" />
-                <stop offset="100%" stopColor="#1e293b" />
-              </linearGradient>
-              <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
-                <feDropShadow dx="2" dy="2" stdDeviation="3" floodOpacity="0.3"/>
-              </filter>
-            </defs>
+        <div className="space-y-6">
+          {Array.from({ length: COLUMNS }).map((_, colIndex) => (
+            <div key={colIndex} className="bg-slate-800 rounded-lg p-4">
+              <h4 className="text-slate-300 text-sm font-medium mb-3">Колонка {colIndex + 1}</h4>
+              
+              <div className="space-y-3">
+                {ROWS.map(row => (
+                  <div key={`${colIndex}-${row}`} className="flex items-center gap-2">
+                    <span className="text-slate-400 text-xs w-8 shrink-0">Ряд {row}</span>
+                    <div className="flex flex-wrap gap-1">
+                      {Array.from({ length: POSITIONS }).map((_, posIndex) => {
+                        const cell = getCell(row, colIndex, posIndex);
+                        const isSelected = selectedCell && 
+                          selectedCell.row === row && 
+                          selectedCell.x === colIndex && 
+                          selectedCell.y === posIndex;
 
-            <rect 
-              x="20" 
-              y="20" 
-              width={svgWidth - 40} 
-              height={svgHeight - 40} 
-              rx="8" 
-              fill="url(#cabinetGrad)"
-              filter="url(#shadow)"
-            />
-
-            {ROWS.map((row, rowIndex) => (
-              <g key={row}>
-                <text 
-                  x="40" 
-                  y={60 + rowIndex * (cellHeight + rowGap) + cellHeight / 2}
-                  fill="white"
-                  fontSize="16"
-                  fontWeight="bold"
-                  dominantBaseline="middle"
-                >
-                  Ряд {row}
-                </text>
-
-                {Array.from({ length: COLUMNS }).map((_, colIndex) => (
-                  <g key={`${row}-${colIndex}`}>
-                    <text
-                      x={80 + colIndex * (POSITIONS * (cellWidth + cellGap) + columnGap) + (POSITIONS * (cellWidth + cellGap)) / 2}
-                      y={45 + rowIndex * (cellHeight + rowGap)}
-                      fill="#94a3b8"
-                      fontSize="12"
-                      textAnchor="middle"
-                    >
-                      Колонка {colIndex + 1}
-                    </text>
-
-                    {Array.from({ length: POSITIONS }).map((_, posIndex) => {
-                      const cell = getCell(row, colIndex, posIndex);
-                      const x = 80 + colIndex * (POSITIONS * (cellWidth + cellGap) + columnGap) + posIndex * (cellWidth + cellGap);
-                      const y = 55 + rowIndex * (cellHeight + rowGap);
-                      const isSelected = selectedCell?.id === cell?.id;
-
-                      return (
-                        <g 
-                          key={`${row}-${colIndex}-${posIndex}`}
-                          onClick={() => cell && handleCellClick(cell)}
-                          style={{ cursor: 'pointer' }}
-                          data-testid={`cell-${row}-${colIndex}-${posIndex}`}
-                        >
-                          <rect
-                            x={x}
-                            y={y}
-                            width={cellWidth}
-                            height={cellHeight}
-                            rx="3"
-                            fill={cell ? getCellColor(cell.status) : '#64748b'}
-                            stroke={isSelected ? '#ffffff' : '#334155'}
-                            strokeWidth={isSelected ? 2 : 1}
-                            className="transition-all duration-200 hover:opacity-80"
-                          />
-                          {cell?.status === 'occupied' && (
-                            <rect
-                              x={x + 8}
-                              y={y + 5}
-                              width={cellWidth - 16}
-                              height={cellHeight - 10}
-                              rx="2"
-                              fill="#166534"
-                            />
-                          )}
-                          <text
-                            x={x + cellWidth / 2}
-                            y={y + cellHeight / 2}
-                            fill={cell?.status === 'empty' ? '#64748b' : '#ffffff'}
-                            fontSize="8"
-                            textAnchor="middle"
-                            dominantBaseline="middle"
+                        return (
+                          <button
+                            key={`${row}-${colIndex}-${posIndex}`}
+                            onClick={() => handleCellClick(cell, row, colIndex, posIndex)}
+                            className={`
+                              w-7 h-7 rounded text-xs font-medium transition-all
+                              ${cell ? getCellColor(cell.status) : 'bg-slate-600'}
+                              ${isSelected ? 'ring-2 ring-white ring-offset-2 ring-offset-slate-800' : ''}
+                              ${cell?.status === 'occupied' || cell?.status === 'reserved' || cell?.status === 'needs_extraction' 
+                                ? 'text-white' 
+                                : 'text-slate-500'}
+                              hover:opacity-80 active:scale-95
+                            `}
+                            data-testid={`cell-${row}-${colIndex}-${posIndex}`}
                           >
                             {posIndex + 1}
-                          </text>
-                        </g>
-                      );
-                    })}
-                  </g>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
                 ))}
-              </g>
-            ))}
-
-            <g transform={`translate(${svgWidth - 180}, 50)`}>
-              <text x="0" y="0" fill="white" fontSize="12" fontWeight="bold">Легенда:</text>
-              {[
-                { color: '#e2e8f0', label: 'Пустая' },
-                { color: '#22c55e', label: 'Занята' },
-                { color: '#3b82f6', label: 'Забронирована' },
-                { color: '#f59e0b', label: 'Требует изъятия' }
-              ].map((item, i) => (
-                <g key={item.label} transform={`translate(0, ${20 + i * 22})`}>
-                  <rect x="0" y="0" width="16" height="16" rx="2" fill={item.color} />
-                  <text x="22" y="12" fill="#94a3b8" fontSize="10">{item.label}</text>
-                </g>
-              ))}
-            </g>
-          </svg>
+              </div>
+            </div>
+          ))}
         </div>
       </div>
 
@@ -252,9 +168,17 @@ export function CabinetViewer({ cells, onCellClick }: CabinetViewerProps) {
               <div className="bg-slate-100 rounded-lg p-4">
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-sm text-slate-500">Позиция</span>
-                  <Badge variant="outline">
-                    {selectedCell.row}-{selectedCell.x + 1}-{selectedCell.y + 1}
+                  <Badge variant="outline" className="font-mono">
+                    {selectedCell.row}{selectedCell.x + 1}-{String(selectedCell.y + 1).padStart(2, '0')}
                   </Badge>
+                </div>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm text-slate-500">Колонка</span>
+                  <span className="font-medium">{selectedCell.x + 1}</span>
+                </div>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm text-slate-500">Ряд</span>
+                  <span className="font-medium">{selectedCell.row}</span>
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-slate-500">Статус</span>
@@ -299,6 +223,13 @@ export function CabinetViewer({ cells, onCellClick }: CabinetViewerProps) {
                   </div>
                 </div>
               )}
+
+              {!selectedCell.bookRfid && selectedCell.status === 'empty' && (
+                <div className="text-center py-4 text-slate-400 border rounded-lg">
+                  <BookOpen className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                  <p className="text-sm">Ячейка пуста</p>
+                </div>
+              )}
             </div>
           ) : (
             <div className="text-center py-8 text-slate-400">
@@ -310,42 +241,4 @@ export function CabinetViewer({ cells, onCellClick }: CabinetViewerProps) {
       </Card>
     </div>
   );
-}
-
-export function CabinetViewerDemo() {
-  const demoCells: Cell[] = [];
-  let id = 0;
-  
-  for (const row of ROWS) {
-    for (let x = 0; x < COLUMNS; x++) {
-      for (let y = 0; y < POSITIONS; y++) {
-        const random = Math.random();
-        let status: Cell['status'] = 'empty';
-        let bookRfid: string | undefined;
-        let bookTitle: string | undefined;
-        let bookAuthor: string | undefined;
-
-        if (random > 0.6) {
-          status = 'occupied';
-          bookRfid = `RFID${String(id).padStart(6, '0')}`;
-          bookTitle = `Книга №${id}`;
-          bookAuthor = `Автор ${id}`;
-        } else if (random > 0.5) {
-          status = 'reserved';
-          bookRfid = `RFID${String(id).padStart(6, '0')}`;
-          bookTitle = `Забронированная книга №${id}`;
-          bookAuthor = `Автор ${id}`;
-        } else if (random > 0.45) {
-          status = 'needs_extraction';
-          bookRfid = `RFID${String(id).padStart(6, '0')}`;
-          bookTitle = `Возвращённая книга №${id}`;
-          bookAuthor = `Автор ${id}`;
-        }
-
-        demoCells.push({ id: id++, row, x, y, status, bookRfid, bookTitle, bookAuthor });
-      }
-    }
-  }
-
-  return <CabinetViewer cells={demoCells} />;
 }
