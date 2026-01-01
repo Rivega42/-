@@ -73,15 +73,28 @@ Preferred communication style: Simple, everyday language (Русский).
 
 PathPlanner класс реализует:
 - Расчёт координат для 126 ячеек (positions_x, positions_y)
-- Построение пути с промежуточными точками
-- Избегание диагональных движений
-- Оценка времени перемещения
+- L-образный путь (сначала Y, потом X) для избежания диагональных движений
+- Промежуточные точки каждые 2000 шагов для больших перемещений
+- MAX_DIAGONAL_STEP = 500 для определения прямых перемещений
+- estimate_time() с учётом пути и параллельного движения CoreXY осей
 
 ### Безопасность датчиков
 
-- `_safe_move_xy()` - проверка концевиков при движении
-- `_safe_tray_extend/retract()` - проверка датчиков лотка
-- Аварийная остановка при срабатывании endstops
+**_safe_move_xy()** - проверка всех 4 концевиков:
+- Перед движением: x_begin/x_end, y_begin/y_end в зависимости от направления
+- После движения: проверка неожиданных срабатываний
+- motors.stop() + _emit_error() при любой ошибке
+
+**_safe_tray_extend/retract()** - проверка датчиков лотка:
+- Проверка начального состояния
+- 300мс стабилизация после движения
+- Верификация конечной позиции
+
+### Role-Based Access Control
+
+API endpoints защищены role_check():
+- `librarian/admin`: load-book, extract, extract-all, run-inventory
+- `admin only`: calibration/*, settings, test/*, backup/*
 
 ### Telegram уведомления
 
