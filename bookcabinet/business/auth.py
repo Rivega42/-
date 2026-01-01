@@ -1,5 +1,5 @@
 """
-Авторизация по карте
+Сервис аутентификации с проверкой ролей
 """
 from typing import Optional, Dict, List
 from ..database import db
@@ -10,28 +10,70 @@ from ..config import IRBIS
 class AuthService:
     def __init__(self):
         self.irbis = mock_irbis if IRBIS['mock'] else None
+        self.current_user: Optional[Dict] = None
+        
+        # Тестовые пользователи
+        self.test_users = {
+            'CARD001': {'rfid': 'CARD001', 'id': '001', 'name': 'Иванов Иван', 'role': 'reader', 'ticket': 'LIB-001'},
+            'CARD002': {'rfid': 'CARD002', 'id': '002', 'name': 'Петрова Мария', 'role': 'reader', 'ticket': 'LIB-002'},
+            'ADMIN01': {'rfid': 'ADMIN01', 'id': 'L01', 'name': 'Сидорова Анна', 'role': 'librarian', 'ticket': 'STAFF-001'},
+            'ADMIN99': {'rfid': 'ADMIN99', 'id': 'A99', 'name': 'Администратор', 'role': 'admin', 'ticket': 'ADMIN-001'},
+        }
     
     async def authenticate(self, card_rfid: str) -> Dict:
+        """Аутентификация пользователя по RFID карте"""
+        
+        # Сначала проверяем тестовых пользователей
+        if card_rfid in self.test_users:
+            user = self.test_users[card_rfid]
+            self.current_user = user
+            
+            reservations = []
+            needs_extraction = 0
+            
+            if user['role'] == 'reader':
+                reservations = db.get_user_reservations(card_rfid)
+                if self.irbis:
+                    irbis_reservations = await self.irbis.get_reservations(card_rfid)
+                    for res in irbis_reservations:
+                        if not any(r.get('rfid') == res.get('rfid') for r in reservations):
+                            reservations.append(res)
+            else:
+                cells_extraction = db.get_cells_needing_extraction()
+                needs_extraction = len(cells_extraction) if cells_extraction else 0
+            
+            db.add_system_log('INFO', f"Авторизация: {user['name']} ({user['role']})", 'auth')
+            
+            return {
+                'success': True,
+                'user': user,
+                'reservedBooks': reservations,
+                'needsExtraction': needs_extraction,
+            }
+        
+        # Проверяем в локальной базе
         user = db.get_user_by_rfid(card_rfid)
         
-        if not user:
-            if self.irbis:
-                irbis_user = await self.irbis.get_user(card_rfid)
-                if irbis_user:
-                    user = irbis_user
+        if not user and self.irbis:
+            irbis_user = await self.irbis.get_user(card_rfid)
+            if irbis_user:
+                user = irbis_user
         
         if not user:
+            db.add_system_log('WARNING', f'Неизвестная карта: {card_rfid}', 'auth')
             return {
                 'success': False,
                 'error': 'Пользователь не найден',
             }
+        
+        self.current_user = user
         
         reservations = db.get_user_reservations(card_rfid)
         
         if self.irbis:
             irbis_reservations = await self.irbis.get_reservations(card_rfid)
             for res in irbis_reservations:
-                if not any(r['rfid'] == res['rfid'] for r in reservations):
+                if not any(r.get('rfid') == res.get('rfid') for r in reservations):
                     reservations.append(res)
         
         cells_extraction = db.get_cells_needing_extraction()
@@ -42,14 +84,53 @@ class AuthService:
             'success': True,
             'user': user,
             'reservedBooks': reservations,
-            'needsExtraction': len(cells_extraction),
+            'needsExtraction': len(cells_extraction) if cells_extraction else 0,
         }
     
+    def get_current_user(self) -> Optional[Dict]:
+        """Получить текущего пользователя"""
+        return self.current_user
+    
+    def logout(self):
+        """Выход пользователя"""
+        if self.current_user:
+            db.add_system_log('INFO', f'Выход: {self.current_user["name"]}', 'auth')
+        self.current_user = None
+    
+    def has_role(self, *roles: str) -> bool:
+        """Проверить, имеет ли текущий пользователь одну из ролей"""
+        if not self.current_user:
+            return False
+        return self.current_user.get('role') in roles
+    
+    def is_reader(self) -> bool:
+        return self.has_role('reader')
+    
+    def is_librarian(self) -> bool:
+        return self.has_role('librarian', 'admin')
+    
+    def is_admin(self) -> bool:
+        return self.has_role('admin')
+    
+    def require_role(self, *roles: str) -> Dict:
+        """Проверить роль и вернуть ошибку если нет доступа"""
+        if not self.current_user:
+            return {'success': False, 'error': 'Требуется авторизация', 'code': 401}
+        
+        if not self.has_role(*roles):
+            return {'success': False, 'error': 'Недостаточно прав', 'code': 403}
+        
+        return {'success': True}
+    
     def check_permission(self, user: Dict, action: str) -> bool:
+        """Проверить права на действие"""
         from ..database.models import ROLE_PERMISSIONS, UserRole
-        role = UserRole(user.get('role', 'reader'))
-        permissions = ROLE_PERMISSIONS.get(role, [])
-        return action in permissions
+        try:
+            role = UserRole(user.get('role', 'reader'))
+            permissions = ROLE_PERMISSIONS.get(role, [])
+            return action in permissions
+        except:
+            return False
 
 
 auth_service = AuthService()

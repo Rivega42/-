@@ -1,8 +1,8 @@
 """
-Алгоритмы управления: INIT, TAKE, GIVE
+Алгоритмы управления: INIT, TAKE, GIVE с реальным path planning
 """
 import asyncio
-from typing import Optional, Callable, Dict, Any
+from typing import Optional, Callable, Dict, Any, List, Tuple
 from datetime import datetime
 
 from ..hardware.motors import motors
@@ -10,7 +10,111 @@ from ..hardware.servos import servos
 from ..hardware.shutters import shutters
 from ..hardware.sensors import sensors
 from .corexy import corexy
-from ..config import TIMEOUTS, MOCK_MODE
+from .calibration import calibration
+from ..config import TIMEOUTS, MOCK_MODE, CABINET
+
+
+class PathPlanner:
+    """Планировщик траекторий для CoreXY с полным расчётом"""
+    
+    SAFE_ZONE_Y = 1000  # Безопасная зона Y для горизонтальных перемещений
+    MAX_DIAGONAL_STEP = 500  # Максимальный шаг диагонального движения
+    
+    def __init__(self):
+        self.reload_calibration()
+        self.window = CABINET['window']
+    
+    def reload_calibration(self):
+        """Перезагрузить калибровочные данные"""
+        self.positions_x = calibration.get('positions.x', [0, 4500, 9000])
+        self.positions_y = calibration.get('positions.y', [i * 450 for i in range(21)])
+        self.speed = calibration.get('speeds.xy', 4000)
+    
+    def get_cell_position(self, row: str, x: int, y: int) -> Tuple[int, int]:
+        """Получить координаты ячейки в шагах"""
+        steps_x = self.positions_x[x] if x < len(self.positions_x) else 0
+        steps_y = self.positions_y[y] if y < len(self.positions_y) else 0
+        return (steps_x, steps_y)
+    
+    def get_window_position(self) -> Tuple[int, int]:
+        """Координаты окна выдачи"""
+        return self.get_cell_position(
+            self.window['row'],
+            self.window['x'],
+            self.window['y']
+        )
+    
+    def plan_path(self, start: Tuple[int, int], end: Tuple[int, int]) -> List[Tuple[int, int]]:
+        """Построить путь с промежуточными точками для избежания столкновений
+        
+        Стратегия:
+        1. Для больших перемещений - сначала Y, потом X (L-образный путь)
+        2. Для близких точек - прямое движение
+        3. При пересечении опасных зон - добавляем промежуточные точки
+        """
+        path = []
+        sx, sy = start
+        ex, ey = end
+        
+        dx = abs(ex - sx)
+        dy = abs(ey - sy)
+        
+        # Прямое движение для близких точек
+        if dx < self.MAX_DIAGONAL_STEP and dy < self.MAX_DIAGONAL_STEP:
+            path.append((ex, ey))
+            return path
+        
+        # L-образный путь для дальних точек
+        # Сначала двигаемся по Y (вертикально)
+        if dy > self.MAX_DIAGONAL_STEP:
+            # Если нужно пересечь большое расстояние по Y
+            # добавляем промежуточные точки каждые 2000 шагов
+            step_count = max(1, dy // 2000)
+            y_step = (ey - sy) / step_count
+            
+            for i in range(1, step_count):
+                intermediate_y = int(sy + y_step * i)
+                path.append((sx, intermediate_y))
+            
+            path.append((sx, ey))
+        
+        # Затем двигаемся по X (горизонтально)
+        if dx > self.MAX_DIAGONAL_STEP:
+            step_count = max(1, dx // 2000)
+            x_step = (ex - sx) / step_count
+            
+            current_y = ey
+            for i in range(1, step_count):
+                intermediate_x = int(sx + x_step * i)
+                path.append((intermediate_x, current_y))
+        
+        # Финальная точка
+        path.append((ex, ey))
+        
+        return path
+    
+    def estimate_time(self, start: Tuple[int, int], end: Tuple[int, int]) -> float:
+        """Оценка времени перемещения в секундах с учётом пути"""
+        path = self.plan_path(start, end)
+        
+        total_distance = 0
+        current = start
+        
+        for point in path:
+            dx = abs(point[0] - current[0])
+            dy = abs(point[1] - current[1])
+            # Для CoreXY: время = max(dx, dy) т.к. оси двигаются параллельно
+            total_distance += max(dx, dy)
+            current = point
+        
+        if self.speed <= 0:
+            return 0
+        
+        return total_distance / self.speed
+    
+    def get_total_cells(self) -> int:
+        """Получить общее количество ячеек"""
+        return len(CABINET['rows']) * CABINET['columns'] * CABINET['positions']
 
 
 class Algorithms:
@@ -19,6 +123,8 @@ class Algorithms:
         self.current_operation = None
         self.progress_callback: Optional[Callable] = None
         self.error_callback: Optional[Callable] = None
+        self.path_planner = PathPlanner()
+        self._stop_requested = False
     
     def set_callbacks(self, progress: Callable = None, error: Callable = None):
         self.progress_callback = progress
@@ -41,22 +147,202 @@ class Algorithms:
                 'operation': self.current_operation,
             })
     
+    async def _check_sensors_for_home(self) -> bool:
+        """Проверка концевиков при homing"""
+        return sensors.is_at_home()
+    
+    async def _check_tray_sensors(self) -> Dict[str, bool]:
+        """Проверка датчиков лотка"""
+        return {
+            'retracted': sensors.is_tray_retracted(),
+            'extended': sensors.is_tray_extended(),
+        }
+    
+    async def _safe_move_xy(self, target_x: int, target_y: int, timeout_ms: int = None) -> bool:
+        """Безопасное перемещение с проверкой датчиков и аварийной остановкой"""
+        if self._stop_requested:
+            return False
+        
+        timeout = timeout_ms or TIMEOUTS['move']
+        
+        current_pos = motors.get_position()
+        path = self.path_planner.plan_path(
+            (current_pos['x'], current_pos['y']),
+            (target_x, target_y)
+        )
+        
+        for point in path:
+            if self._stop_requested:
+                motors.stop()
+                await self._emit_error(11, 'Операция остановлена пользователем')
+                return False
+            
+            # Проверка перед движением - все направления
+            if not MOCK_MODE:
+                all_sensors = sensors.read_all()
+                
+                # Движение вправо (X+) - проверяем x_end
+                if point[0] > current_pos['x'] and all_sensors.get('x_end'):
+                    motors.stop()
+                    await self._emit_error(10, 'Сработал концевик X (конец)')
+                    return False
+                
+                # Движение влево (X-) - проверяем x_begin
+                if point[0] < current_pos['x'] and all_sensors.get('x_begin'):
+                    motors.stop()
+                    await self._emit_error(10, 'Сработал концевик X (начало)')
+                    return False
+                
+                # Движение вперёд (Y+) - проверяем y_end
+                if point[1] > current_pos['y'] and all_sensors.get('y_end'):
+                    motors.stop()
+                    await self._emit_error(10, 'Сработал концевик Y (конец)')
+                    return False
+                
+                # Движение назад (Y-) - проверяем y_begin
+                if point[1] < current_pos['y'] and all_sensors.get('y_begin'):
+                    motors.stop()
+                    await self._emit_error(10, 'Сработал концевик Y (начало)')
+                    return False
+            
+            # Движение к точке
+            success = await motors.move_xy(point[0], point[1])
+            if not success:
+                await self._emit_error(12, 'Ошибка перемещения мотора')
+                return False
+            
+            # Проверка после движения - неожиданные срабатывания
+            if not MOCK_MODE:
+                all_sensors = sensors.read_all()
+                
+                # Неожиданный x_end при движении к цели (ещё не достигнута)
+                if all_sensors.get('x_end') and point[0] < target_x:
+                    motors.stop()
+                    await self._emit_error(10, 'Неожиданное срабатывание концевика X (конец)')
+                    return False
+                
+                # Неожиданный x_begin при движении от начала
+                if all_sensors.get('x_begin') and point[0] > 0:
+                    motors.stop()
+                    await self._emit_error(10, 'Неожиданное срабатывание концевика X (начало)')
+                    return False
+                
+                # Неожиданный y_end при движении к цели
+                if all_sensors.get('y_end') and point[1] < target_y:
+                    motors.stop()
+                    await self._emit_error(10, 'Неожиданное срабатывание концевика Y (конец)')
+                    return False
+                
+                # Неожиданный y_begin при движении от начала
+                if all_sensors.get('y_begin') and point[1] > 0:
+                    motors.stop()
+                    await self._emit_error(10, 'Неожиданное срабатывание концевика Y (начало)')
+                    return False
+            
+            current_pos = motors.get_position()
+        
+        return True
+    
+    async def _safe_tray_extend(self, steps: int = None) -> bool:
+        """Безопасное выдвижение лотка с проверкой датчиков"""
+        if self._stop_requested:
+            return False
+        
+        # Проверка начального состояния
+        if not MOCK_MODE:
+            tray_status = await self._check_tray_sensors()
+            # Если уже выдвинут на нужную позицию
+            if tray_status['extended'] and steps is None:
+                return True
+        
+        success = await motors.extend_tray(steps)
+        
+        if not success:
+            await self._emit_error(20, 'Ошибка выдвижения лотка')
+            return False
+        
+        # Проверка результата
+        if not MOCK_MODE:
+            # Ждём стабилизации датчика
+            await asyncio.sleep(0.3)
+            tray_status = await self._check_tray_sensors()
+            
+            if steps is None and not tray_status['extended']:
+                # Полное выдвижение но датчик не сработал
+                await self._emit_error(21, 'Лоток не достиг конечной позиции')
+                return False
+        
+        return True
+    
+    async def _safe_tray_retract(self, steps: int = None) -> bool:
+        """Безопасное втягивание лотка с проверкой датчиков"""
+        if self._stop_requested:
+            return False
+        
+        # Проверка начального состояния
+        if not MOCK_MODE:
+            tray_status = await self._check_tray_sensors()
+            # Если уже втянут
+            if tray_status['retracted'] and steps is None:
+                return True
+        
+        success = await motors.retract_tray(steps)
+        
+        if not success:
+            await self._emit_error(22, 'Ошибка втягивания лотка')
+            return False
+        
+        # Проверка результата
+        if not MOCK_MODE:
+            await asyncio.sleep(0.3)
+            tray_status = await self._check_tray_sensors()
+            
+            if steps is None and not tray_status['retracted']:
+                # Полное втягивание но датчик не сработал
+                await self._emit_error(23, 'Лоток не достиг начальной позиции')
+                return False
+        
+        return True
+    
     async def init_home(self) -> bool:
+        """Алгоритм INIT - возврат в начальное положение"""
         self.current_operation = 'INIT'
         self.state = 'homing'
+        self._stop_requested = False
         
         try:
-            await self._emit_progress(1, 4, 'Проверка платформы')
+            await self._emit_progress(1, 5, 'Проверка состояния лотка')
             
-            if not sensors.is_tray_retracted():
-                await self._emit_progress(2, 4, 'Втягивание платформы')
-                await motors.retract_tray()
+            tray_status = await self._check_tray_sensors()
+            if not tray_status['retracted']:
+                await self._emit_progress(2, 5, 'Втягивание лотка')
+                await self._safe_tray_retract()
             
-            await self._emit_progress(3, 4, 'Поиск начальной позиции X')
-            await motors.move_xy(0, motors.position['y'])
+            await self._emit_progress(3, 5, 'Движение к началу по X')
             
-            await self._emit_progress(4, 4, 'Поиск начальной позиции Y')
-            await motors.move_xy(0, 0)
+            if MOCK_MODE:
+                await asyncio.sleep(0.5)
+                motors.position['x'] = 0
+            else:
+                while not sensors.read('x_begin'):
+                    if self._stop_requested:
+                        return False
+                    await motors.move_xy(motors.position['x'] - 100, motors.position['y'])
+                motors.position['x'] = 0
+            
+            await self._emit_progress(4, 5, 'Движение к началу по Y')
+            
+            if MOCK_MODE:
+                await asyncio.sleep(0.5)
+                motors.position['y'] = 0
+            else:
+                while not sensors.read('y_begin'):
+                    if self._stop_requested:
+                        return False
+                    await motors.move_xy(motors.position['x'], motors.position['y'] - 100)
+                motors.position['y'] = 0
+            
+            await self._emit_progress(5, 5, 'Инициализация завершена')
             
             if MOCK_MODE:
                 sensors.set_mock('x_begin', 1)
@@ -72,50 +358,58 @@ class Algorithms:
             return False
     
     async def take_shelf(self, row: str, x: int, y: int) -> bool:
+        """Алгоритм TAKE - извлечение полки для выдачи книги"""
         self.current_operation = 'TAKE'
         self.state = 'busy'
+        self._stop_requested = False
         total_steps = 13
         
         try:
-            await self._emit_progress(1, total_steps, 'Проверка платформы')
-            if not sensors.is_tray_retracted():
-                await motors.retract_tray()
+            await self._emit_progress(1, total_steps, 'Проверка лотка')
+            if not sensors.is_tray_retracted() or MOCK_MODE:
+                await self._safe_tray_retract()
             
+            target_x, target_y = self.path_planner.get_cell_position(row, x, y)
             await self._emit_progress(2, total_steps, f'Перемещение к ячейке ({row}, {x}, {y})')
-            target_x, target_y = corexy.cell_to_steps(row, x, y)
-            await motors.move_xy(target_x, target_y)
+            if not await self._safe_move_xy(target_x, target_y):
+                return False
             
-            await self._emit_progress(3, total_steps, 'Выдвижение платформы (1-й этап)')
-            await motors.extend_tray()
+            grab_params = calibration.get(f'grab_{row.lower()}', {
+                'extend1': 1500, 'retract': 1500, 'extend2': 3000
+            })
             
-            await self._emit_progress(4, total_steps, 'Закрытие замка')
+            await self._emit_progress(3, total_steps, 'Выдвижение лотка (1-й этап)')
+            await self._safe_tray_extend(grab_params.get('extend1', 1500))
+            
             lock = 'lock1' if row == 'FRONT' else 'lock2'
+            await self._emit_progress(4, total_steps, 'Захват полки (закрытие замка)')
             await servos.close_lock(lock)
             
-            await self._emit_progress(5, total_steps, 'Втягивание')
-            await motors.retract_tray()
+            await self._emit_progress(5, total_steps, 'Втягивание лотка')
+            await self._safe_tray_retract(grab_params.get('retract', 1500))
             
-            await self._emit_progress(6, total_steps, 'Открытие замка')
+            await self._emit_progress(6, total_steps, 'Освобождение защёлки (открытие замка)')
             await servos.open_lock(lock)
             
-            await self._emit_progress(7, total_steps, 'Выдвижение платформы (2-й этап)')
-            await motors.extend_tray()
+            await self._emit_progress(7, total_steps, 'Выдвижение лотка (2-й этап)')
+            await self._safe_tray_extend(grab_params.get('extend2', 3000))
             
-            await self._emit_progress(8, total_steps, 'Закрытие замка')
+            await self._emit_progress(8, total_steps, 'Фиксация полки')
             await servos.close_lock(lock)
             
             await self._emit_progress(9, total_steps, 'Полное втягивание')
-            await motors.retract_tray()
+            await self._safe_tray_retract()
             
-            await self._emit_progress(10, total_steps, 'Перемещение к окну')
-            window_x, window_y = corexy.window_position()
-            await motors.move_xy(window_x, window_y)
+            window_x, window_y = self.path_planner.get_window_position()
+            await self._emit_progress(10, total_steps, 'Перемещение к окну выдачи')
+            if not await self._safe_move_xy(window_x, window_y):
+                return False
             
             await self._emit_progress(11, total_steps, 'Открытие внутренней шторки')
             await shutters.open_shutter('inner')
             
             await self._emit_progress(12, total_steps, 'Выдвижение в окно')
-            await motors.extend_tray()
+            await self._safe_tray_extend()
             
             await self._emit_progress(13, total_steps, 'Открытие внешней шторки')
             await shutters.open_shutter('outer')
@@ -129,42 +423,54 @@ class Algorithms:
             return False
     
     async def give_shelf(self, row: str, x: int, y: int) -> bool:
+        """Алгоритм GIVE - возврат полки в ячейку"""
         self.current_operation = 'GIVE'
         self.state = 'busy'
-        total_steps = 10
+        self._stop_requested = False
+        total_steps = 12
         
         try:
             await self._emit_progress(1, total_steps, 'Закрытие внешней шторки')
             await shutters.close_shutter('outer')
             
-            await self._emit_progress(2, total_steps, 'Втягивание платформы')
-            await motors.retract_tray()
+            await self._emit_progress(2, total_steps, 'Втягивание лотка')
+            await self._safe_tray_retract()
             
             await self._emit_progress(3, total_steps, 'Закрытие внутренней шторки')
             await shutters.close_shutter('inner')
             
+            target_x, target_y = self.path_planner.get_cell_position(row, x, y)
             await self._emit_progress(4, total_steps, f'Перемещение к ячейке ({row}, {x}, {y})')
-            target_x, target_y = corexy.cell_to_steps(row, x, y)
-            await motors.move_xy(target_x, target_y)
+            if not await self._safe_move_xy(target_x, target_y):
+                return False
             
-            await self._emit_progress(5, total_steps, 'Выдвижение платформы')
-            await motors.extend_tray()
+            grab_params = calibration.get(f'grab_{row.lower()}', {
+                'extend1': 1500, 'retract': 1500, 'extend2': 3000
+            })
             
-            await self._emit_progress(6, total_steps, 'Открытие замка')
+            await self._emit_progress(5, total_steps, 'Выдвижение лотка (вставка)')
+            await self._safe_tray_extend(grab_params.get('extend2', 3000))
+            
             lock = 'lock1' if row == 'FRONT' else 'lock2'
+            await self._emit_progress(6, total_steps, 'Освобождение полки (открытие замка)')
             await servos.open_lock(lock)
             
-            await self._emit_progress(7, total_steps, 'Втягивание')
-            await motors.retract_tray()
+            await self._emit_progress(7, total_steps, 'Частичное втягивание')
+            await self._safe_tray_retract(grab_params.get('retract', 1500))
             
-            await self._emit_progress(8, total_steps, 'Закрытие замка')
+            await self._emit_progress(8, total_steps, 'Фиксация защёлки (закрытие замка)')
             await servos.close_lock(lock)
             
-            await self._emit_progress(9, total_steps, 'Выдвижение (вставка полки)')
-            await motors.extend_tray()
+            await self._emit_progress(9, total_steps, 'Выдвижение для освобождения')
+            await self._safe_tray_extend(grab_params.get('extend1', 1500))
             
-            await self._emit_progress(10, total_steps, 'Полное втягивание')
-            await motors.retract_tray()
+            await self._emit_progress(10, total_steps, 'Открытие замка')
+            await servos.open_lock(lock)
+            
+            await self._emit_progress(11, total_steps, 'Полное втягивание')
+            await self._safe_tray_retract()
+            
+            await self._emit_progress(12, total_steps, 'Операция завершена')
             
             self.state = 'idle'
             return True
@@ -175,11 +481,14 @@ class Algorithms:
             return False
     
     async def wait_for_user(self, timeout_ms: int = None) -> bool:
+        """Ожидание действия пользователя"""
         timeout = timeout_ms or TIMEOUTS['user_wait']
         await asyncio.sleep(timeout / 1000)
         return True
     
     def stop(self):
+        """Аварийная остановка"""
+        self._stop_requested = True
         motors.stop()
         self.state = 'stopped'
     

@@ -8,6 +8,7 @@
 </head>
 <body>
     <div id="app">
+        <!-- Экран приветствия -->
         <div id="welcome-screen" class="screen active">
             <div class="logo">📚</div>
             <h1>Добро пожаловать!</h1>
@@ -20,32 +21,38 @@
             </div>
             
             <div class="test-buttons">
-                <button class="btn btn-primary btn-lg" onclick="authenticate('CARD001')">
+                <button class="btn btn-primary btn-lg" onclick="authenticate('CARD001')" data-testid="btn-auth-reader">
                     👤 Читатель
                 </button>
-                <button class="btn btn-secondary btn-lg" onclick="authenticate('ADMIN01')">
+                <button class="btn btn-secondary btn-lg" onclick="authenticate('ADMIN01')" data-testid="btn-auth-librarian">
                     📖 Библиотекарь
                 </button>
-                <button class="btn btn-outline btn-lg" onclick="authenticate('ADMIN99')">
+                <button class="btn btn-outline btn-lg" onclick="authenticate('ADMIN99')" data-testid="btn-auth-admin">
                     🔧 Администратор
                 </button>
             </div>
+            
+            <div class="status-bar" id="system-status">
+                <span class="status-item" id="status-irbis">ИРБИС: —</span>
+                <span class="status-item" id="status-cells">Ячеек: —</span>
+            </div>
         </div>
         
+        <!-- Меню читателя -->
         <div id="reader-menu" class="screen">
             <header>
-                <button class="btn-back" onclick="logout()">← Выход</button>
+                <button class="btn-back" onclick="logout()" data-testid="btn-logout">← Выход</button>
                 <h2>Меню читателя</h2>
                 <div class="user-info" id="user-info"></div>
             </header>
             
             <div class="menu-grid">
-                <div class="menu-card" onclick="showScreen('book-list')">
+                <div class="menu-card" onclick="showScreen('book-list')" data-testid="card-get-book">
                     <div class="icon">📖</div>
                     <h3>Забрать книгу</h3>
                     <p id="reserved-count">0 забронировано</p>
                 </div>
-                <div class="menu-card" onclick="showScreen('return-book')">
+                <div class="menu-card" onclick="startReturn()" data-testid="card-return-book">
                     <div class="icon">↩️</div>
                     <h3>Вернуть книгу</h3>
                     <p>Положите книгу в окно</p>
@@ -53,6 +60,7 @@
             </div>
         </div>
         
+        <!-- Меню библиотекаря -->
         <div id="librarian-menu" class="screen">
             <header>
                 <button class="btn-back" onclick="logout()">← Выход</button>
@@ -62,28 +70,93 @@
             
             <div id="extraction-alert" class="alert alert-warning hidden">
                 <span id="extraction-count">0</span> книг требуют изъятия
-                <button class="btn btn-sm" onclick="extractAll()">Изъять все</button>
+                <button class="btn btn-sm" onclick="extractAll()" data-testid="btn-extract-all">Изъять все</button>
             </div>
             
             <div class="menu-grid cols-3">
-                <div class="menu-card" onclick="showScreen('load-books')">
+                <div class="menu-card" onclick="showScreen('load-books')" data-testid="card-load">
                     <div class="icon">➕</div>
                     <h3>Загрузить книги</h3>
                     <p>Добавить в шкаф</p>
                 </div>
-                <div class="menu-card" onclick="showScreen('extract-books')">
+                <div class="menu-card" onclick="showScreen('extract-books')" data-testid="card-extract">
                     <div class="icon">📦</div>
                     <h3>Изъять книги</h3>
                     <p>Забрать возвращённые</p>
                 </div>
-                <div class="menu-card" onclick="runInventory()">
+                <div class="menu-card" onclick="showScreen('cells-view')" data-testid="card-cells">
+                    <div class="icon">🗄️</div>
+                    <h3>Просмотр ячеек</h3>
+                    <p>Состояние шкафа</p>
+                </div>
+                <div class="menu-card" onclick="runInventory()" data-testid="card-inventory">
                     <div class="icon">🔍</div>
                     <h3>Инвентаризация</h3>
                     <p>Проверить содержимое</p>
                 </div>
+                <div class="menu-card" onclick="showScreen('operations-log')" data-testid="card-log">
+                    <div class="icon">📋</div>
+                    <h3>Журнал операций</h3>
+                    <p>История действий</p>
+                </div>
+                <div class="menu-card" onclick="showStatistics()" data-testid="card-stats">
+                    <div class="icon">📊</div>
+                    <h3>Статистика</h3>
+                    <p>Отчёты и графики</p>
+                </div>
             </div>
         </div>
         
+        <!-- Меню администратора -->
+        <div id="admin-menu" class="screen">
+            <header>
+                <button class="btn-back" onclick="logout()">← Выход</button>
+                <h2>Панель администратора</h2>
+                <div class="user-info" id="admin-info"></div>
+            </header>
+            
+            <div id="admin-extraction-alert" class="alert alert-warning hidden">
+                <span id="admin-extraction-count">0</span> книг требуют изъятия
+                <button class="btn btn-sm" onclick="extractAll()">Изъять все</button>
+            </div>
+            
+            <div class="menu-grid cols-4">
+                <div class="menu-card" onclick="showScreen('load-books')">
+                    <div class="icon">➕</div>
+                    <h3>Загрузить</h3>
+                </div>
+                <div class="menu-card" onclick="showScreen('extract-books')">
+                    <div class="icon">📦</div>
+                    <h3>Изъять</h3>
+                </div>
+                <div class="menu-card" onclick="showScreen('cells-view')">
+                    <div class="icon">🗄️</div>
+                    <h3>Ячейки</h3>
+                </div>
+                <div class="menu-card" onclick="runInventory()">
+                    <div class="icon">🔍</div>
+                    <h3>Инвентаризация</h3>
+                </div>
+                <div class="menu-card" onclick="showScreen('calibration')" data-testid="card-calibration">
+                    <div class="icon">🎯</div>
+                    <h3>Калибровка</h3>
+                </div>
+                <div class="menu-card" onclick="showScreen('diagnostics')" data-testid="card-diagnostics">
+                    <div class="icon">🔧</div>
+                    <h3>Диагностика</h3>
+                </div>
+                <div class="menu-card" onclick="showScreen('operations-log')">
+                    <div class="icon">📋</div>
+                    <h3>Журнал</h3>
+                </div>
+                <div class="menu-card" onclick="showScreen('settings')" data-testid="card-settings">
+                    <div class="icon">⚙️</div>
+                    <h3>Настройки</h3>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Список книг для выдачи -->
         <div id="book-list" class="screen">
             <header>
                 <button class="btn-back" onclick="goBack()">← Назад</button>
@@ -92,6 +165,7 @@
             <div id="books-container" class="list-container"></div>
         </div>
         
+        <!-- Возврат книги -->
         <div id="return-book" class="screen">
             <header>
                 <button class="btn-back" onclick="goBack()">← Назад</button>
@@ -99,14 +173,17 @@
             </header>
             <div class="center-content">
                 <div class="icon-lg">📦</div>
-                <p class="instruction">Положите книгу в окно приёма</p>
-                <div class="progress-bar">
-                    <div class="progress-fill" style="width: 30%"></div>
+                <p class="instruction">Отсканируйте RFID-метку книги</p>
+                <div class="form-group" style="max-width: 400px;">
+                    <input type="text" id="return-rfid" placeholder="RFID книги" data-testid="input-return-rfid">
                 </div>
-                <p class="hint">Ожидание книги...</p>
+                <button class="btn btn-primary btn-lg" onclick="returnBook()" data-testid="btn-return">
+                    ↩️ Вернуть книгу
+                </button>
             </div>
         </div>
         
+        <!-- Загрузка книг -->
         <div id="load-books" class="screen">
             <header>
                 <button class="btn-back" onclick="goBack()">← Назад</button>
@@ -115,30 +192,292 @@
             <div class="form-container">
                 <div class="form-group">
                     <label>RFID-метка книги *</label>
-                    <input type="text" id="load-rfid" placeholder="Сканируйте или введите RFID">
+                    <input type="text" id="load-rfid" placeholder="Сканируйте или введите RFID" data-testid="input-load-rfid">
                 </div>
                 <div class="form-group">
                     <label>Название книги *</label>
-                    <input type="text" id="load-title" placeholder="Введите название">
+                    <input type="text" id="load-title" placeholder="Введите название" data-testid="input-load-title">
                 </div>
                 <div class="form-group">
                     <label>Автор</label>
                     <input type="text" id="load-author" placeholder="Введите автора (необязательно)">
                 </div>
-                <button class="btn btn-primary btn-block" onclick="loadBook()">
+                <button class="btn btn-primary btn-block" onclick="loadBook()" data-testid="btn-load">
                     ➕ Загрузить книгу
                 </button>
             </div>
         </div>
         
+        <!-- Изъятие книг -->
         <div id="extract-books" class="screen">
             <header>
                 <button class="btn-back" onclick="goBack()">← Назад</button>
                 <h2>Изъятие книг</h2>
+                <button class="btn btn-primary" onclick="extractAll()">Изъять все</button>
             </header>
             <div id="extraction-list" class="list-container"></div>
         </div>
         
+        <!-- Просмотр ячеек -->
+        <div id="cells-view" class="screen">
+            <header>
+                <button class="btn-back" onclick="goBack()">← Назад</button>
+                <h2>Состояние ячеек</h2>
+                <select id="cells-filter" onchange="loadCells()">
+                    <option value="all">Все</option>
+                    <option value="occupied">Занятые</option>
+                    <option value="empty">Пустые</option>
+                    <option value="extraction">Требуют изъятия</option>
+                </select>
+            </header>
+            <div class="cells-grid-container">
+                <div class="row-tabs">
+                    <button class="tab active" onclick="switchRow('FRONT')">Передний ряд</button>
+                    <button class="tab" onclick="switchRow('BACK')">Задний ряд</button>
+                </div>
+                <div id="cells-grid" class="cells-grid"></div>
+            </div>
+            <div id="cell-details" class="cell-details hidden"></div>
+        </div>
+        
+        <!-- Журнал операций -->
+        <div id="operations-log" class="screen">
+            <header>
+                <button class="btn-back" onclick="goBack()">← Назад</button>
+                <h2>Журнал операций</h2>
+                <select id="log-filter" onchange="loadOperations()">
+                    <option value="all">Все операции</option>
+                    <option value="ISSUE">Выдача</option>
+                    <option value="RETURN">Возврат</option>
+                    <option value="LOAD">Загрузка</option>
+                    <option value="EXTRACT">Изъятие</option>
+                </select>
+            </header>
+            <div id="operations-list" class="list-container"></div>
+        </div>
+        
+        <!-- Калибровка -->
+        <div id="calibration" class="screen">
+            <header>
+                <button class="btn-back" onclick="goBack()">← Назад</button>
+                <h2>Калибровка CoreXY</h2>
+            </header>
+            <div class="calibration-container">
+                <div class="calibration-section">
+                    <h3>🎯 Позиции по X (колонки)</h3>
+                    <div class="calibration-row">
+                        <label>Колонка 0:</label>
+                        <input type="number" id="cal-x-0" value="0">
+                        <button class="btn btn-sm" onclick="testPosition('x', 0)">Тест</button>
+                    </div>
+                    <div class="calibration-row">
+                        <label>Колонка 1:</label>
+                        <input type="number" id="cal-x-1" value="4500">
+                        <button class="btn btn-sm" onclick="testPosition('x', 1)">Тест</button>
+                    </div>
+                    <div class="calibration-row">
+                        <label>Колонка 2:</label>
+                        <input type="number" id="cal-x-2" value="9000">
+                        <button class="btn btn-sm" onclick="testPosition('x', 2)">Тест</button>
+                    </div>
+                </div>
+                
+                <div class="calibration-section">
+                    <h3>📍 Позиции по Y (ряды 0-20)</h3>
+                    <div id="calibration-y-positions"></div>
+                </div>
+                
+                <div class="calibration-section">
+                    <h3>🔄 Ручное управление</h3>
+                    <div class="manual-controls">
+                        <div class="control-group">
+                            <label>Шаги X:</label>
+                            <input type="number" id="manual-x" value="0">
+                        </div>
+                        <div class="control-group">
+                            <label>Шаги Y:</label>
+                            <input type="number" id="manual-y" value="0">
+                        </div>
+                        <button class="btn btn-primary" onclick="manualMove()">Переместить</button>
+                        <button class="btn btn-secondary" onclick="homePosition()">Домой</button>
+                    </div>
+                </div>
+                
+                <div class="calibration-actions">
+                    <button class="btn btn-primary btn-lg" onclick="saveCalibration()">💾 Сохранить калибровку</button>
+                    <button class="btn btn-danger" onclick="resetCalibration()">🔄 Сбросить</button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Диагностика -->
+        <div id="diagnostics" class="screen">
+            <header>
+                <button class="btn-back" onclick="goBack()">← Назад</button>
+                <h2>Диагностика оборудования</h2>
+                <button class="btn btn-primary" onclick="runDiagnostics()">🔄 Обновить</button>
+            </header>
+            <div class="diagnostics-container">
+                <div class="diag-section">
+                    <h3>📡 Датчики</h3>
+                    <div id="sensors-status" class="status-grid"></div>
+                </div>
+                
+                <div class="diag-section">
+                    <h3>⚙️ Моторы</h3>
+                    <div id="motors-status" class="status-grid"></div>
+                    <div class="motor-controls">
+                        <button class="btn btn-sm" onclick="testMotor('xy')">Тест XY</button>
+                        <button class="btn btn-sm" onclick="testMotor('tray')">Тест лотка</button>
+                    </div>
+                </div>
+                
+                <div class="diag-section">
+                    <h3>🔒 Замки и шторки</h3>
+                    <div id="locks-status" class="status-grid"></div>
+                    <div class="lock-controls">
+                        <button class="btn btn-sm" onclick="testLock('lock1')">Замок 1</button>
+                        <button class="btn btn-sm" onclick="testLock('lock2')">Замок 2</button>
+                        <button class="btn btn-sm" onclick="testShutter('outer')">Внешняя шторка</button>
+                        <button class="btn btn-sm" onclick="testShutter('inner')">Внутренняя шторка</button>
+                    </div>
+                </div>
+                
+                <div class="diag-section">
+                    <h3>💳 RFID ридеры</h3>
+                    <div id="rfid-status" class="status-grid"></div>
+                    <div class="rfid-controls">
+                        <button class="btn btn-sm" onclick="testRfid('card')">Тест карт</button>
+                        <button class="btn btn-sm" onclick="testRfid('book')">Тест книг</button>
+                    </div>
+                </div>
+                
+                <div class="diag-section">
+                    <h3>🌐 Подключения</h3>
+                    <div id="connections-status" class="status-grid"></div>
+                </div>
+                
+                <div class="diag-section">
+                    <h3>📋 Системные логи</h3>
+                    <div id="system-logs" class="logs-container"></div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Настройки -->
+        <div id="settings" class="screen">
+            <header>
+                <button class="btn-back" onclick="goBack()">← Назад</button>
+                <h2>Настройки системы</h2>
+            </header>
+            <div class="settings-container">
+                <div class="settings-section">
+                    <h3>⏱️ Таймауты (мс)</h3>
+                    <div class="setting-row">
+                        <label>Перемещение XY:</label>
+                        <input type="number" id="setting-move-timeout" value="1500">
+                    </div>
+                    <div class="setting-row">
+                        <label>Выдвижение лотка:</label>
+                        <input type="number" id="setting-tray-extend" value="800">
+                    </div>
+                    <div class="setting-row">
+                        <label>Ожидание пользователя:</label>
+                        <input type="number" id="setting-user-wait" value="30000">
+                    </div>
+                </div>
+                
+                <div class="settings-section">
+                    <h3>📲 Telegram уведомления</h3>
+                    <div class="setting-row">
+                        <label>Включено:</label>
+                        <input type="checkbox" id="setting-telegram-enabled">
+                    </div>
+                    <div class="setting-row">
+                        <label>Bot Token:</label>
+                        <input type="text" id="setting-telegram-token" placeholder="123456:ABC...">
+                    </div>
+                    <div class="setting-row">
+                        <label>Chat ID:</label>
+                        <input type="text" id="setting-telegram-chat" placeholder="-100123456789">
+                    </div>
+                    <button class="btn btn-sm" onclick="testTelegram()">Тест отправки</button>
+                </div>
+                
+                <div class="settings-section">
+                    <h3>💾 Резервное копирование</h3>
+                    <div class="setting-row">
+                        <label>Автобэкап:</label>
+                        <input type="checkbox" id="setting-backup-enabled" checked>
+                    </div>
+                    <div class="setting-row">
+                        <label>Интервал (часы):</label>
+                        <input type="number" id="setting-backup-interval" value="24">
+                    </div>
+                    <button class="btn btn-primary" onclick="createBackup()">Создать бэкап сейчас</button>
+                    <button class="btn btn-secondary" onclick="showBackups()">Список бэкапов</button>
+                </div>
+                
+                <div class="settings-section">
+                    <h3>🌐 ИРБИС</h3>
+                    <div class="setting-row">
+                        <label>Хост:</label>
+                        <input type="text" id="setting-irbis-host" value="192.168.1.100">
+                    </div>
+                    <div class="setting-row">
+                        <label>Порт:</label>
+                        <input type="number" id="setting-irbis-port" value="6666">
+                    </div>
+                    <div class="setting-row">
+                        <label>Mock режим:</label>
+                        <input type="checkbox" id="setting-irbis-mock" checked>
+                    </div>
+                    <button class="btn btn-sm" onclick="testIrbis()">Проверить подключение</button>
+                </div>
+                
+                <div class="settings-actions">
+                    <button class="btn btn-primary btn-lg" onclick="saveSettings()">💾 Сохранить настройки</button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Статистика -->
+        <div id="statistics" class="screen">
+            <header>
+                <button class="btn-back" onclick="goBack()">← Назад</button>
+                <h2>Статистика</h2>
+            </header>
+            <div class="stats-container">
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-value" id="stat-occupied">0</div>
+                        <div class="stat-label">Занято ячеек</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="stat-empty">0</div>
+                        <div class="stat-label">Свободно</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="stat-extraction">0</div>
+                        <div class="stat-label">Требуют изъятия</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="stat-issues-today">0</div>
+                        <div class="stat-label">Выдач сегодня</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="stat-returns-today">0</div>
+                        <div class="stat-label">Возвратов сегодня</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="stat-total-issues">0</div>
+                        <div class="stat-label">Всего выдач</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Прогресс -->
         <div id="progress-screen" class="screen">
             <div class="center-content">
                 <div class="spinner"></div>
@@ -146,19 +485,21 @@
                 <div class="progress-bar">
                     <div class="progress-fill" id="progress-fill"></div>
                 </div>
-                <p class="hint">Пожалуйста, подождите</p>
+                <p class="hint" id="progress-step">Шаг 0 из 0</p>
             </div>
         </div>
         
+        <!-- Успех -->
         <div id="success-screen" class="screen">
             <div class="center-content success">
                 <div class="icon-lg">✅</div>
                 <h2>Успешно!</h2>
                 <p id="success-message"></p>
-                <button class="btn btn-primary btn-lg" onclick="goBack()">Продолжить</button>
+                <button class="btn btn-primary btn-lg" onclick="goBack()" data-testid="btn-continue">Продолжить</button>
             </div>
         </div>
         
+        <!-- Ошибка -->
         <div id="error-screen" class="screen">
             <div class="center-content error">
                 <div class="icon-lg">❌</div>
