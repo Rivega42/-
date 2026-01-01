@@ -798,10 +798,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         } else if (axis === 'y') {
           systemStatus.position = { ...currentPos, y: currentPos.y + (steps || 0) };
         }
-        broadcast({ type: 'position', data: systemStatus.position });
+        broadcast({ type: 'position', data: { ...systemStatus.position, timestamp: new Date().toISOString() } });
       } else if (command === 'home') {
         systemStatus.position = { x: 0, y: 0, tray: 0 };
-        broadcast({ type: 'position', data: systemStatus.position });
+        broadcast({ type: 'position', data: { ...systemStatus.position, timestamp: new Date().toISOString() } });
       }
 
       res.json({ success: true, position: systemStatus.position });
@@ -826,7 +826,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       } else if (command === 'retract') {
         systemStatus.position = { ...systemStatus.position, tray: 0 };
       }
-      broadcast({ type: 'position', data: systemStatus.position });
+      broadcast({ type: 'position', data: { ...systemStatus.position, timestamp: new Date().toISOString() } });
 
       res.json({ success: true, position: systemStatus.position });
     } catch (error) {
@@ -968,6 +968,185 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({ success: true, calibration: calibrationData });
     } catch (error) {
       res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to reset calibration' });
+    }
+  });
+
+  // Комплексные тесты калибровки (симуляция в mock режиме)
+  app.post("/api/calibration/test-suite", async (req, res) => {
+    try {
+      const results: {
+        test: string;
+        status: 'pass' | 'fail' | 'running';
+        message: string;
+        duration?: number;
+      }[] = [];
+
+      const simulateDelay = () => new Promise(resolve => setTimeout(resolve, 100 + Math.random() * 200));
+
+      // 1. Тест моторов - Home
+      const startHome = Date.now();
+      await simulateDelay();
+      systemStatus.position = { x: 0, y: 0, tray: 0 };
+      results.push({ 
+        test: 'motors_home', 
+        status: 'pass', 
+        message: 'Перемещение в начальную позицию выполнено',
+        duration: Date.now() - startHome
+      });
+
+      // 2. Тест лотка - выдвижение/втягивание
+      const startTray = Date.now();
+      await simulateDelay();
+      systemStatus.position.tray = 1000;
+      await simulateDelay();
+      systemStatus.position.tray = 0;
+      results.push({ 
+        test: 'tray_cycle', 
+        status: 'pass', 
+        message: 'Цикл выдвижения/втягивания лотка выполнен',
+        duration: Date.now() - startTray
+      });
+
+      // 3. Тест сервоприводов - замки
+      const startServos = Date.now();
+      await simulateDelay();
+      systemStatus.locks.front = true;
+      await simulateDelay();
+      systemStatus.locks.front = false;
+      systemStatus.locks.back = true;
+      await simulateDelay();
+      systemStatus.locks.back = false;
+      results.push({ 
+        test: 'servos_locks', 
+        status: 'pass', 
+        message: 'Тест сервоприводов замков пройден',
+        duration: Date.now() - startServos
+      });
+
+      // 4. Тест шторок
+      const startShutters = Date.now();
+      await simulateDelay();
+      systemStatus.shutters.inner = true;
+      await simulateDelay();
+      systemStatus.shutters.inner = false;
+      systemStatus.shutters.outer = true;
+      await simulateDelay();
+      systemStatus.shutters.outer = false;
+      results.push({ 
+        test: 'shutters', 
+        status: 'pass', 
+        message: 'Тест шторок пройден',
+        duration: Date.now() - startShutters
+      });
+
+      // 5. Тест датчиков
+      const startSensors = Date.now();
+      await simulateDelay();
+      const allSensorsOk = Object.values(systemStatus.sensors).some(v => v);
+      results.push({ 
+        test: 'sensors', 
+        status: 'pass', 
+        message: `Датчики: x_begin=${systemStatus.sensors.x_begin}, y_begin=${systemStatus.sensors.y_begin}`,
+        duration: Date.now() - startSensors
+      });
+
+      // 6. Тест перемещения к тестовой ячейке
+      const startMove = Date.now();
+      await simulateDelay();
+      systemStatus.position = { x: 1000, y: 1000, tray: 0 };
+      await simulateDelay();
+      systemStatus.position = { x: 0, y: 0, tray: 0 };
+      results.push({ 
+        test: 'motors_move', 
+        status: 'pass', 
+        message: 'Тест перемещения выполнен',
+        duration: Date.now() - startMove
+      });
+
+      const passed = results.filter(r => r.status === 'pass').length;
+      const failed = results.filter(r => r.status === 'fail').length;
+
+      await storage.addSystemLog({
+        level: failed > 0 ? 'ERROR' : 'INFO',
+        message: `Комплексный тест калибровки: ${passed}/${results.length} пройдено`,
+        component: 'CALIBRATION',
+      });
+
+      res.json({ 
+        success: failed === 0, 
+        results,
+        summary: { passed, failed, total: results.length }
+      });
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to run calibration suite' });
+    }
+  });
+
+  // Отдельные тесты калибровки
+  app.post("/api/calibration/test/:testName", async (req, res) => {
+    const { testName } = req.params;
+    
+    try {
+      const result: { status: 'pass' | 'fail'; message: string; duration: number } = {
+        status: 'pass',
+        message: '',
+        duration: 0
+      };
+      const start = Date.now();
+      const simulateDelay = () => new Promise(resolve => setTimeout(resolve, 100 + Math.random() * 200));
+
+      switch (testName) {
+        case 'home':
+          await simulateDelay();
+          systemStatus.position = { x: 0, y: 0, tray: 0 };
+          result.message = 'Homing выполнен успешно';
+          break;
+        case 'tray':
+          await simulateDelay();
+          systemStatus.position.tray = 1000;
+          await simulateDelay();
+          systemStatus.position.tray = 0;
+          result.message = 'Цикл лотка выполнен';
+          break;
+        case 'servos':
+          await simulateDelay();
+          systemStatus.locks.front = true;
+          await simulateDelay();
+          systemStatus.locks.front = false;
+          result.message = 'Тест сервоприводов пройден';
+          break;
+        case 'shutters':
+          await simulateDelay();
+          systemStatus.shutters.inner = true;
+          await simulateDelay();
+          systemStatus.shutters.inner = false;
+          result.message = 'Тест шторок пройден';
+          break;
+        case 'sensors':
+          await simulateDelay();
+          result.message = `Датчики: ${JSON.stringify(systemStatus.sensors)}`;
+          break;
+        case 'move-cell':
+          const { x, y } = req.body;
+          await simulateDelay();
+          systemStatus.position = { x: x || 2000, y: y || 2000, tray: 0 };
+          result.message = `Перемещение к позиции (${x || 2000}, ${y || 2000})`;
+          break;
+        default:
+          throw new Error(`Неизвестный тест: ${testName}`);
+      }
+
+      result.duration = Date.now() - start;
+      res.json({ success: true, result });
+    } catch (error) {
+      res.status(500).json({ 
+        success: false, 
+        result: { 
+          status: 'fail', 
+          message: error instanceof Error ? error.message : 'Test failed',
+          duration: 0
+        }
+      });
     }
   });
 

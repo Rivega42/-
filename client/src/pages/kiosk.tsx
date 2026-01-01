@@ -329,6 +329,44 @@ export default function KioskPage() {
     },
   });
 
+  const [calibrationTestResults, setCalibrationTestResults] = useState<{
+    test: string;
+    status: 'pass' | 'fail' | 'running';
+    message: string;
+    duration?: number;
+  }[]>([]);
+
+  const runCalibrationSuiteMutation = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest('POST', '/api/calibration/test-suite', {});
+      return response.json();
+    },
+    onSuccess: (data) => {
+      setCalibrationTestResults(data.results || []);
+      if (data.success) {
+        toast({ title: 'Успех', description: `Все тесты пройдены: ${data.summary.passed}/${data.summary.total}` });
+      } else {
+        toast({ title: 'Внимание', description: `Пройдено ${data.summary.passed}/${data.summary.total} тестов`, variant: 'destructive' });
+      }
+    },
+    onError: (error: any) => {
+      toast({ title: 'Ошибка', description: error.message, variant: 'destructive' });
+    },
+  });
+
+  const runSingleTestMutation = useMutation({
+    mutationFn: async (testName: string) => {
+      const response = await apiRequest('POST', `/api/calibration/test/${testName}`, {});
+      return response.json();
+    },
+    onSuccess: (data) => {
+      toast({ title: data.success ? 'Успех' : 'Ошибка', description: data.result?.message, variant: data.success ? 'default' : 'destructive' });
+    },
+    onError: (error: any) => {
+      toast({ title: 'Ошибка', description: error.message, variant: 'destructive' });
+    },
+  });
+
   const handleCardScan = useCallback((rfid: string) => {
     authMutation.mutate(rfid);
   }, [authMutation]);
@@ -1531,6 +1569,119 @@ export default function KioskPage() {
               </div>
             </div>
           </Card>
+
+          <Card className="p-6 col-span-2">
+            <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
+              <Play className="w-5 h-5" />
+              Комплексные тесты калибровки
+            </h3>
+            
+            <div className="flex gap-3 mb-4">
+              <Button
+                onClick={() => runCalibrationSuiteMutation.mutate()}
+                disabled={runCalibrationSuiteMutation.isPending}
+                className="h-12"
+                data-testid="button-run-all-tests"
+              >
+                {runCalibrationSuiteMutation.isPending ? (
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                ) : (
+                  <Play className="w-4 h-4 mr-2" />
+                )}
+                Запустить все тесты
+              </Button>
+            </div>
+
+            <div className="grid grid-cols-3 gap-3 mb-4">
+              <Button
+                variant="outline"
+                onClick={() => runSingleTestMutation.mutate('home')}
+                disabled={runSingleTestMutation.isPending}
+                className="h-12"
+                data-testid="button-test-home"
+              >
+                <Home className="w-4 h-4 mr-2" />
+                Homing
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => runSingleTestMutation.mutate('tray')}
+                disabled={runSingleTestMutation.isPending}
+                className="h-12"
+                data-testid="button-test-tray"
+              >
+                <Package className="w-4 h-4 mr-2" />
+                Лоток
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => runSingleTestMutation.mutate('servos')}
+                disabled={runSingleTestMutation.isPending}
+                className="h-12"
+                data-testid="button-test-servos"
+              >
+                <Lock className="w-4 h-4 mr-2" />
+                Сервоприводы
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => runSingleTestMutation.mutate('shutters')}
+                disabled={runSingleTestMutation.isPending}
+                className="h-12"
+                data-testid="button-test-shutters"
+              >
+                <ArrowUp className="w-4 h-4 mr-2" />
+                Шторки
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => runSingleTestMutation.mutate('sensors')}
+                disabled={runSingleTestMutation.isPending}
+                className="h-12"
+                data-testid="button-test-sensors"
+              >
+                <Activity className="w-4 h-4 mr-2" />
+                Датчики
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => runSingleTestMutation.mutate('move-cell')}
+                disabled={runSingleTestMutation.isPending}
+                className="h-12"
+                data-testid="button-test-move"
+              >
+                <Move className="w-4 h-4 mr-2" />
+                Перемещение
+              </Button>
+            </div>
+
+            {calibrationTestResults.length > 0 && (
+              <div className="border rounded-lg overflow-hidden">
+                <div className="bg-slate-100 px-4 py-2 font-medium text-sm">
+                  Результаты тестов
+                </div>
+                <div className="divide-y">
+                  {calibrationTestResults.map((result, idx) => (
+                    <div key={idx} className="flex items-center justify-between px-4 py-3">
+                      <div className="flex items-center gap-3">
+                        <div className={`w-3 h-3 rounded-full ${
+                          result.status === 'pass' ? 'bg-green-500' : 
+                          result.status === 'fail' ? 'bg-red-500' : 'bg-yellow-500'
+                        }`} />
+                        <span className="font-medium">{result.test}</span>
+                      </div>
+                      <div className="flex items-center gap-4">
+                        <span className="text-sm text-slate-500">{result.message}</span>
+                        {result.duration && (
+                          <Badge variant="outline">{result.duration}ms</Badge>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </Card>
         </div>
       </div>
     </div>
@@ -1544,8 +1695,7 @@ export default function KioskPage() {
       y: cell.y,
       status: cell.status as 'empty' | 'occupied' | 'reserved' | 'needs_extraction',
       bookRfid: cell.bookRfid || undefined,
-      bookTitle: cell.bookTitle || undefined,
-      bookAuthor: cell.bookAuthor || undefined
+      bookTitle: cell.bookTitle || undefined
     }));
 
     return (
