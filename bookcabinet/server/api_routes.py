@@ -383,20 +383,59 @@ async def post_wizard_kinematics_step(request):
                 'motor': step_config['motor'],
                 'direction': step_config['direction'],
                 'label': step_config['label'],
-                'instruction': 'Наблюдайте за движением каретки. Нажмите WASD по направлению движения.',
+                'instruction': 'Наблюдайте за движением каретки. Выберите диагональное направление.',
             })
     
     elif action == 'response' and response:
         step_config = KINEMATICS_STEPS[step]
-        direction_map = {'W': ('y', 1), 'S': ('y', -1), 'A': ('x', -1), 'D': ('x', 1)}
+        motor = step_config['motor'].lower()
+        motor_dir = step_config['direction']
         
-        if response in direction_map:
-            axis, observed_dir = direction_map[response]
-            motor = step_config['motor'].lower()
-            motor_dir = step_config['direction']
-            
-            key = f'{axis}_plus_dir_{motor}'
-            calibration.wizard.kinematics_results[key] = motor_dir if observed_dir == 1 else -motor_dir
+        # Диагональные направления для CoreXY: WD, WA, SD, SA
+        has_up = 'W' in response
+        has_down = 'S' in response
+        has_right = 'D' in response
+        has_left = 'A' in response
+        
+        # Определяем направления X и Y из диагонального ответа
+        if motor == 'a':
+            if motor_dir == 1:  # По часовой
+                if has_right:
+                    calibration.wizard.kinematics_results['x_plus_dir_a'] = 1
+                elif has_left:
+                    calibration.wizard.kinematics_results['x_plus_dir_a'] = -1
+                if has_up:
+                    calibration.wizard.kinematics_results['y_plus_dir_a'] = 1
+                elif has_down:
+                    calibration.wizard.kinematics_results['y_plus_dir_a'] = -1
+            else:  # Против часовой
+                if has_right:
+                    calibration.wizard.kinematics_results['x_plus_dir_a'] = -1
+                elif has_left:
+                    calibration.wizard.kinematics_results['x_plus_dir_a'] = 1
+                if has_up:
+                    calibration.wizard.kinematics_results['y_plus_dir_a'] = -1
+                elif has_down:
+                    calibration.wizard.kinematics_results['y_plus_dir_a'] = 1
+        elif motor == 'b':
+            if motor_dir == 1:  # По часовой
+                if has_right:
+                    calibration.wizard.kinematics_results['x_plus_dir_b'] = -1
+                elif has_left:
+                    calibration.wizard.kinematics_results['x_plus_dir_b'] = 1
+                if has_up:
+                    calibration.wizard.kinematics_results['y_plus_dir_b'] = 1
+                elif has_down:
+                    calibration.wizard.kinematics_results['y_plus_dir_b'] = -1
+            else:  # Против часовой
+                if has_right:
+                    calibration.wizard.kinematics_results['x_plus_dir_b'] = 1
+                elif has_left:
+                    calibration.wizard.kinematics_results['x_plus_dir_b'] = -1
+                if has_up:
+                    calibration.wizard.kinematics_results['y_plus_dir_b'] = -1
+                elif has_down:
+                    calibration.wizard.kinematics_results['y_plus_dir_b'] = 1
         
         calibration.wizard.step += 1
         

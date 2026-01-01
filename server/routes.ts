@@ -1287,7 +1287,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           motor: motorTests[step].motor,
           direction: motorTests[step].direction,
           label: motorTests[step].label,
-          instruction: `Куда поехала каретка? Нажмите W (вверх), A (влево), S (вниз) или D (вправо)`
+          instruction: `Куда поехала каретка? Выберите диагональное направление движения`
         });
       } else if (action === 'response') {
         const { response } = req.body; // 'W', 'A', 'S', 'D'
@@ -1332,24 +1332,46 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Вычисление кинематики из ответов
+  // Вычисление кинематики из ответов (диагональные направления для CoreXY)
+  // WD = вверх-вправо, WA = вверх-влево, SD = вниз-вправо, SA = вниз-влево
   function computeKinematicsFromResponses(results: { motor: string; direction: string; response: string }[]) {
     let x_plus_dir_a = 1, x_plus_dir_b = -1, y_plus_dir_a = 1, y_plus_dir_b = 1;
     
     for (const r of results) {
+      const resp = r.response;
+      // Определяем составляющие X и Y из диагонального ответа
+      const hasUp = resp.includes('W');
+      const hasDown = resp.includes('S');
+      const hasRight = resp.includes('D');
+      const hasLeft = resp.includes('A');
+      
       if (r.motor === 'A') {
         if (r.direction === 'CW') {
-          if (r.response === 'D') x_plus_dir_a = 1;
-          else if (r.response === 'A') x_plus_dir_a = -1;
-          else if (r.response === 'W') y_plus_dir_a = 1;
-          else if (r.response === 'S') y_plus_dir_a = -1;
+          // Мотор A по часовой - определяем куда движется
+          if (hasRight) x_plus_dir_a = 1;
+          else if (hasLeft) x_plus_dir_a = -1;
+          if (hasUp) y_plus_dir_a = 1;
+          else if (hasDown) y_plus_dir_a = -1;
+        } else {
+          // Мотор A против часовой - противоположное направление
+          if (hasRight) x_plus_dir_a = -1;
+          else if (hasLeft) x_plus_dir_a = 1;
+          if (hasUp) y_plus_dir_a = -1;
+          else if (hasDown) y_plus_dir_a = 1;
         }
       } else if (r.motor === 'B') {
         if (r.direction === 'CW') {
-          if (r.response === 'D') x_plus_dir_b = -1;
-          else if (r.response === 'A') x_plus_dir_b = 1;
-          else if (r.response === 'W') y_plus_dir_b = 1;
-          else if (r.response === 'S') y_plus_dir_b = -1;
+          // Мотор B по часовой
+          if (hasRight) x_plus_dir_b = -1;
+          else if (hasLeft) x_plus_dir_b = 1;
+          if (hasUp) y_plus_dir_b = 1;
+          else if (hasDown) y_plus_dir_b = -1;
+        } else {
+          // Мотор B против часовой
+          if (hasRight) x_plus_dir_b = 1;
+          else if (hasLeft) x_plus_dir_b = -1;
+          if (hasUp) y_plus_dir_b = -1;
+          else if (hasDown) y_plus_dir_b = 1;
         }
       }
     }
