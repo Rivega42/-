@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import type { User, Book, Cell, SystemStatus, Operation, Statistics } from "@shared/schema";
+import type { User, Book, Cell, SystemStatus, Operation, Statistics, CalibrationData } from "@shared/schema";
 import { 
   BookOpen, 
   Undo2, 
@@ -29,7 +29,18 @@ import {
   Plus,
   History,
   BarChart3,
-  Activity
+  Activity,
+  Cog,
+  Play,
+  RotateCcw,
+  Move,
+  Lock,
+  Unlock,
+  Target,
+  Home,
+  ArrowUp,
+  ArrowDown,
+  ArrowRight
 } from "lucide-react";
 
 type Screen = 
@@ -45,6 +56,8 @@ type Screen =
   | 'operations_log'
   | 'statistics'
   | 'diagnostics'
+  | 'mechanics_test'
+  | 'calibration'
   | 'progress' 
   | 'success' 
   | 'error'
@@ -96,7 +109,12 @@ export default function KioskPage() {
 
   const { data: diagnostics } = useQuery<{ sensors: Record<string, boolean>; motors: string; rfid: Record<string, string> }>({
     queryKey: ['/api/diagnostics'],
-    enabled: screen === 'diagnostics',
+    enabled: screen === 'diagnostics' || screen === 'mechanics_test',
+  });
+
+  const { data: calibration, refetch: refetchCalibration } = useQuery<CalibrationData>({
+    queryKey: ['/api/calibration'],
+    enabled: screen === 'calibration',
   });
 
   useEffect(() => {
@@ -222,6 +240,89 @@ export default function KioskPage() {
     onError: (error: any) => {
       setErrorMessage(error.message || 'Ошибка инвентаризации');
       setScreen('error');
+    },
+  });
+
+  const testMotorMutation = useMutation({
+    mutationFn: async (params: { command: string; axis?: string; steps?: number; speed?: number }) => {
+      const response = await apiRequest('POST', '/api/test/motor', params);
+      return response.json();
+    },
+    onSuccess: () => {
+      toast({ title: 'Успех', description: 'Команда мотора выполнена' });
+      queryClient.invalidateQueries({ queryKey: ['/api/diagnostics'] });
+    },
+    onError: (error: any) => {
+      toast({ title: 'Ошибка', description: error.message, variant: 'destructive' });
+    },
+  });
+
+  const testTrayMutation = useMutation({
+    mutationFn: async (command: string) => {
+      const response = await apiRequest('POST', '/api/test/tray', { command });
+      return response.json();
+    },
+    onSuccess: () => {
+      toast({ title: 'Успех', description: 'Команда лотка выполнена' });
+    },
+    onError: (error: any) => {
+      toast({ title: 'Ошибка', description: error.message, variant: 'destructive' });
+    },
+  });
+
+  const testServoMutation = useMutation({
+    mutationFn: async (params: { servo: string; command: string }) => {
+      const response = await apiRequest('POST', '/api/test/servo', params);
+      return response.json();
+    },
+    onSuccess: () => {
+      toast({ title: 'Успех', description: 'Команда сервопривода выполнена' });
+      queryClient.invalidateQueries({ queryKey: ['/api/diagnostics'] });
+    },
+    onError: (error: any) => {
+      toast({ title: 'Ошибка', description: error.message, variant: 'destructive' });
+    },
+  });
+
+  const testShutterMutation = useMutation({
+    mutationFn: async (params: { shutter: string; command: string }) => {
+      const response = await apiRequest('POST', '/api/test/shutter', params);
+      return response.json();
+    },
+    onSuccess: () => {
+      toast({ title: 'Успех', description: 'Команда шторки выполнена' });
+      queryClient.invalidateQueries({ queryKey: ['/api/diagnostics'] });
+    },
+    onError: (error: any) => {
+      toast({ title: 'Ошибка', description: error.message, variant: 'destructive' });
+    },
+  });
+
+  const saveCalibrationMutation = useMutation({
+    mutationFn: async (data: Partial<CalibrationData>) => {
+      const response = await apiRequest('POST', '/api/calibration', data);
+      return response.json();
+    },
+    onSuccess: () => {
+      toast({ title: 'Успех', description: 'Калибровка сохранена' });
+      refetchCalibration();
+    },
+    onError: (error: any) => {
+      toast({ title: 'Ошибка', description: error.message, variant: 'destructive' });
+    },
+  });
+
+  const resetCalibrationMutation = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest('POST', '/api/calibration/reset', {});
+      return response.json();
+    },
+    onSuccess: () => {
+      toast({ title: 'Успех', description: 'Калибровка сброшена к значениям по умолчанию' });
+      refetchCalibration();
+    },
+    onError: (error: any) => {
+      toast({ title: 'Ошибка', description: error.message, variant: 'destructive' });
     },
   });
 
@@ -579,6 +680,30 @@ export default function KioskPage() {
               <p className="text-slate-500">Проверка оборудования</p>
             </CardContent>
           </Card>
+
+          <Card 
+            className="cursor-pointer hover:shadow-xl transition-all active:scale-[0.98]"
+            onClick={() => setScreen('mechanics_test')}
+            data-testid="card-mechanics-test"
+          >
+            <CardContent className="p-7 flex flex-col items-center text-center">
+              <Cog className="w-14 h-14 text-orange-500 mb-3" />
+              <h3 className="text-xl font-bold mb-1">Тест механики</h3>
+              <p className="text-slate-500">Моторы, сервоприводы, шторки</p>
+            </CardContent>
+          </Card>
+
+          <Card 
+            className="cursor-pointer hover:shadow-xl transition-all active:scale-[0.98]"
+            onClick={() => setScreen('calibration')}
+            data-testid="card-calibration"
+          >
+            <CardContent className="p-7 flex flex-col items-center text-center">
+              <Target className="w-14 h-14 text-green-500 mb-3" />
+              <h3 className="text-xl font-bold mb-1">Калибровка</h3>
+              <p className="text-slate-500">Настройка позиций и скоростей</p>
+            </CardContent>
+          </Card>
         </div>
       </div>
     </div>
@@ -839,19 +964,19 @@ export default function KioskPage() {
                   <div className="flex items-center justify-between">
                     <div>
                       <div className="flex items-center gap-2">
-                        <Badge variant={op.result === 'success' ? 'default' : 'destructive'}>
+                        <Badge variant={op.result === 'OK' ? 'default' : 'destructive'}>
                           {op.operation}
                         </Badge>
                         <span className="text-sm text-slate-500">
-                          {new Date(op.timestamp).toLocaleString()}
+                          {op.timestamp ? new Date(op.timestamp).toLocaleString() : '-'}
                         </span>
                       </div>
-                      {op.bookTitle && (
-                        <p className="text-slate-600 mt-1">{op.bookTitle}</p>
+                      {op.bookRfid && (
+                        <p className="text-slate-600 mt-1">RFID: {op.bookRfid}</p>
                       )}
                     </div>
-                    <div className={`text-sm ${op.result === 'success' ? 'text-green-600' : 'text-red-600'}`}>
-                      {op.result === 'success' ? 'Успешно' : 'Ошибка'}
+                    <div className={`text-sm ${op.result === 'OK' ? 'text-green-600' : 'text-red-600'}`}>
+                      {op.result === 'OK' ? 'Успешно' : op.result}
                     </div>
                   </div>
                 </Card>
@@ -978,6 +1103,424 @@ export default function KioskPage() {
     </div>
   );
 
+  const renderMechanicsTest = () => (
+    <div className="min-h-screen bg-slate-100 pt-28 p-6" data-testid="screen-mechanics-test">
+      <div className="max-w-5xl mx-auto">
+        <h2 className="text-3xl font-bold text-slate-800 mb-6">Тестирование механики</h2>
+        
+        <div className="grid grid-cols-2 gap-5">
+          <Card className="p-6">
+            <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
+              <Move className="w-5 h-5" />
+              Управление моторами XY
+            </h3>
+            <div className="space-y-4">
+              <div className="grid grid-cols-3 gap-2">
+                <div />
+                <Button 
+                  className="h-14"
+                  onClick={() => testMotorMutation.mutate({ command: 'move', axis: 'y', steps: -500 })}
+                  disabled={testMotorMutation.isPending}
+                  data-testid="button-motor-y-minus"
+                >
+                  <ArrowUp className="w-6 h-6" />
+                </Button>
+                <div />
+                <Button 
+                  className="h-14"
+                  onClick={() => testMotorMutation.mutate({ command: 'move', axis: 'x', steps: -500 })}
+                  disabled={testMotorMutation.isPending}
+                  data-testid="button-motor-x-minus"
+                >
+                  <ArrowLeft className="w-6 h-6" />
+                </Button>
+                <Button 
+                  variant="outline"
+                  className="h-14"
+                  onClick={() => testMotorMutation.mutate({ command: 'home' })}
+                  disabled={testMotorMutation.isPending}
+                  data-testid="button-motor-home"
+                >
+                  <Home className="w-5 h-5" />
+                </Button>
+                <Button 
+                  className="h-14"
+                  onClick={() => testMotorMutation.mutate({ command: 'move', axis: 'x', steps: 500 })}
+                  disabled={testMotorMutation.isPending}
+                  data-testid="button-motor-x-plus"
+                >
+                  <ArrowRight className="w-6 h-6" />
+                </Button>
+                <div />
+                <Button 
+                  className="h-14"
+                  onClick={() => testMotorMutation.mutate({ command: 'move', axis: 'y', steps: 500 })}
+                  disabled={testMotorMutation.isPending}
+                  data-testid="button-motor-y-plus"
+                >
+                  <ArrowDown className="w-6 h-6" />
+                </Button>
+                <div />
+              </div>
+              <div className="text-center text-slate-500">
+                Позиция: X={systemStatus?.position?.x || 0}, Y={systemStatus?.position?.y || 0}
+              </div>
+            </div>
+          </Card>
+
+          <Card className="p-6">
+            <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
+              <Package className="w-5 h-5" />
+              Управление лотком
+            </h3>
+            <div className="space-y-4">
+              <div className="flex gap-3">
+                <Button 
+                  className="flex-1 h-14"
+                  onClick={() => testTrayMutation.mutate('extend')}
+                  disabled={testTrayMutation.isPending}
+                  data-testid="button-tray-extend"
+                >
+                  <Play className="w-5 h-5 mr-2" />
+                  Выдвинуть
+                </Button>
+                <Button 
+                  variant="outline"
+                  className="flex-1 h-14"
+                  onClick={() => testTrayMutation.mutate('retract')}
+                  disabled={testTrayMutation.isPending}
+                  data-testid="button-tray-retract"
+                >
+                  <RotateCcw className="w-5 h-5 mr-2" />
+                  Задвинуть
+                </Button>
+              </div>
+              <div className="text-center text-slate-500">
+                Лоток: {systemStatus?.position?.tray || 0} шагов
+              </div>
+            </div>
+          </Card>
+
+          <Card className="p-6">
+            <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
+              <Lock className="w-5 h-5" />
+              Замки (сервоприводы)
+            </h3>
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <span className="font-medium">Передний замок</span>
+                <div className="flex gap-2">
+                  <Button 
+                    size="sm"
+                    onClick={() => testServoMutation.mutate({ servo: 'front', command: 'open' })}
+                    disabled={testServoMutation.isPending}
+                    data-testid="button-lock-front-open"
+                  >
+                    <Unlock className="w-4 h-4 mr-1" /> Открыть
+                  </Button>
+                  <Button 
+                    size="sm"
+                    variant="outline"
+                    onClick={() => testServoMutation.mutate({ servo: 'front', command: 'close' })}
+                    disabled={testServoMutation.isPending}
+                    data-testid="button-lock-front-close"
+                  >
+                    <Lock className="w-4 h-4 mr-1" /> Закрыть
+                  </Button>
+                </div>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="font-medium">Задний замок</span>
+                <div className="flex gap-2">
+                  <Button 
+                    size="sm"
+                    onClick={() => testServoMutation.mutate({ servo: 'back', command: 'open' })}
+                    disabled={testServoMutation.isPending}
+                    data-testid="button-lock-back-open"
+                  >
+                    <Unlock className="w-4 h-4 mr-1" /> Открыть
+                  </Button>
+                  <Button 
+                    size="sm"
+                    variant="outline"
+                    onClick={() => testServoMutation.mutate({ servo: 'back', command: 'close' })}
+                    disabled={testServoMutation.isPending}
+                    data-testid="button-lock-back-close"
+                  >
+                    <Lock className="w-4 h-4 mr-1" /> Закрыть
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </Card>
+
+          <Card className="p-6">
+            <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
+              <Settings className="w-5 h-5" />
+              Шторки
+            </h3>
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <span className="font-medium">Внутренняя</span>
+                <div className="flex gap-2">
+                  <Button 
+                    size="sm"
+                    onClick={() => testShutterMutation.mutate({ shutter: 'inner', command: 'open' })}
+                    disabled={testShutterMutation.isPending}
+                    data-testid="button-shutter-inner-open"
+                  >
+                    Открыть
+                  </Button>
+                  <Button 
+                    size="sm"
+                    variant="outline"
+                    onClick={() => testShutterMutation.mutate({ shutter: 'inner', command: 'close' })}
+                    disabled={testShutterMutation.isPending}
+                    data-testid="button-shutter-inner-close"
+                  >
+                    Закрыть
+                  </Button>
+                </div>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="font-medium">Внешняя</span>
+                <div className="flex gap-2">
+                  <Button 
+                    size="sm"
+                    onClick={() => testShutterMutation.mutate({ shutter: 'outer', command: 'open' })}
+                    disabled={testShutterMutation.isPending}
+                    data-testid="button-shutter-outer-open"
+                  >
+                    Открыть
+                  </Button>
+                  <Button 
+                    size="sm"
+                    variant="outline"
+                    onClick={() => testShutterMutation.mutate({ shutter: 'outer', command: 'close' })}
+                    disabled={testShutterMutation.isPending}
+                    data-testid="button-shutter-outer-close"
+                  >
+                    Закрыть
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </Card>
+
+          <Card className="p-6 col-span-2">
+            <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
+              <Activity className="w-5 h-5" />
+              Состояние датчиков
+            </h3>
+            <div className="grid grid-cols-6 gap-3">
+              {diagnostics?.sensors && Object.entries(diagnostics.sensors).map(([key, value]) => (
+                <div key={key} className="flex flex-col items-center p-3 bg-slate-50 rounded">
+                  <div className={`w-4 h-4 rounded-full mb-2 ${value ? 'bg-green-500' : 'bg-slate-300'}`} />
+                  <span className="text-xs text-slate-600">{key}</span>
+                </div>
+              ))}
+            </div>
+          </Card>
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderCalibration = () => (
+    <div className="min-h-screen bg-slate-100 pt-28 p-6" data-testid="screen-calibration">
+      <div className="max-w-5xl mx-auto">
+        <div className="flex items-center justify-between mb-6">
+          <h2 className="text-3xl font-bold text-slate-800">Калибровка</h2>
+          <Button 
+            variant="destructive"
+            onClick={() => resetCalibrationMutation.mutate()}
+            disabled={resetCalibrationMutation.isPending}
+            data-testid="button-reset-calibration"
+          >
+            <RotateCcw className="w-4 h-4 mr-2" />
+            Сброс к заводским
+          </Button>
+        </div>
+        
+        <div className="grid grid-cols-2 gap-5">
+          <Card className="p-6">
+            <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
+              <Cog className="w-5 h-5" />
+              Скорости
+            </h3>
+            <div className="space-y-4">
+              <div>
+                <Label>Скорость XY (шаг/сек)</Label>
+                <div className="flex gap-2 mt-1">
+                  <Input 
+                    type="number"
+                    value={calibration?.speeds?.xy || 3000}
+                    className="h-12"
+                    data-testid="input-speed-xy"
+                    onChange={(e) => saveCalibrationMutation.mutate({ speeds: { ...calibration?.speeds, xy: parseInt(e.target.value) || 3000 } } as any)}
+                  />
+                </div>
+              </div>
+              <div>
+                <Label>Скорость лотка (шаг/сек)</Label>
+                <div className="flex gap-2 mt-1">
+                  <Input 
+                    type="number"
+                    value={calibration?.speeds?.tray || 2000}
+                    className="h-12"
+                    data-testid="input-speed-tray"
+                    onChange={(e) => saveCalibrationMutation.mutate({ speeds: { ...calibration?.speeds, tray: parseInt(e.target.value) || 2000 } } as any)}
+                  />
+                </div>
+              </div>
+              <div>
+                <Label>Ускорение (шаг/сек²)</Label>
+                <div className="flex gap-2 mt-1">
+                  <Input 
+                    type="number"
+                    value={calibration?.speeds?.acceleration || 5000}
+                    className="h-12"
+                    data-testid="input-acceleration"
+                    onChange={(e) => saveCalibrationMutation.mutate({ speeds: { ...calibration?.speeds, acceleration: parseInt(e.target.value) || 5000 } } as any)}
+                  />
+                </div>
+              </div>
+            </div>
+          </Card>
+
+          <Card className="p-6">
+            <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
+              <Lock className="w-5 h-5" />
+              Углы сервоприводов
+            </h3>
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label>Замок 1 открыт (°)</Label>
+                  <Input 
+                    type="number"
+                    value={calibration?.servos?.lock1_open || 90}
+                    className="h-12 mt-1"
+                    data-testid="input-servo-lock1-open"
+                    onChange={(e) => saveCalibrationMutation.mutate({ servos: { ...calibration?.servos, lock1_open: parseInt(e.target.value) || 90 } } as any)}
+                  />
+                </div>
+                <div>
+                  <Label>Замок 1 закрыт (°)</Label>
+                  <Input 
+                    type="number"
+                    value={calibration?.servos?.lock1_close || 0}
+                    className="h-12 mt-1"
+                    data-testid="input-servo-lock1-close"
+                    onChange={(e) => saveCalibrationMutation.mutate({ servos: { ...calibration?.servos, lock1_close: parseInt(e.target.value) || 0 } } as any)}
+                  />
+                </div>
+                <div>
+                  <Label>Замок 2 открыт (°)</Label>
+                  <Input 
+                    type="number"
+                    value={calibration?.servos?.lock2_open || 90}
+                    className="h-12 mt-1"
+                    data-testid="input-servo-lock2-open"
+                    onChange={(e) => saveCalibrationMutation.mutate({ servos: { ...calibration?.servos, lock2_open: parseInt(e.target.value) || 90 } } as any)}
+                  />
+                </div>
+                <div>
+                  <Label>Замок 2 закрыт (°)</Label>
+                  <Input 
+                    type="number"
+                    value={calibration?.servos?.lock2_close || 0}
+                    className="h-12 mt-1"
+                    data-testid="input-servo-lock2-close"
+                    onChange={(e) => saveCalibrationMutation.mutate({ servos: { ...calibration?.servos, lock2_close: parseInt(e.target.value) || 0 } } as any)}
+                  />
+                </div>
+              </div>
+            </div>
+          </Card>
+
+          <Card className="p-6">
+            <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
+              <Target className="w-5 h-5" />
+              Позиция окна выдачи
+            </h3>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label>X (шаги)</Label>
+                <Input 
+                  type="number"
+                  value={calibration?.window?.x || 5000}
+                  className="h-12 mt-1"
+                  data-testid="input-window-x"
+                  onChange={(e) => saveCalibrationMutation.mutate({ window: { ...calibration?.window, x: parseInt(e.target.value) || 5000 } } as any)}
+                />
+              </div>
+              <div>
+                <Label>Y (шаги)</Label>
+                <Input 
+                  type="number"
+                  value={calibration?.window?.y || 5000}
+                  className="h-12 mt-1"
+                  data-testid="input-window-y"
+                  onChange={(e) => saveCalibrationMutation.mutate({ window: { ...calibration?.window, y: parseInt(e.target.value) || 5000 } } as any)}
+                />
+              </div>
+            </div>
+          </Card>
+
+          <Card className="p-6">
+            <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
+              <Move className="w-5 h-5" />
+              Кинематика CoreXY
+            </h3>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label>X+ dir A</Label>
+                <Input 
+                  type="number"
+                  value={calibration?.kinematics?.x_plus_dir_a || 1}
+                  className="h-12 mt-1"
+                  data-testid="input-kinematics-x-plus-dir-a"
+                  onChange={(e) => saveCalibrationMutation.mutate({ kinematics: { ...calibration?.kinematics, x_plus_dir_a: parseInt(e.target.value) || 1 } } as any)}
+                />
+              </div>
+              <div>
+                <Label>X+ dir B</Label>
+                <Input 
+                  type="number"
+                  value={calibration?.kinematics?.x_plus_dir_b || -1}
+                  className="h-12 mt-1"
+                  data-testid="input-kinematics-x-plus-dir-b"
+                  onChange={(e) => saveCalibrationMutation.mutate({ kinematics: { ...calibration?.kinematics, x_plus_dir_b: parseInt(e.target.value) || -1 } } as any)}
+                />
+              </div>
+              <div>
+                <Label>Y+ dir A</Label>
+                <Input 
+                  type="number"
+                  value={calibration?.kinematics?.y_plus_dir_a || 1}
+                  className="h-12 mt-1"
+                  data-testid="input-kinematics-y-plus-dir-a"
+                  onChange={(e) => saveCalibrationMutation.mutate({ kinematics: { ...calibration?.kinematics, y_plus_dir_a: parseInt(e.target.value) || 1 } } as any)}
+                />
+              </div>
+              <div>
+                <Label>Y+ dir B</Label>
+                <Input 
+                  type="number"
+                  value={calibration?.kinematics?.y_plus_dir_b || 1}
+                  className="h-12 mt-1"
+                  data-testid="input-kinematics-y-plus-dir-b"
+                  onChange={(e) => saveCalibrationMutation.mutate({ kinematics: { ...calibration?.kinematics, y_plus_dir_b: parseInt(e.target.value) || 1 } } as any)}
+                />
+              </div>
+            </div>
+          </Card>
+        </div>
+      </div>
+    </div>
+  );
+
   return (
     <>
       {renderHeader()}
@@ -992,6 +1535,8 @@ export default function KioskPage() {
       {screen === 'operations_log' && renderOperationsLog()}
       {screen === 'statistics' && renderStatistics()}
       {screen === 'diagnostics' && renderDiagnostics()}
+      {screen === 'mechanics_test' && renderMechanicsTest()}
+      {screen === 'calibration' && renderCalibration()}
       {screen === 'progress' && renderProgress()}
       {screen === 'success' && renderSuccess()}
       {screen === 'error' && renderError()}
