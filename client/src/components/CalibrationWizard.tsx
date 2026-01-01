@@ -68,6 +68,7 @@ export default function CalibrationWizard() {
     label: string;
   } | null>(null);
   const [grabSide, setGrabSide] = useState<'front' | 'back'>('front');
+  const [blockedSide, setBlockedSide] = useState<'front' | 'back'>('front');
   const [quickTestCell, setQuickTestCell] = useState({ side: 'front' as 'front' | 'back', col: 0, row: 0 });
 
   const { data: calibration, refetch: refetchCalibration } = useQuery<CalibrationData>({
@@ -647,10 +648,7 @@ export default function CalibrationWizard() {
     );
   };
 
-  const renderBlocked = () => {
-    const [side, setSide] = useState<'front' | 'back'>('front');
-    
-    return (
+  const renderBlocked = () => (
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <h3 className="text-lg font-semibold">Редактор заблокированных ячеек</h3>
@@ -659,7 +657,7 @@ export default function CalibrationWizard() {
           </Button>
         </div>
 
-        <Tabs value={side} onValueChange={(v) => setSide(v as 'front' | 'back')}>
+        <Tabs value={blockedSide} onValueChange={(v) => setBlockedSide(v as 'front' | 'back')}>
           <TabsList>
             <TabsTrigger value="front">FRONT (к читателю)</TabsTrigger>
             <TabsTrigger value="back">BACK (к библиотекарю)</TabsTrigger>
@@ -683,15 +681,15 @@ export default function CalibrationWizard() {
                   Колонка {col}
                 </div>
                 {Array.from({ length: 21 }, (_, row) => {
-                  const blocked = calibration?.blocked_cells?.[side]?.[String(col)]?.includes(row);
+                  const blocked = calibration?.blocked_cells?.[blockedSide]?.[String(col)]?.includes(row);
                   return (
                     <Button
                       key={row}
                       variant="outline"
                       size="sm"
                       className={`w-full h-8 ${blocked ? 'bg-red-100 border-red-300 hover:bg-red-200' : 'bg-green-50 hover:bg-green-100'}`}
-                      onClick={() => toggleBlockedCell(side, col, row)}
-                      data-testid={`btn-cell-${side}-${col}-${row}`}
+                      onClick={() => toggleBlockedCell(blockedSide, col, row)}
+                      data-testid={`btn-cell-${blockedSide}-${col}-${row}`}
                     >
                       <span className="text-xs">
                         {blocked ? <Lock className="w-3 h-3 inline mr-1" /> : <Unlock className="w-3 h-3 inline mr-1" />}
@@ -705,8 +703,7 @@ export default function CalibrationWizard() {
           </div>
         </ScrollArea>
       </div>
-    );
-  };
+  );
 
   const renderQuickTest = () => (
     <div className="space-y-4">
