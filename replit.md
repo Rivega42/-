@@ -42,7 +42,22 @@ Preferred communication style: Simple, everyday language (Русский).
 **Мониторинг (monitoring/):**
 - `telegram.py` - Уведомления через Telegram Bot API
 - `backup.py` - Резервное копирование с ротацией
-- `watchdog.py` - Мониторинг состояния
+- `watchdog.py` - Мониторинг состояния (motors, sensors, rfid, database, websocket)
+
+### WebSocket команды
+
+| Action | Commands | Описание |
+|--------|----------|----------|
+| `motor` | move_xy, move_relative, extend_tray, retract_tray, stop, home, get_position, get_sensors | Управление моторами |
+| `servo` | open, close | Управление замками (lock1, lock2) |
+| `shutter` | open, close | Управление шторками (inner, outer) |
+
+### Watchdog сервис
+
+Проверяет компоненты каждые 60 секунд:
+- motors, sensors, rfid_card, rfid_book, database, websocket
+- Порог ошибок: 3 последовательных сбоя
+- Интеграция с systemd через NOTIFY_SOCKET
 
 ### Роли пользователей
 
@@ -77,6 +92,30 @@ PathPlanner класс реализует:
 - Промежуточные точки каждые 2000 шагов для больших перемещений
 - MAX_DIAGONAL_STEP = 500 для определения прямых перемещений
 - estimate_time() с учётом пути и параллельного движения CoreXY осей
+
+### Инвентаризация
+
+**run_inventory()** - полная инвентаризация с RFID сканированием:
+- Обход всех ячеек: take_shelf → RFID inventory → give_shelf
+- Статусы: ok, missing, mismatch, unexpected
+- Метаданные RFID: antenna_id, num_tags, rssi_dbm для каждого тега
+- Возвращает полный массив results без обрезки
+
+**run_quick_inventory()** - быстрая инвентаризация без RFID:
+- Только проверка статусов в базе данных
+- Подсчёт: found, empty, needs_extraction
+
+### Валидация калибровки
+
+**validate()** проверяет:
+- positions.x: 3 колонки, отсортированные, >= 0
+- positions.y: 21 ряд, отсортированные, >= 0
+- kinematics: все направления ±1
+- speeds: xy/tray (1-10000), acceleration (1-20000)
+- servos: углы 0-180°
+- grab_front/back: обязательные ключи extend1/retract/extend2 (0-10000)
+
+**update_with_validation()** мержит данные и сохраняет только при valid=True
 
 ### Безопасность датчиков
 
