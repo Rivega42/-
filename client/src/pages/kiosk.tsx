@@ -245,7 +245,7 @@ export default function KioskPage() {
 
   const testMotorMutation = useMutation({
     mutationFn: async (params: { command: string; axis?: string; steps?: number; speed?: number }) => {
-      const response = await apiRequest('POST', '/api/test/motor', params);
+      const response = await apiRequest('POST', '/api/test/motors', params);
       return response.json();
     },
     onSuccess: () => {
@@ -272,7 +272,7 @@ export default function KioskPage() {
 
   const testServoMutation = useMutation({
     mutationFn: async (params: { servo: string; command: string }) => {
-      const response = await apiRequest('POST', '/api/test/servo', params);
+      const response = await apiRequest('POST', '/api/test/servos', params);
       return response.json();
     },
     onSuccess: () => {
@@ -286,7 +286,7 @@ export default function KioskPage() {
 
   const testShutterMutation = useMutation({
     mutationFn: async (params: { shutter: string; command: string }) => {
-      const response = await apiRequest('POST', '/api/test/shutter', params);
+      const response = await apiRequest('POST', '/api/test/shutters', params);
       return response.json();
     },
     onSuccess: () => {
