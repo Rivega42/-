@@ -704,6 +704,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get("/api/diagnostics", async (req, res) => {
+    try {
+      const rfidStatus = rfidService.getConnectionStatus();
+      
+      res.json({
+        sensors: systemStatus.sensors,
+        motors: systemStatus.state === 'error' ? 'error' : 'ok',
+        rfid: {
+          cardReader: rfidStatus.connected ? 'connected' : 'disconnected',
+          bookReader: 'connected', // Mock: book reader always connected in dev mode
+        },
+        system: {
+          state: systemStatus.state,
+          position: systemStatus.position,
+          shutters: systemStatus.shutters,
+          locks: systemStatus.locks,
+          irbisConnected: systemStatus.irbisConnected,
+          autonomousMode: systemStatus.autonomousMode,
+          maintenanceMode: systemStatus.maintenanceMode,
+        }
+      });
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to get diagnostics' });
+    }
+  });
+
   // ==================== СИМУЛЯЦИЯ (для тестирования) ====================
 
   app.post("/api/simulate-tag-read", async (req, res) => {
