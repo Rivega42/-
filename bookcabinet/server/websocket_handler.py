@@ -48,7 +48,117 @@ class WebSocketHandler:
                 await ws.send_json({'type': 'auth_result', 'data': result})
             
             elif action == 'motor':
-                pass
+                from ..hardware.motors import motors
+                from ..hardware.sensors import sensors
+                
+                cmd = message.get('command')
+                value = message.get('value', 0)
+                
+                if cmd == 'move_xy':
+                    x = message.get('x', 0)
+                    y = message.get('y', 0)
+                    success = await motors.move_xy(x, y)
+                    pos = motors.get_position()
+                    await ws.send_json({
+                        'type': 'motor_result',
+                        'success': success,
+                        'position': pos
+                    })
+                
+                elif cmd == 'move_relative':
+                    dx = message.get('dx', 0)
+                    dy = message.get('dy', 0)
+                    pos = motors.get_position()
+                    success = await motors.move_xy(pos['x'] + dx, pos['y'] + dy)
+                    new_pos = motors.get_position()
+                    await ws.send_json({
+                        'type': 'motor_result',
+                        'success': success,
+                        'position': new_pos
+                    })
+                
+                elif cmd == 'extend_tray':
+                    steps = message.get('steps')
+                    success = await motors.extend_tray(steps)
+                    await ws.send_json({
+                        'type': 'motor_result',
+                        'success': success,
+                        'tray': motors.get_position()['tray']
+                    })
+                
+                elif cmd == 'retract_tray':
+                    steps = message.get('steps')
+                    success = await motors.retract_tray(steps)
+                    await ws.send_json({
+                        'type': 'motor_result',
+                        'success': success,
+                        'tray': motors.get_position()['tray']
+                    })
+                
+                elif cmd == 'stop':
+                    motors.stop()
+                    await ws.send_json({
+                        'type': 'motor_result',
+                        'success': True,
+                        'stopped': True
+                    })
+                
+                elif cmd == 'home':
+                    from ..mechanics.algorithms import algorithms
+                    success = await algorithms.init_home()
+                    await ws.send_json({
+                        'type': 'motor_result',
+                        'success': success,
+                        'position': motors.get_position()
+                    })
+                
+                elif cmd == 'get_position':
+                    await ws.send_json({
+                        'type': 'position',
+                        **motors.get_position()
+                    })
+                
+                elif cmd == 'get_sensors':
+                    await ws.send_json({
+                        'type': 'sensors',
+                        'data': sensors.read_all()
+                    })
+                
+                else:
+                    await ws.send_json({
+                        'type': 'error',
+                        'message': f'Unknown motor command: {cmd}'
+                    })
+            
+            elif action == 'servo':
+                from ..hardware.servos import servos
+                
+                cmd = message.get('command')
+                lock = message.get('lock', 'lock1')
+                
+                if cmd == 'open':
+                    await servos.open_lock(lock)
+                    await ws.send_json({'type': 'servo_result', 'success': True, 'lock': lock, 'state': 'open'})
+                elif cmd == 'close':
+                    await servos.close_lock(lock)
+                    await ws.send_json({'type': 'servo_result', 'success': True, 'lock': lock, 'state': 'closed'})
+                else:
+                    await ws.send_json({'type': 'error', 'message': f'Unknown servo command: {cmd}'})
+            
+            elif action == 'shutter':
+                from ..hardware.shutters import shutters
+                
+                cmd = message.get('command')
+                shutter = message.get('shutter', 'inner')
+                
+                if cmd == 'open':
+                    await shutters.open_shutter(shutter)
+                    await ws.send_json({'type': 'shutter_result', 'success': True, 'shutter': shutter, 'state': 'open'})
+                elif cmd == 'close':
+                    await shutters.close_shutter(shutter)
+                    await ws.send_json({'type': 'shutter_result', 'success': True, 'shutter': shutter, 'state': 'closed'})
+                else:
+                    await ws.send_json({'type': 'error', 'message': f'Unknown shutter command: {cmd}'})
             
         except json.JSONDecodeError:
             await ws.send_json({'type': 'error', 'message': 'Invalid JSON'})

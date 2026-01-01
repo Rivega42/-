@@ -93,6 +93,107 @@ class Calibration:
     def reset(self):
         self.data = self._default_data()
         self.save()
+    
+    def validate(self, data: Dict = None) -> Dict:
+        """Валидация данных калибровки"""
+        to_validate = data if data else self.data
+        errors = []
+        warnings = []
+        
+        # Проверка positions
+        positions = to_validate.get('positions', {})
+        
+        x_positions = positions.get('x', [])
+        if len(x_positions) != 3:
+            errors.append(f'positions.x должен содержать 3 элемента (колонки), найдено {len(x_positions)}')
+        else:
+            for i, x in enumerate(x_positions):
+                if not isinstance(x, (int, float)) or x < 0:
+                    errors.append(f'positions.x[{i}] должен быть >= 0')
+                if x > 15000:
+                    warnings.append(f'positions.x[{i}] = {x} выходит за типичный диапазон')
+            
+            if x_positions != sorted(x_positions):
+                errors.append('positions.x должны быть отсортированы по возрастанию')
+        
+        y_positions = positions.get('y', [])
+        if len(y_positions) != 21:
+            errors.append(f'positions.y должен содержать 21 элемент (ряды), найдено {len(y_positions)}')
+        else:
+            for i, y in enumerate(y_positions):
+                if not isinstance(y, (int, float)) or y < 0:
+                    errors.append(f'positions.y[{i}] должен быть >= 0')
+                if y > 15000:
+                    warnings.append(f'positions.y[{i}] = {y} выходит за типичный диапазон')
+            
+            if y_positions != sorted(y_positions):
+                errors.append('positions.y должны быть отсортированы по возрастанию')
+        
+        # Проверка kinematics
+        kinematics = to_validate.get('kinematics', {})
+        for key in ['x_plus_dir_a', 'x_plus_dir_b', 'y_plus_dir_a', 'y_plus_dir_b']:
+            val = kinematics.get(key)
+            if val not in [-1, 1]:
+                errors.append(f'kinematics.{key} должен быть -1 или 1')
+        
+        # Проверка speeds
+        speeds = to_validate.get('speeds', {})
+        if speeds.get('xy', 0) <= 0 or speeds.get('xy', 0) > 10000:
+            errors.append('speeds.xy должен быть в диапазоне 1-10000')
+        if speeds.get('tray', 0) <= 0 or speeds.get('tray', 0) > 10000:
+            errors.append('speeds.tray должен быть в диапазоне 1-10000')
+        if speeds.get('acceleration', 0) <= 0 or speeds.get('acceleration', 0) > 20000:
+            errors.append('speeds.acceleration должен быть в диапазоне 1-20000')
+        
+        # Проверка servos
+        servos = to_validate.get('servos', {})
+        for key in ['lock1_open', 'lock1_close', 'lock2_open', 'lock2_close']:
+            val = servos.get(key, -1)
+            if not isinstance(val, (int, float)) or val < 0 or val > 180:
+                errors.append(f'servos.{key} должен быть в диапазоне 0-180')
+        
+        # Проверка grab параметров
+        for grab_key in ['grab_front', 'grab_back']:
+            grab = to_validate.get(grab_key)
+            if grab is None:
+                errors.append(f'{grab_key} обязателен')
+                continue
+            if not isinstance(grab, dict):
+                errors.append(f'{grab_key} должен быть объектом')
+                continue
+            for key in ['extend1', 'retract', 'extend2']:
+                if key not in grab:
+                    errors.append(f'{grab_key}.{key} обязателен')
+                    continue
+                val = grab.get(key, -1)
+                if not isinstance(val, (int, float)) or val < 0 or val > 10000:
+                    errors.append(f'{grab_key}.{key} должен быть в диапазоне 0-10000')
+        
+        return {
+            'valid': len(errors) == 0,
+            'errors': errors,
+            'warnings': warnings,
+        }
+    
+    def update_with_validation(self, data: Dict) -> Dict:
+        """Обновление калибровки с валидацией"""
+        merged = {**self.data}
+        
+        for key in ['positions', 'kinematics', 'speeds', 'servos', 'grab_front', 'grab_back']:
+            if key in data:
+                if isinstance(data[key], dict) and isinstance(merged.get(key), dict):
+                    merged[key] = {**merged.get(key, {}), **data[key]}
+                else:
+                    merged[key] = data[key]
+        
+        validation = self.validate(merged)
+        
+        if validation['valid']:
+            self.data = merged
+            self.save()
+            return {'success': True, 'warnings': validation['warnings']}
+        else:
+            return {'success': False, 'errors': validation['errors'], 'warnings': validation['warnings']}
 
 
 calibration = Calibration()

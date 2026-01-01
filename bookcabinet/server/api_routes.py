@@ -202,7 +202,18 @@ async def post_inventory(request):
     if error:
         return error
     
-    result = await unload_service.run_inventory()
+    data = await request.json() if request.body_exists else {}
+    quick = data.get('quick', False)
+    scan_rfid = data.get('scan_rfid', True)
+    
+    if quick:
+        result = await unload_service.run_quick_inventory()
+    else:
+        result = await unload_service.run_inventory(
+            on_progress=ws_handler.send_progress,
+            scan_rfid=scan_rfid
+        )
+    
     return json_response(result)
 
 
@@ -246,19 +257,18 @@ async def post_calibration(request):
     
     data = await request.json()
     
-    if 'positions' in data:
-        calibration.data['positions'] = data['positions']
-    if 'kinematics' in data:
-        calibration.data['kinematics'] = data['kinematics']
-    if 'speeds' in data:
-        calibration.data['speeds'] = data['speeds']
-    if 'servos' in data:
-        calibration.data['servos'] = data['servos']
+    validate_only = data.pop('validate_only', False)
     
-    calibration.save()
-    db.add_system_log('INFO', 'Калибровка обновлена', 'calibration')
+    if validate_only:
+        result = calibration.validate(data)
+        return json_response(result)
     
-    return json_response({'success': True})
+    result = calibration.update_with_validation(data)
+    
+    if result['success']:
+        db.add_system_log('INFO', 'Калибровка обновлена', 'calibration')
+    
+    return json_response(result)
 
 
 async def post_calibration_test(request):
