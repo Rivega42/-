@@ -141,6 +141,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Специфичные роуты ПЕРЕД параметризованными
+  app.get("/api/cells/extraction", async (req, res) => {
+    try {
+      const cells = await storage.getCellsNeedingExtraction();
+      res.json(cells);
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to get cells' });
+    }
+  });
+
+  app.get("/api/cells/available/:row?", async (req, res) => {
+    try {
+      const cells = await storage.getAvailableCells(req.params.row);
+      res.json(cells);
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to get available cells' });
+    }
+  });
+
+  // Параметризованные роуты ПОСЛЕ специфичных
   app.get("/api/cells/:id", async (req, res) => {
     try {
       const cell = await storage.getCell(parseInt(req.params.id));
@@ -158,24 +178,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(cell);
     } catch (error) {
       res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to update cell' });
-    }
-  });
-
-  app.get("/api/cells/available/:row?", async (req, res) => {
-    try {
-      const cells = await storage.getAvailableCells(req.params.row);
-      res.json(cells);
-    } catch (error) {
-      res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to get available cells' });
-    }
-  });
-
-  app.get("/api/cells/extraction", async (req, res) => {
-    try {
-      const cells = await storage.getCellsNeedingExtraction();
-      res.json(cells);
-    } catch (error) {
-      res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to get cells' });
     }
   });
 

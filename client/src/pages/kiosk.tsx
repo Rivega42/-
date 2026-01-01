@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import type { User, Book, Cell, SystemStatus } from "@shared/schema";
+import type { User, Book, Cell, SystemStatus, Operation, Statistics } from "@shared/schema";
 import { 
   BookOpen, 
   Undo2, 
@@ -26,7 +26,10 @@ import {
   Package,
   AlertTriangle,
   Search,
-  Plus
+  Plus,
+  History,
+  BarChart3,
+  Activity
 } from "lucide-react";
 
 type Screen = 
@@ -39,6 +42,9 @@ type Screen =
   | 'load_books'
   | 'extract_books'
   | 'inventory'
+  | 'operations_log'
+  | 'statistics'
+  | 'diagnostics'
   | 'progress' 
   | 'success' 
   | 'error'
@@ -71,6 +77,26 @@ export default function KioskPage() {
   const { data: cellsNeedingExtraction = [] } = useQuery<Cell[]>({
     queryKey: ['/api/cells/extraction'],
     enabled: session?.user.role === 'librarian' || session?.user.role === 'admin',
+  });
+
+  const { data: allCells = [] } = useQuery<Cell[]>({
+    queryKey: ['/api/cells'],
+    enabled: screen === 'extract_books',
+  });
+
+  const { data: statistics } = useQuery<Statistics>({
+    queryKey: ['/api/statistics'],
+    enabled: screen === 'statistics',
+  });
+
+  const { data: operations = [] } = useQuery<Operation[]>({
+    queryKey: ['/api/operations'],
+    enabled: screen === 'operations_log',
+  });
+
+  const { data: diagnostics } = useQuery<{ sensors: Record<string, boolean>; motors: string; rfid: Record<string, string> }>({
+    queryKey: ['/api/diagnostics'],
+    enabled: screen === 'diagnostics',
   });
 
   useEffect(() => {
@@ -483,6 +509,30 @@ export default function KioskPage() {
               <p className="text-slate-500">Проверить содержимое</p>
             </CardContent>
           </Card>
+
+          <Card 
+            className="cursor-pointer hover:shadow-xl transition-all active:scale-[0.98]"
+            onClick={() => setScreen('operations_log')}
+            data-testid="card-operations-log"
+          >
+            <CardContent className="p-7 flex flex-col items-center text-center">
+              <History className="w-14 h-14 text-slate-600 mb-3" />
+              <h3 className="text-xl font-bold mb-1">Журнал операций</h3>
+              <p className="text-slate-500">История выдач и возвратов</p>
+            </CardContent>
+          </Card>
+
+          <Card 
+            className="cursor-pointer hover:shadow-xl transition-all active:scale-[0.98]"
+            onClick={() => setScreen('statistics')}
+            data-testid="card-statistics"
+          >
+            <CardContent className="p-7 flex flex-col items-center text-center">
+              <BarChart3 className="w-14 h-14 text-indigo-500 mb-3" />
+              <h3 className="text-xl font-bold mb-1">Статистика</h3>
+              <p className="text-slate-500">Аналитика и отчёты</p>
+            </CardContent>
+          </Card>
         </div>
       </div>
     </div>
@@ -520,6 +570,7 @@ export default function KioskPage() {
 
           <Card 
             className="cursor-pointer hover:shadow-xl transition-all active:scale-[0.98]"
+            onClick={() => setScreen('diagnostics')}
             data-testid="card-diagnostics"
           >
             <CardContent className="p-7 flex flex-col items-center text-center">
@@ -631,11 +682,7 @@ export default function KioskPage() {
   );
 
   const renderExtractBooks = () => {
-    const { data: cells = [] } = useQuery<Cell[]>({
-      queryKey: ['/api/cells'],
-    });
-    
-    const extractionCells = cells.filter(c => c.needsExtraction);
+    const extractionCells = allCells.filter(c => c.needsExtraction);
 
     return (
       <div className="min-h-screen bg-slate-100 pt-28 p-6" data-testid="screen-extract-books">
@@ -774,6 +821,163 @@ export default function KioskPage() {
     </div>
   );
 
+  const renderOperationsLog = () => (
+    <div className="min-h-screen bg-slate-100 pt-28 p-6" data-testid="screen-operations-log">
+      <div className="max-w-4xl mx-auto">
+        <h2 className="text-3xl font-bold text-slate-800 mb-6">Журнал операций</h2>
+        
+        {operations.length === 0 ? (
+          <Card className="p-10 text-center">
+            <History className="w-16 h-16 text-slate-400 mx-auto mb-4" />
+            <p className="text-xl text-slate-500">Нет операций</p>
+          </Card>
+        ) : (
+          <ScrollArea className="h-[calc(100vh-200px)]">
+            <div className="space-y-3">
+              {operations.map((op) => (
+                <Card key={op.id} className="p-4" data-testid={`card-operation-${op.id}`}>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <Badge variant={op.result === 'success' ? 'default' : 'destructive'}>
+                          {op.operation}
+                        </Badge>
+                        <span className="text-sm text-slate-500">
+                          {new Date(op.timestamp).toLocaleString()}
+                        </span>
+                      </div>
+                      {op.bookTitle && (
+                        <p className="text-slate-600 mt-1">{op.bookTitle}</p>
+                      )}
+                    </div>
+                    <div className={`text-sm ${op.result === 'success' ? 'text-green-600' : 'text-red-600'}`}>
+                      {op.result === 'success' ? 'Успешно' : 'Ошибка'}
+                    </div>
+                  </div>
+                </Card>
+              ))}
+            </div>
+          </ScrollArea>
+        )}
+      </div>
+    </div>
+  );
+
+  const renderStatistics = () => (
+    <div className="min-h-screen bg-slate-100 pt-28 p-6" data-testid="screen-statistics">
+      <div className="max-w-4xl mx-auto">
+        <h2 className="text-3xl font-bold text-slate-800 mb-6">Статистика</h2>
+        
+        <div className="grid grid-cols-2 gap-5">
+          <Card className="p-6">
+            <div className="flex items-center gap-4">
+              <BookOpen className="w-12 h-12 text-blue-500" />
+              <div>
+                <p className="text-sm text-slate-500">Выдано сегодня</p>
+                <p className="text-3xl font-bold">{statistics?.issuesToday || 0}</p>
+                <p className="text-sm text-slate-400">Всего: {statistics?.issuesTotal || 0}</p>
+              </div>
+            </div>
+          </Card>
+
+          <Card className="p-6">
+            <div className="flex items-center gap-4">
+              <Undo2 className="w-12 h-12 text-green-500" />
+              <div>
+                <p className="text-sm text-slate-500">Возвращено сегодня</p>
+                <p className="text-3xl font-bold">{statistics?.returnsToday || 0}</p>
+                <p className="text-sm text-slate-400">Всего: {statistics?.returnsTotal || 0}</p>
+              </div>
+            </div>
+          </Card>
+
+          <Card className="p-6">
+            <div className="flex items-center gap-4">
+              <Package className="w-12 h-12 text-slate-500" />
+              <div>
+                <p className="text-sm text-slate-500">Заполненность шкафа</p>
+                <p className="text-3xl font-bold">{statistics?.occupiedCells || 0}/{statistics?.totalCells || 0}</p>
+                <Progress 
+                  value={statistics?.totalCells ? (statistics.occupiedCells / statistics.totalCells) * 100 : 0} 
+                  className="h-2 mt-2 w-32" 
+                />
+              </div>
+            </div>
+          </Card>
+
+          <Card className="p-6">
+            <div className="flex items-center gap-4">
+              <AlertTriangle className="w-12 h-12 text-orange-500" />
+              <div>
+                <p className="text-sm text-slate-500">Требуют изъятия</p>
+                <p className="text-3xl font-bold text-orange-500">{statistics?.booksNeedExtraction || 0}</p>
+              </div>
+            </div>
+          </Card>
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderDiagnostics = () => (
+    <div className="min-h-screen bg-slate-100 pt-28 p-6" data-testid="screen-diagnostics">
+      <div className="max-w-4xl mx-auto">
+        <h2 className="text-3xl font-bold text-slate-800 mb-6">Диагностика оборудования</h2>
+        
+        <div className="grid grid-cols-2 gap-5">
+          <Card className="p-6">
+            <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
+              <Activity className="w-5 h-5" />
+              Датчики
+            </h3>
+            <div className="space-y-2">
+              {diagnostics?.sensors && Object.entries(diagnostics.sensors).map(([key, value]) => (
+                <div key={key} className="flex items-center justify-between py-2 border-b">
+                  <span className="text-slate-600">{key}</span>
+                  <Badge variant={value ? 'default' : 'secondary'}>
+                    {value ? 'Активен' : 'Неактивен'}
+                  </Badge>
+                </div>
+              ))}
+              {!diagnostics && <p className="text-slate-400">Загрузка...</p>}
+            </div>
+          </Card>
+
+          <Card className="p-6">
+            <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
+              <Settings className="w-5 h-5" />
+              Моторы
+            </h3>
+            <div className="flex items-center gap-3">
+              <div className={`w-4 h-4 rounded-full ${diagnostics?.motors === 'ok' ? 'bg-green-500' : 'bg-red-500'}`} />
+              <span className="text-lg">
+                {diagnostics?.motors === 'ok' ? 'В норме' : diagnostics?.motors || 'Проверка...'}
+              </span>
+            </div>
+          </Card>
+
+          <Card className="p-6 col-span-2">
+            <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
+              <CreditCard className="w-5 h-5" />
+              RFID считыватели
+            </h3>
+            <div className="grid grid-cols-2 gap-4">
+              {diagnostics?.rfid && Object.entries(diagnostics.rfid).map(([key, value]) => (
+                <div key={key} className="flex items-center justify-between py-2 px-4 bg-slate-50 rounded">
+                  <span className="text-slate-600">{key}</span>
+                  <Badge variant={value === 'connected' ? 'default' : 'destructive'}>
+                    {value === 'connected' ? 'Подключён' : value}
+                  </Badge>
+                </div>
+              ))}
+              {!diagnostics && <p className="text-slate-400">Загрузка...</p>}
+            </div>
+          </Card>
+        </div>
+      </div>
+    </div>
+  );
+
   return (
     <>
       {renderHeader()}
@@ -785,6 +989,9 @@ export default function KioskPage() {
       {screen === 'return_book' && renderReturnBook()}
       {screen === 'load_books' && renderLoadBooks()}
       {screen === 'extract_books' && renderExtractBooks()}
+      {screen === 'operations_log' && renderOperationsLog()}
+      {screen === 'statistics' && renderStatistics()}
+      {screen === 'diagnostics' && renderDiagnostics()}
       {screen === 'progress' && renderProgress()}
       {screen === 'success' && renderSuccess()}
       {screen === 'error' && renderError()}
