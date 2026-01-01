@@ -40,8 +40,10 @@ import {
   Home,
   ArrowUp,
   ArrowDown,
-  ArrowRight
+  ArrowRight,
+  Box
 } from "lucide-react";
+import { CabinetViewer } from "@/components/CabinetViewer";
 
 type Screen = 
   | 'welcome' 
@@ -58,6 +60,7 @@ type Screen =
   | 'diagnostics'
   | 'mechanics_test'
   | 'calibration'
+  | 'cabinet_view'
   | 'progress' 
   | 'success' 
   | 'error'
@@ -92,9 +95,9 @@ export default function KioskPage() {
     enabled: session?.user.role === 'librarian' || session?.user.role === 'admin',
   });
 
-  const { data: allCells = [] } = useQuery<Cell[]>({
+  const { data: cells = [] } = useQuery<Cell[]>({
     queryKey: ['/api/cells'],
-    enabled: screen === 'extract_books',
+    enabled: screen === 'extract_books' || screen === 'cabinet_view',
   });
 
   const { data: statistics } = useQuery<Statistics>({
@@ -634,6 +637,18 @@ export default function KioskPage() {
               <p className="text-slate-500">Аналитика и отчёты</p>
             </CardContent>
           </Card>
+
+          <Card 
+            className="cursor-pointer hover:shadow-xl transition-all active:scale-[0.98]"
+            onClick={() => setScreen('cabinet_view')}
+            data-testid="card-cabinet-view"
+          >
+            <CardContent className="p-7 flex flex-col items-center text-center">
+              <Box className="w-14 h-14 text-cyan-500 mb-3" />
+              <h3 className="text-xl font-bold mb-1">3D-модель шкафа</h3>
+              <p className="text-slate-500">Визуализация RFID-меток</p>
+            </CardContent>
+          </Card>
         </div>
       </div>
     </div>
@@ -807,7 +822,7 @@ export default function KioskPage() {
   );
 
   const renderExtractBooks = () => {
-    const extractionCells = allCells.filter(c => c.needsExtraction);
+    const extractionCells = cells.filter(c => c.needsExtraction);
 
     return (
       <div className="min-h-screen bg-slate-100 pt-28 p-6" data-testid="screen-extract-books">
@@ -1521,6 +1536,28 @@ export default function KioskPage() {
     </div>
   );
 
+  const renderCabinetView = () => {
+    const cabinetCells = cells.map(cell => ({
+      id: cell.id,
+      row: cell.row || 'A',
+      x: cell.x,
+      y: cell.y,
+      status: cell.status as 'empty' | 'occupied' | 'reserved' | 'needs_extraction',
+      bookRfid: cell.bookRfid || undefined,
+      bookTitle: cell.bookTitle || undefined,
+      bookAuthor: cell.bookAuthor || undefined
+    }));
+
+    return (
+      <div className="min-h-screen bg-slate-100 pt-28 p-6" data-testid="screen-cabinet-view">
+        <div className="max-w-7xl mx-auto h-[calc(100vh-160px)]">
+          <h2 className="text-3xl font-bold text-slate-800 mb-4">3D-модель шкафа</h2>
+          <CabinetViewer cells={cabinetCells} />
+        </div>
+      </div>
+    );
+  };
+
   return (
     <>
       {renderHeader()}
@@ -1537,6 +1574,7 @@ export default function KioskPage() {
       {screen === 'diagnostics' && renderDiagnostics()}
       {screen === 'mechanics_test' && renderMechanicsTest()}
       {screen === 'calibration' && renderCalibration()}
+      {screen === 'cabinet_view' && renderCabinetView()}
       {screen === 'progress' && renderProgress()}
       {screen === 'success' && renderSuccess()}
       {screen === 'error' && renderError()}
