@@ -481,30 +481,49 @@ export default function CalibrationWizard() {
           {kinematicsStep ? (
             <div className="space-y-6">
               <div className="text-2xl font-bold">{kinematicsStep.label}</div>
-              <p className="text-lg">Куда поехала каретка?</p>
+              <p className="text-lg text-slate-600">Куда поехала каретка?</p>
               
-              <div className="grid grid-cols-3 gap-4 max-w-[300px] mx-auto">
-                <div></div>
-                <Button size="lg" onClick={() => respondKinematics('W')} disabled={isRunning} data-testid="btn-kin-w">
-                  <ArrowUp className="w-8 h-8" />
+              <div className="grid grid-cols-2 gap-4 max-w-[400px] mx-auto">
+                <Button 
+                  size="lg" 
+                  className="h-20 text-lg flex flex-col gap-1"
+                  onClick={() => respondKinematics('W')} 
+                  disabled={isRunning} 
+                  data-testid="btn-kin-w"
+                >
+                  <ArrowUp className="w-6 h-6" />
+                  <span>Вверх (Y+)</span>
                 </Button>
-                <div></div>
-                
-                <Button size="lg" onClick={() => respondKinematics('A')} disabled={isRunning} data-testid="btn-kin-a">
-                  <ArrowLeft className="w-8 h-8" />
+                <Button 
+                  size="lg" 
+                  className="h-20 text-lg flex flex-col gap-1"
+                  onClick={() => respondKinematics('S')} 
+                  disabled={isRunning} 
+                  data-testid="btn-kin-s"
+                >
+                  <ArrowDown className="w-6 h-6" />
+                  <span>Вниз (Y−)</span>
                 </Button>
-                <div className="flex items-center justify-center text-slate-400">
-                  WASD
-                </div>
-                <Button size="lg" onClick={() => respondKinematics('D')} disabled={isRunning} data-testid="btn-kin-d">
-                  <ArrowRight className="w-8 h-8" />
+                <Button 
+                  size="lg" 
+                  className="h-20 text-lg flex flex-col gap-1"
+                  onClick={() => respondKinematics('A')} 
+                  disabled={isRunning} 
+                  data-testid="btn-kin-a"
+                >
+                  <ArrowLeft className="w-6 h-6" />
+                  <span>Влево (X−)</span>
                 </Button>
-                
-                <div></div>
-                <Button size="lg" onClick={() => respondKinematics('S')} disabled={isRunning} data-testid="btn-kin-s">
-                  <ArrowDown className="w-8 h-8" />
+                <Button 
+                  size="lg" 
+                  className="h-20 text-lg flex flex-col gap-1"
+                  onClick={() => respondKinematics('D')} 
+                  disabled={isRunning} 
+                  data-testid="btn-kin-d"
+                >
+                  <ArrowRight className="w-6 h-6" />
+                  <span>Вправо (X+)</span>
                 </Button>
-                <div></div>
               </div>
             </div>
           ) : (
