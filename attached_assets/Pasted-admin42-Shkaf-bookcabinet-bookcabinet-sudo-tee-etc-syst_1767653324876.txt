@@ -1,0 +1,71 @@
+admin42@Shkaf:~/bookcabinet/bookcabinet $ sudo tee /etc/systemd/system/bookcabinet.service << 'EOF'
+[Unit]
+Description=BookCabinet Library RFID Kiosk
+After=network.target pigpiod.service pcscd.service
+Wants=pigpiod.service pcscd.service
+[Service]
+Type=simple
+User=admin42
+Group=admin42
+WorkingDirectory=/home/admin42/bookcabinet/bookcabinet
+ExecStart=/usr/bin/python3 main.py
+Restart=always
+RestartSec=5
+Environment=MOCK_MODE=false
+Environment=HOST=0.0.0.0
+Environment=PORT=5000
+StandardOutput=journal
+StandardError=journal
+[Install]
+WantedBy=multi-user.target
+EOF
+sudo systemctl daemon-reload
+sudo systemctl enable bookcabinet
+[Unit]
+Description=BookCabinet Library RFID Kiosk
+After=network.target pigpiod.service pcscd.service
+Wants=pigpiod.service pcscd.service
+[Service]
+Type=simple
+User=admin42
+Group=admin42
+WorkingDirectory=/home/admin42/bookcabinet/bookcabinet
+ExecStart=/usr/bin/python3 main.py
+Restart=always
+RestartSec=5
+Environment=MOCK_MODE=false
+Environment=HOST=0.0.0.0
+Environment=PORT=5000
+StandardOutput=journal
+StandardError=journal
+[Install]
+WantedBy=multi-user.target
+Created symlink '/etc/systemd/system/multi-user.target.wants/bookcabinet.service' → '/etc/systemd/system/bookcabinet.service'.
+admin42@Shkaf:~/bookcabinet/bookcabinet $ cd ~/bookcabinet/bookcabinet
+python3 main.py
+Traceback (most recent call last):
+  File "/home/admin42/bookcabinet/bookcabinet/main.py", line 15, in <module>
+    from bookcabinet.server.web_server import create_app
+  File "/home/admin42/bookcabinet/bookcabinet/server/__init__.py", line 1, in <module>
+    from .web_server import create_app, run_server
+  File "/home/admin42/bookcabinet/bookcabinet/server/web_server.py", line 8, in <module>
+    from .api_routes import setup_routes
+  File "/home/admin42/bookcabinet/bookcabinet/server/api_routes.py", line 8, in <module>
+    from ..database import db
+  File "/home/admin42/bookcabinet/bookcabinet/database/__init__.py", line 1, in <module>
+    from .db import db, Database
+  File "/home/admin42/bookcabinet/bookcabinet/database/db.py", line 327, in <module>
+    db = Database()
+  File "/home/admin42/bookcabinet/bookcabinet/database/db.py", line 17, in __init__
+    self._init_database()
+    ~~~~~~~~~~~~~~~~~~~^^
+  File "/home/admin42/bookcabinet/bookcabinet/database/db.py", line 30, in _init_database
+    with self.get_connection() as conn:
+         ~~~~~~~~~~~~~~~~~~~^^
+  File "/usr/lib/python3.13/contextlib.py", line 141, in __enter__
+    return next(self.gen)
+  File "/home/admin42/bookcabinet/bookcabinet/database/db.py", line 21, in get_connection
+    conn = sqlite3.connect(self.db_path)
+sqlite3.OperationalError: unable to open database file
+admin42@Shkaf:~/bookcabinet/bookcabinet $ ^C
+admin42@Shkaf:~/bookcabinet/bookcabinet $ 
