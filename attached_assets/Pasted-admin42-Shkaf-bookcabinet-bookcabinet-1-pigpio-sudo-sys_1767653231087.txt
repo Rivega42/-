@@ -1,0 +1,67 @@
+admin42@Shkaf:~/bookcabinet/bookcabinet $ # 1. Статус pigpio:
+sudo systemctl status pigpiod
+
+# 2. Статус PC/SC (для RFID карт):
+sudo systemctl status pcscd
+
+# 3. Статус основного сервиса:
+sudo systemctl status bookcabinet
+
+# 4. Если сервис не запущен - запусти вручную для теста:
+cd ~/bookcabinet/bookcabinet
+python3 main.py
+
+# 5. Проверить что порт открыт:
+curl http://localhost:5000
+● pigpiod.service - Pigpio daemon
+     Loaded: loaded (/etc/systemd/system/pigpiod.service; enabled; preset: enabled)
+     Active: active (running) since Tue 2026-01-06 01:43:19 MSK; 3min 19s ago
+ Invocation: ac35f9eeb46b4ee890af351a7f2ee4a0
+   Main PID: 4700 (pigpiod)
+      Tasks: 4 (limit: 751)
+        CPU: 15.087s
+     CGroup: /system.slice/pigpiod.service
+             └─4700 /usr/local/bin/pigpiod -l
+
+Jan 06 01:43:19 Shkaf systemd[1]: Starting pigpiod.service - Pigpio daemon...
+Jan 06 01:43:19 Shkaf systemd[1]: Started pigpiod.service - Pigpio daemon.
+○ pcscd.service - PC/SC Smart Card Daemon
+     Loaded: loaded (/usr/lib/systemd/system/pcscd.service; indirect; preset: enabled)
+     Active: inactive (dead) since Tue 2026-01-06 01:44:30 MSK; 2min 8s ago
+   Duration: 1min 1.485s
+ Invocation: 308886c944ab4d93ae5bf69b7483bd7b
+TriggeredBy: ● pcscd.socket
+       Docs: man:pcscd(8)
+    Process: 5061 ExecStart=/usr/sbin/pcscd --foreground --auto-exit $PCSCD_ARGS (code=exited, status=0/SUCCESS)
+   Main PID: 5061 (code=exited, status=0/SUCCESS)
+        CPU: 425ms
+
+Jan 06 01:43:29 Shkaf systemd[1]: Started pcscd.service - PC/SC Smart Card Daemon.
+Jan 06 01:44:30 Shkaf systemd[1]: pcscd.service: Deactivated successfully.
+Unit bookcabinet.service could not be found.
+Traceback (most recent call last):
+  File "/home/admin42/bookcabinet/bookcabinet/main.py", line 15, in <module>
+    from bookcabinet.server.web_server import create_app
+  File "/home/admin42/bookcabinet/bookcabinet/server/__init__.py", line 1, in <module>
+    from .web_server import create_app, run_server
+  File "/home/admin42/bookcabinet/bookcabinet/server/web_server.py", line 8, in <module>
+    from .api_routes import setup_routes
+  File "/home/admin42/bookcabinet/bookcabinet/server/api_routes.py", line 8, in <module>
+    from ..database import db
+  File "/home/admin42/bookcabinet/bookcabinet/database/__init__.py", line 1, in <module>
+    from .db import db, Database
+  File "/home/admin42/bookcabinet/bookcabinet/database/db.py", line 327, in <module>
+    db = Database()
+  File "/home/admin42/bookcabinet/bookcabinet/database/db.py", line 17, in __init__
+    self._init_database()
+    ~~~~~~~~~~~~~~~~~~~^^
+  File "/home/admin42/bookcabinet/bookcabinet/database/db.py", line 30, in _init_database
+    with self.get_connection() as conn:
+         ~~~~~~~~~~~~~~~~~~~^^
+  File "/usr/lib/python3.13/contextlib.py", line 141, in __enter__
+    return next(self.gen)
+  File "/home/admin42/bookcabinet/bookcabinet/database/db.py", line 21, in get_connection
+    conn = sqlite3.connect(self.db_path)
+sqlite3.OperationalError: unable to open database file
+curl: (7) Failed to connect to localhost port 5000 after 0 ms: Could not connect to server
+admin42@Shkaf:~/bookcabinet/bookcabinet $ 
