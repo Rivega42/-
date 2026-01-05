@@ -1,0 +1,387 @@
+wget https://github.com/joan2937/pigpio/archive/master.zip
+unzip master.zip
+cd pigpio-master
+make
+sudo make install
+--2026-01-06 01:11:53--  https://github.com/joan2937/pigpio/archive/master.zip
+Resolving github.com (github.com)... 140.82.121.3
+Connecting to github.com (github.com)|140.82.121.3|:443... connected.
+HTTP request sent, awaiting response... 302 Found
+Location: https://codeload.github.com/joan2937/pigpio/zip/refs/heads/master [following]
+--2026-01-06 01:11:53--  https://codeload.github.com/joan2937/pigpio/zip/refs/heads/master
+Resolving codeload.github.com (codeload.github.com)... 140.82.121.9
+Connecting to codeload.github.com (codeload.github.com)|140.82.121.9|:443... connected.
+HTTP request sent, awaiting response... 200 OK
+Length: unspecified [application/zip]
+Saving to: ‘master.zip’
+
+master.zip                 [     <=>                    ]   2.85M  3.28MB/s    in 0.9s    
+
+2026-01-06 01:11:55 (3.28 MB/s) - ‘master.zip’ saved [2993705]
+
+Archive:  master.zip
+c33738a320a3e28824af7807edafda440952c05d
+   creating: pigpio-master/
+  inflating: pigpio-master/.gitignore  
+  inflating: pigpio-master/CMakeLists.txt  
+  inflating: pigpio-master/CONTRIBUTING.md  
+   creating: pigpio-master/DOC/
+   creating: pigpio-master/DOC/HTML/
+   creating: pigpio-master/DOC/HTML/images/
+  inflating: pigpio-master/DOC/HTML/images/LDR-fritz.png  
+  inflating: pigpio-master/DOC/HTML/images/LDR-gnup-1.png  
+  inflating: pigpio-master/DOC/HTML/images/LDR-gnup-2.png  
+  inflating: pigpio-master/DOC/HTML/images/LDR-photo.jpg  
+  inflating: pigpio-master/DOC/HTML/images/LDR-wave-1.png  
+  inflating: pigpio-master/DOC/HTML/images/LDR-wave-2.png  
+  inflating: pigpio-master/DOC/HTML/images/LDR-wave-3.png  
+  inflating: pigpio-master/DOC/HTML/images/breadboard.jpg  
+  inflating: pigpio-master/DOC/HTML/images/caps.jpg  
+  inflating: pigpio-master/DOC/HTML/images/driver.jpg  
+  inflating: pigpio-master/DOC/HTML/images/faq-i2c-ss.png  
+  inflating: pigpio-master/DOC/HTML/images/faq-i2c.jpg  
+  inflating: pigpio-master/DOC/HTML/images/faq-serial.jpg  
+  inflating: pigpio-master/DOC/HTML/images/faq-spi.jpg  
+  inflating: pigpio-master/DOC/HTML/images/faq1.jpg  
+  inflating: pigpio-master/DOC/HTML/images/faq2.jpg  
+  inflating: pigpio-master/DOC/HTML/images/faq3.jpg  
+  inflating: pigpio-master/DOC/HTML/images/imu-1.jpg  
+  inflating: pigpio-master/DOC/HTML/images/imu-2.jpg  
+  inflating: pigpio-master/DOC/HTML/images/imu-3.jpg  
+  inflating: pigpio-master/DOC/HTML/images/ir-fritz.png  
+  inflating: pigpio-master/DOC/HTML/images/ir-motion.jpg  
+  inflating: pigpio-master/DOC/HTML/images/ir-photo.jpg  
+  inflating: pigpio-master/DOC/HTML/images/ir-rx.jpg  
+  inflating: pigpio-master/DOC/HTML/images/ir-wave-1.png  
+  inflating: pigpio-master/DOC/HTML/images/ir-wave-2.png  
+  inflating: pigpio-master/DOC/HTML/images/ir-wave-3.png  
+  inflating: pigpio-master/DOC/HTML/images/keypad.jpg  
+  inflating: pigpio-master/DOC/HTML/images/lcd.jpg  
+  inflating: pigpio-master/DOC/HTML/images/ldr-cap.jpg  
+  inflating: pigpio-master/DOC/HTML/images/ldr.jpg  
+  inflating: pigpio-master/DOC/HTML/images/leds.jpg  
+  inflating: pigpio-master/DOC/HTML/images/meter.jpg  
+  inflating: pigpio-master/DOC/HTML/images/motor.jpg  
+  inflating: pigpio-master/DOC/HTML/images/msp430.jpg  
+  inflating: pigpio-master/DOC/HTML/images/nano.jpg  
+  inflating: pigpio-master/DOC/HTML/images/oled-2.jpg  
+  inflating: pigpio-master/DOC/HTML/images/oled.jpg  
+ extracting: pigpio-master/DOC/HTML/images/pigpio-logo.gif  
+  inflating: pigpio-master/DOC/HTML/images/pins.jpg  
+  inflating: pigpio-master/DOC/HTML/images/pisc-1.jpg  
+  inflating: pigpio-master/DOC/HTML/images/pisc-2.jpg  
+  inflating: pigpio-master/DOC/HTML/images/pisc-3.jpg  
+  inflating: pigpio-master/DOC/HTML/images/pot.jpg  
+  inflating: pigpio-master/DOC/HTML/images/pro-mini.jpg  
+  inflating: pigpio-master/DOC/HTML/images/psu.jpg  
+  inflating: pigpio-master/DOC/HTML/images/re-fritz.png  
+  inflating: pigpio-master/DOC/HTML/images/re-photo.jpg  
+  inflating: pigpio-master/DOC/HTML/images/re-wave-1.png  
+  inflating: pigpio-master/DOC/HTML/images/re-wave-2.png  
+  inflating: pigpio-master/DOC/HTML/images/remote-1.jpg  
+  inflating: pigpio-master/DOC/HTML/images/remote-2.jpg  
+  inflating: pigpio-master/DOC/HTML/images/reverse.jpg  
+  inflating: pigpio-master/DOC/HTML/images/rf-rx-2.jpg  
+  inflating: pigpio-master/DOC/HTML/images/rf-rx.jpg  
+  inflating: pigpio-master/DOC/HTML/images/rf-tx.jpg  
+  inflating: pigpio-master/DOC/HTML/images/rotary.jpg  
+  inflating: pigpio-master/DOC/HTML/images/rpi.jpg  
+  inflating: pigpio-master/DOC/HTML/images/serial.jpg  
+  inflating: pigpio-master/DOC/HTML/images/servo.jpg  
+ extracting: pigpio-master/DOC/HTML/images/sidebar.gif  
+  inflating: pigpio-master/DOC/HTML/images/son-fritz.png  
+  inflating: pigpio-master/DOC/HTML/images/son-gnup-1.png  
+  inflating: pigpio-master/DOC/HTML/images/son-gnup-2.png  
+  inflating: pigpio-master/DOC/HTML/images/son-photo.jpg  
+  inflating: pigpio-master/DOC/HTML/images/son-wave-1.png  
+  inflating: pigpio-master/DOC/HTML/images/son-wave-2.png  
+  inflating: pigpio-master/DOC/HTML/images/son-wave-3.png  
+  inflating: pigpio-master/DOC/HTML/images/son-wave-4.png  
+  inflating: pigpio-master/DOC/HTML/images/speaker.jpg  
+  inflating: pigpio-master/DOC/HTML/images/spi-lnx-pi3b.png  
+  inflating: pigpio-master/DOC/HTML/images/spi-lnx-pibr1.png  
+  inflating: pigpio-master/DOC/HTML/images/spi-pig-pi3b.png  
+  inflating: pigpio-master/DOC/HTML/images/spi-pig-pibr1.png  
+  inflating: pigpio-master/DOC/HTML/images/srf02.jpg  
+  inflating: pigpio-master/DOC/HTML/images/srf04.jpg  
+  inflating: pigpio-master/DOC/HTML/images/stepper.jpg  
+  inflating: pigpio-master/DOC/HTML/images/switches.jpg  
+  inflating: pigpio-master/DOC/HTML/images/topbar.gif  
+  inflating: pigpio-master/DOC/HTML/images/transistors.jpg  
+  inflating: pigpio-master/DOC/HTML/images/ubec-2.jpg  
+  inflating: pigpio-master/DOC/HTML/images/uln2003a.jpg  
+  inflating: pigpio-master/DOC/HTML/images/wheel.jpg  
+  inflating: pigpio-master/DOC/HTML/images/wires.jpg  
+  inflating: pigpio-master/DOC/HTML/images/yl-40.jpg  
+   creating: pigpio-master/DOC/HTML/scripts/
+  inflating: pigpio-master/DOC/HTML/scripts/index.css  
+  inflating: pigpio-master/DOC/HTML/scripts/standard.css  
+   creating: pigpio-master/DOC/MAN/
+ extracting: pigpio-master/DOC/MAN/README  
+  inflating: pigpio-master/DOC/README  
+   creating: pigpio-master/DOC/bin/
+  inflating: pigpio-master/DOC/bin/backup.sh  
+  inflating: pigpio-master/DOC/bin/body.py  
+  inflating: pigpio-master/DOC/bin/build_site.py  
+  inflating: pigpio-master/DOC/bin/cmakdoc.py  
+  inflating: pigpio-master/DOC/bin/examples.py  
+  inflating: pigpio-master/DOC/bin/html.py  
+  inflating: pigpio-master/DOC/bin/purge.sh  
+  inflating: pigpio-master/DOC/bin/pymakdoc.py  
+  inflating: pigpio-master/DOC/bin/smakdoc.py  
+  inflating: pigpio-master/DOC/bin/tidy.py  
+  inflating: pigpio-master/DOC/bin/updatesql.py  
+   creating: pigpio-master/DOC/dbase/
+  inflating: pigpio-master/DOC/dbase/pigpio.sqlite  
+  inflating: pigpio-master/DOC/makedoc  
+   creating: pigpio-master/DOC/src/
+   creating: pigpio-master/DOC/src/defs/
+  inflating: pigpio-master/DOC/src/defs/examples.def  
+  inflating: pigpio-master/DOC/src/defs/pig2vcd.def  
+  inflating: pigpio-master/DOC/src/defs/pigpiod.def  
+  inflating: pigpio-master/DOC/src/defs/pigs.def  
+   creating: pigpio-master/DOC/src/html/
+  inflating: pigpio-master/DOC/src/html/download.html  
+  inflating: pigpio-master/DOC/src/html/ex_LDR.html  
+  inflating: pigpio-master/DOC/src/html/ex_ir_remote.html  
+  inflating: pigpio-master/DOC/src/html/ex_motor_shield.html  
+  inflating: pigpio-master/DOC/src/html/ex_rotary_encoder.html  
+  inflating: pigpio-master/DOC/src/html/ex_sonar_ranger.html  
+  inflating: pigpio-master/DOC/src/html/faq.html  
+  inflating: pigpio-master/DOC/src/html/index.html  
+  inflating: pigpio-master/DOC/src/html/misc.html  
+  inflating: pigpio-master/DOC/src/html/pif.html  
+  inflating: pigpio-master/DOC/src/html/piscope.html  
+  inflating: pigpio-master/DOC/src/html/sif.html  
+   creating: pigpio-master/EXAMPLES/
+   creating: pigpio-master/EXAMPLES/C/
+   creating: pigpio-master/EXAMPLES/C/COUNTER_1/
+  inflating: pigpio-master/EXAMPLES/C/COUNTER_1/README  
+  inflating: pigpio-master/EXAMPLES/C/COUNTER_1/freq_count_1.c  
+   creating: pigpio-master/EXAMPLES/C/COUNTER_2/
+  inflating: pigpio-master/EXAMPLES/C/COUNTER_2/README  
+  inflating: pigpio-master/EXAMPLES/C/COUNTER_2/freq_count_2.c  
+   creating: pigpio-master/EXAMPLES/C/HALL_EFFECT_SENSOR/
+ extracting: pigpio-master/EXAMPLES/C/HALL_EFFECT_SENSOR/README  
+  inflating: pigpio-master/EXAMPLES/C/HALL_EFFECT_SENSOR/hall.c  
+   creating: pigpio-master/EXAMPLES/C/I2C_SNIFFER/
+  inflating: pigpio-master/EXAMPLES/C/I2C_SNIFFER/README  
+  inflating: pigpio-master/EXAMPLES/C/I2C_SNIFFER/pig2i2c.c  
+   creating: pigpio-master/EXAMPLES/C/IR_RECEIVER/
+  inflating: pigpio-master/EXAMPLES/C/IR_RECEIVER/README  
+  inflating: pigpio-master/EXAMPLES/C/IR_RECEIVER/ir_hasher.c  
+  inflating: pigpio-master/EXAMPLES/C/IR_RECEIVER/ir_hasher.h  
+  inflating: pigpio-master/EXAMPLES/C/IR_RECEIVER/test_ir_hasher.c  
+   creating: pigpio-master/EXAMPLES/C/PCF8591_YL-40/
+  inflating: pigpio-master/EXAMPLES/C/PCF8591_YL-40/PCF8591.c  
+ extracting: pigpio-master/EXAMPLES/C/PCF8591_YL-40/README  
+   creating: pigpio-master/EXAMPLES/C/POT_CAP_RECHARGE/
+  inflating: pigpio-master/EXAMPLES/C/POT_CAP_RECHARGE/README  
+  inflating: pigpio-master/EXAMPLES/C/POT_CAP_RECHARGE/pot_cap_charge.c  
+   creating: pigpio-master/EXAMPLES/C/ROTARY_ENCODER/
+  inflating: pigpio-master/EXAMPLES/C/ROTARY_ENCODER/README  
+  inflating: pigpio-master/EXAMPLES/C/ROTARY_ENCODER/rotary_encoder.c  
+  inflating: pigpio-master/EXAMPLES/C/ROTARY_ENCODER/rotary_encoder.h  
+  inflating: pigpio-master/EXAMPLES/C/ROTARY_ENCODER/test_rotary_encoder.c  
+   creating: pigpio-master/EXAMPLES/C/WIEGAND_CODE/
+  inflating: pigpio-master/EXAMPLES/C/WIEGAND_CODE/README  
+  inflating: pigpio-master/EXAMPLES/C/WIEGAND_CODE/test_wiegand.c  
+  inflating: pigpio-master/EXAMPLES/C/WIEGAND_CODE/wiegand.c  
+  inflating: pigpio-master/EXAMPLES/C/WIEGAND_CODE/wiegand.h  
+   creating: pigpio-master/EXAMPLES/CPP/
+   creating: pigpio-master/EXAMPLES/CPP/IR_RECEIVER/
+  inflating: pigpio-master/EXAMPLES/CPP/IR_RECEIVER/README  
+  inflating: pigpio-master/EXAMPLES/CPP/IR_RECEIVER/ir_hasher.cpp  
+  inflating: pigpio-master/EXAMPLES/CPP/IR_RECEIVER/ir_hasher.hpp  
+  inflating: pigpio-master/EXAMPLES/CPP/IR_RECEIVER/test_ir_hasher.cpp  
+   creating: pigpio-master/EXAMPLES/CPP/ROTARY_ENCODER/
+  inflating: pigpio-master/EXAMPLES/CPP/ROTARY_ENCODER/README  
+  inflating: pigpio-master/EXAMPLES/CPP/ROTARY_ENCODER/rotary_encoder.cpp  
+  inflating: pigpio-master/EXAMPLES/CPP/ROTARY_ENCODER/rotary_encoder.hpp  
+  inflating: pigpio-master/EXAMPLES/CPP/ROTARY_ENCODER/test_rotary_encoder.cpp  
+   creating: pigpio-master/EXAMPLES/CPP/WIEGAND_CODE/
+  inflating: pigpio-master/EXAMPLES/CPP/WIEGAND_CODE/README  
+  inflating: pigpio-master/EXAMPLES/CPP/WIEGAND_CODE/test_wiegand.cpp  
+  inflating: pigpio-master/EXAMPLES/CPP/WIEGAND_CODE/wiegand.cpp  
+  inflating: pigpio-master/EXAMPLES/CPP/WIEGAND_CODE/wiegand.hpp  
+   creating: pigpio-master/EXAMPLES/Python/
+   creating: pigpio-master/EXAMPLES/Python/DHT11_SENSOR/
+  inflating: pigpio-master/EXAMPLES/Python/DHT11_SENSOR/README  
+  inflating: pigpio-master/EXAMPLES/Python/DHT11_SENSOR/dht11.py  
+   creating: pigpio-master/EXAMPLES/Python/DHT22_AM2302_SENSOR/
+  inflating: pigpio-master/EXAMPLES/Python/DHT22_AM2302_SENSOR/DHT22.py  
+  inflating: pigpio-master/EXAMPLES/Python/DHT22_AM2302_SENSOR/README  
+   creating: pigpio-master/EXAMPLES/Python/GPIO_STATUS/
+ extracting: pigpio-master/EXAMPLES/Python/GPIO_STATUS/README  
+  inflating: pigpio-master/EXAMPLES/Python/GPIO_STATUS/gpio_status.py  
+   creating: pigpio-master/EXAMPLES/Python/HALL_EFFECT_SENSOR/
+ extracting: pigpio-master/EXAMPLES/Python/HALL_EFFECT_SENSOR/README  
+  inflating: pigpio-master/EXAMPLES/Python/HALL_EFFECT_SENSOR/hall.py  
+   creating: pigpio-master/EXAMPLES/Python/I2C_SNIFFER/
+  inflating: pigpio-master/EXAMPLES/Python/I2C_SNIFFER/I2C_sniffer.py  
+  inflating: pigpio-master/EXAMPLES/Python/I2C_SNIFFER/README  
+   creating: pigpio-master/EXAMPLES/Python/IR_RECEIVER/
+  inflating: pigpio-master/EXAMPLES/Python/IR_RECEIVER/README  
+  inflating: pigpio-master/EXAMPLES/Python/IR_RECEIVER/ir_hasher.py  
+   creating: pigpio-master/EXAMPLES/Python/MORSE_CODE/
+  inflating: pigpio-master/EXAMPLES/Python/MORSE_CODE/README  
+  inflating: pigpio-master/EXAMPLES/Python/MORSE_CODE/morse_code.py  
+   creating: pigpio-master/EXAMPLES/Python/PCF8591_YL-40/
+  inflating: pigpio-master/EXAMPLES/Python/PCF8591_YL-40/PCF8591.py  
+ extracting: pigpio-master/EXAMPLES/Python/PCF8591_YL-40/README  
+   creating: pigpio-master/EXAMPLES/Python/PIGPIO_BENCHMARK/
+ extracting: pigpio-master/EXAMPLES/Python/PIGPIO_BENCHMARK/README  
+  inflating: pigpio-master/EXAMPLES/Python/PIGPIO_BENCHMARK/bench_1.py  
+   creating: pigpio-master/EXAMPLES/Python/ROTARY_ENCODER/
+ extracting: pigpio-master/EXAMPLES/Python/ROTARY_ENCODER/README  
+  inflating: pigpio-master/EXAMPLES/Python/ROTARY_ENCODER/rotary_encoder.py  
+   creating: pigpio-master/EXAMPLES/Python/SENT_PROTOCOL/
+  inflating: pigpio-master/EXAMPLES/Python/SENT_PROTOCOL/README.md  
+  inflating: pigpio-master/EXAMPLES/Python/SENT_PROTOCOL/read_SENT.py  
+   creating: pigpio-master/EXAMPLES/Python/SONAR_RANGER/
+  inflating: pigpio-master/EXAMPLES/Python/SONAR_RANGER/README  
+  inflating: pigpio-master/EXAMPLES/Python/SONAR_RANGER/sonar_trigger_echo.py  
+   creating: pigpio-master/EXAMPLES/Python/VIRTUAL_WIRE/
+  inflating: pigpio-master/EXAMPLES/Python/VIRTUAL_WIRE/README  
+  inflating: pigpio-master/EXAMPLES/Python/VIRTUAL_WIRE/vw.py  
+   creating: pigpio-master/EXAMPLES/Python/WIEGAND_CODE/
+  inflating: pigpio-master/EXAMPLES/Python/WIEGAND_CODE/README  
+  inflating: pigpio-master/EXAMPLES/Python/WIEGAND_CODE/wiegand.py  
+   creating: pigpio-master/EXAMPLES/Shell/
+   creating: pigpio-master/EXAMPLES/Shell/GPIOTEST/
+  inflating: pigpio-master/EXAMPLES/Shell/GPIOTEST/README  
+  inflating: pigpio-master/EXAMPLES/Shell/GPIOTEST/gpiotest  
+  inflating: pigpio-master/MakeRemote  
+  inflating: pigpio-master/Makefile  
+  inflating: pigpio-master/README    
+  inflating: pigpio-master/README.md  
+  inflating: pigpio-master/SUPPORT.md  
+  inflating: pigpio-master/UNLICENCE  
+   creating: pigpio-master/cmake/
+  inflating: pigpio-master/cmake/FindRT.cmake  
+ extracting: pigpio-master/cmake/pigpioConfig.cmake  
+  inflating: pigpio-master/cmake/setup.py.in  
+  inflating: pigpio-master/command.c  
+  inflating: pigpio-master/command.h  
+  inflating: pigpio-master/custom.cext  
+  inflating: pigpio-master/pig2vcd.1  
+  inflating: pigpio-master/pig2vcd.c  
+  inflating: pigpio-master/pigpio.3  
+  inflating: pigpio-master/pigpio.c  
+  inflating: pigpio-master/pigpio.h  
+  inflating: pigpio-master/pigpio.py  
+  inflating: pigpio-master/pigpiod.1  
+  inflating: pigpio-master/pigpiod.c  
+  inflating: pigpio-master/pigpiod_if.3  
+  inflating: pigpio-master/pigpiod_if.c  
+  inflating: pigpio-master/pigpiod_if.h  
+  inflating: pigpio-master/pigpiod_if2.3  
+  inflating: pigpio-master/pigpiod_if2.c  
+  inflating: pigpio-master/pigpiod_if2.h  
+  inflating: pigpio-master/pigs.1    
+  inflating: pigpio-master/pigs.c    
+  inflating: pigpio-master/pigs.h    
+  inflating: pigpio-master/setup.py  
+   creating: pigpio-master/util/
+  inflating: pigpio-master/util/Findpigpio.cmake  
+  inflating: pigpio-master/util/pigpiod.service  
+  inflating: pigpio-master/util/readme.md  
+  inflating: pigpio-master/x_pigpio.c  
+  inflating: pigpio-master/x_pigpio.py  
+  inflating: pigpio-master/x_pigpiod_if.c  
+  inflating: pigpio-master/x_pigpiod_if2.c  
+  inflating: pigpio-master/x_pigs    
+  inflating: pigpio-master/x_pipe    
+gcc -O3 -Wall -pthread -fpic -c -o pigpio.o pigpio.c
+gcc -O3 -Wall -pthread -fpic -c -o command.o command.c
+gcc -shared -pthread -Wl,-soname,libpigpio.so.1 -o libpigpio.so.1 pigpio.o command.o
+ln -fs libpigpio.so.1 libpigpio.so
+strip --strip-unneeded libpigpio.so
+size     libpigpio.so
+   text    data     bss     dec     hex filename
+ 303208   10656  611656  925520   e1f50 libpigpio.so
+gcc -O3 -Wall -pthread -fpic -c -o pigpiod_if.o pigpiod_if.c
+gcc -shared -pthread -Wl,-soname,libpigpiod_if.so.1 -o libpigpiod_if.so.1 pigpiod_if.o command.o
+ln -fs libpigpiod_if.so.1 libpigpiod_if.so
+strip --strip-unneeded libpigpiod_if.so
+size     libpigpiod_if.so
+   text    data     bss     dec     hex filename
+  63287    8696   49304  121287   1d9c7 libpigpiod_if.so
+gcc -O3 -Wall -pthread -fpic -c -o pigpiod_if2.o pigpiod_if2.c
+gcc -shared -pthread -Wl,-soname,libpigpiod_if2.so.1 -o libpigpiod_if2.so.1 pigpiod_if2.o command.o
+ln -fs libpigpiod_if2.so.1 libpigpiod_if2.so
+strip --strip-unneeded libpigpiod_if2.so
+size     libpigpiod_if2.so
+   text    data     bss     dec     hex filename
+  87677    8704    2936   99317   183f5 libpigpiod_if2.so
+gcc -O3 -Wall -pthread   -c -o x_pigpio.o x_pigpio.c
+gcc -o x_pigpio x_pigpio.o -L. -lpigpio -pthread -lrt
+gcc -O3 -Wall -pthread   -c -o x_pigpiod_if.o x_pigpiod_if.c
+gcc -o x_pigpiod_if x_pigpiod_if.o -L. -lpigpiod_if -pthread -lrt
+gcc -O3 -Wall -pthread   -c -o x_pigpiod_if2.o x_pigpiod_if2.c
+gcc -o x_pigpiod_if2 x_pigpiod_if2.o -L. -lpigpiod_if2 -pthread -lrt
+gcc -O3 -Wall -pthread   -c -o pig2vcd.o pig2vcd.c
+gcc -o pig2vcd pig2vcd.o
+strip pig2vcd
+gcc -O3 -Wall -pthread   -c -o pigpiod.o pigpiod.c
+gcc -o pigpiod pigpiod.o -L. -lpigpio -pthread -lrt
+strip pigpiod
+gcc -O3 -Wall -pthread   -c -o pigs.o pigs.c
+gcc -o pigs pigs.o command.o
+strip pigs
+install -m 0755 -d                             /opt/pigpio/cgi
+install -m 0755 -d                             /usr/local/include
+install -m 0644 pigpio.h                       /usr/local/include
+install -m 0644 pigpiod_if.h                   /usr/local/include
+install -m 0644 pigpiod_if2.h                  /usr/local/include
+install -m 0755 -d                             /usr/local/lib
+install -m 0755 libpigpio.so.1      /usr/local/lib
+install -m 0755 libpigpiod_if.so.1  /usr/local/lib
+install -m 0755 libpigpiod_if2.so.1 /usr/local/lib
+cd /usr/local/lib && ln -fs libpigpio.so.1      libpigpio.so
+cd /usr/local/lib && ln -fs libpigpiod_if.so.1  libpigpiod_if.so
+cd /usr/local/lib && ln -fs libpigpiod_if2.so.1 libpigpiod_if2.so
+install -m 0755 -d                             /usr/local/bin
+install -m 0755 pig2vcd                        /usr/local/bin
+install -m 0755 pigpiod                        /usr/local/bin
+install -m 0755 pigs                           /usr/local/bin
+if which python2; then python2 setup.py install ; fi
+if which python3; then python3 setup.py install ; fi
+/usr/bin/python3
+/usr/lib/python3/dist-packages/setuptools/_distutils/cmd.py:90: SetuptoolsDeprecationWarning: setup.py install is deprecated.
+!!
+
+        ********************************************************************************
+        Please avoid running ``setup.py`` directly.
+        Instead, use pypa/build, pypa/installer or other
+        standards-based tools.
+
+        See https://blog.ganssle.io/articles/2021/10/setup-py-deprecated.html for details.
+        ********************************************************************************
+
+!!
+  self.initialize_options()
+/usr/lib/python3/dist-packages/setuptools/_distutils/cmd.py:90: EasyInstallDeprecationWarning: easy_install command is deprecated.
+!!
+
+        ********************************************************************************
+        Please avoid running ``setup.py`` and ``easy_install``.
+        Instead, use pypa/build, pypa/installer or other
+        standards-based tools.
+
+        See https://github.com/pypa/setuptools/issues/917 for details.
+        ********************************************************************************
+
+!!
+  self.initialize_options()
+zip_safe flag not set; analyzing archive contents...
+install -m 0755 -d                             /usr/local/man/man1
+install -m 0644 p*.1                           /usr/local/man/man1
+install -m 0755 -d                             /usr/local/man/man3
+install -m 0644 p*.3                           /usr/local/man/man3
+ldconfig
+admin42@Shkaf:~/pigpio-master $ sudo systemctl enable pigpiod
+sudo systemctl start pigpiod
+Failed to enable unit: Unit pigpiod.service does not exist
+Failed to start pigpiod.service: Unit pigpiod.service not found.
+admin42@Shkaf:~/pigpio-master $ 
