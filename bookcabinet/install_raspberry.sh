@@ -1,7 +1,7 @@
 #!/bin/bash
 #
-# BookCabinet - Скрипт развёртывания на Raspberry Pi 4
-# Версия: 2.0
+# BookCabinet - Скрипт развёртывания на Raspberry Pi
+# Версия: 2.1 (Bookworm/Trixie compatible)
 # Запуск: sudo bash install_raspberry.sh
 #
 
@@ -14,7 +14,7 @@ NC='\033[0m'
 
 echo "========================================"
 echo "  BookCabinet - Установка на Raspberry Pi"
-echo "  Версия 2.0"
+echo "  Версия 2.1"
 echo "========================================"
 echo ""
 
@@ -38,9 +38,13 @@ else
     fi
 fi
 
-INSTALL_DIR="/home/pi/bookcabinet"
-SERVICE_USER="pi"
+# Определяем текущего пользователя (того кто вызвал sudo)
+SERVICE_USER=${SUDO_USER:-pi}
+INSTALL_DIR="/home/$SERVICE_USER/bookcabinet/bookcabinet"
 LOG_FILE="/var/log/bookcabinet_install.log"
+
+echo "  Пользователь: $SERVICE_USER"
+echo "  Директория: $INSTALL_DIR"
 
 exec > >(tee -a "$LOG_FILE") 2>&1
 
@@ -51,13 +55,15 @@ apt upgrade -y
 
 echo ""
 echo -e "${YELLOW}[2/9] Установка системных зависимостей...${NC}"
+# Примечание: pigpio и python3-pigpio устанавливаются вручную из исходников
+# если пакет недоступен в репозитории (Trixie)
 apt install -y \
     python3 \
     python3-pip \
     python3-venv \
     python3-dev \
-    pigpio \
-    python3-pigpio \
+    python3-aiohttp \
+    python3-serial \
     pcscd \
     pcsc-tools \
     libpcsclite-dev \
@@ -66,19 +72,47 @@ apt install -y \
     git \
     sqlite3 \
     libi2c-dev \
-    i2c-tools
+    i2c-tools \
+    chromium \
+    unclutter || echo -e "${YELLOW}Некоторые пакеты не установились, продолжаем...${NC}"
 
 echo ""
 echo -e "${YELLOW}[3/9] Настройка pigpio демона...${NC}"
-systemctl stop pigpiod 2>/dev/null || true
-systemctl enable pigpiod
-systemctl start pigpiod
+# Проверяем установлен ли pigpio
+if command -v pigpiod &> /dev/null; then
+    echo -e "${GREEN}✓ pigpiod найден${NC}"
+    
+    # Создаём systemd сервис если его нет
+    if [ ! -f /etc/systemd/system/pigpiod.service ]; then
+        cat > /etc/systemd/system/pigpiod.service << 'EOF'
+[Unit]
+Description=Pigpio daemon
+After=network.target
+
+[Service]
+ExecStart=/usr/local/bin/pigpiod -l
+ExecStop=/bin/systemctl kill pigpiod
+Type=forking
+
+[Install]
+WantedBy=multi-user.target
+EOF
+        systemctl daemon-reload
+    fi
+    
+    systemctl enable pigpiod
+    systemctl start pigpiod || true
+else
+    echo -e "${YELLOW}⚠ pigpiod не найден. Установите вручную из исходников:${NC}"
+    echo "  wget https://github.com/joan2937/pigpio/archive/master.zip"
+    echo "  unzip master.zip && cd pigpio-master && make && sudo make install"
+fi
 
 # Проверка pigpio
 if pigs t > /dev/null 2>&1; then
     echo -e "${GREEN}✓ pigpiod работает${NC}"
 else
-    echo -e "${RED}✗ pigpiod не запустился${NC}"
+    echo -e "${YELLOW}⚠ pigpiod не запустился${NC}"
 fi
 
 echo ""
@@ -96,35 +130,43 @@ fi
 
 echo ""
 echo -e "${YELLOW}[5/9] Настройка serial портов...${NC}"
-# Включить serial
-if ! grep -q "enable_uart=1" /boot/config.txt 2>/dev/null; then
-    echo "enable_uart=1" >> /boot/config.txt
-    echo -e "${GREEN}✓ UART включён в config.txt${NC}"
+# Определяем путь к config.txt (разный в разных версиях ОС)
+if [ -f /boot/firmware/config.txt ]; then
+    CONFIG_TXT="/boot/firmware/config.txt"
+elif [ -f /boot/config.txt ]; then
+    CONFIG_TXT="/boot/config.txt"
+else
+    CONFIG_TXT=""
+fi
+
+if [ -n "$CONFIG_TXT" ]; then
+    if ! grep -q "enable_uart=1" "$CONFIG_TXT" 2>/dev/null; then
+        echo "enable_uart=1" >> "$CONFIG_TXT"
+        echo -e "${GREEN}✓ UART включён в config.txt${NC}"
+    else
+        echo -e "${GREEN}✓ UART уже включён${NC}"
+    fi
 fi
 
 # Отключить serial console
 if [ -f /boot/cmdline.txt ]; then
     sed -i 's/console=serial0,115200 //g' /boot/cmdline.txt 2>/dev/null || true
 fi
+if [ -f /boot/firmware/cmdline.txt ]; then
+    sed -i 's/console=serial0,115200 //g' /boot/firmware/cmdline.txt 2>/dev/null || true
+fi
 
 echo ""
-echo -e "${YELLOW}[6/9] Создание виртуального окружения...${NC}"
-mkdir -p $INSTALL_DIR
+echo -e "${YELLOW}[6/9] Настройка директорий...${NC}"
 mkdir -p $INSTALL_DIR/logs
 mkdir -p $INSTALL_DIR/backups
 
-cd $INSTALL_DIR
-
-python3 -m venv venv
-source venv/bin/activate
-
 echo ""
 echo -e "${YELLOW}[7/9] Установка Python зависимостей...${NC}"
-pip install --upgrade pip
-pip install \
-    aiohttp \
-    pyscard \
-    pyserial
+# В Bookworm+ используем --break-system-packages для системного Python
+pip3 install --break-system-packages pyscard 2>/dev/null || \
+    pip3 install pyscard 2>/dev/null || \
+    echo -e "${YELLOW}⚠ pyscard уже установлен или требует ручной установки${NC}"
 
 echo ""
 echo -e "${YELLOW}[8/9] Настройка прав доступа...${NC}"
@@ -134,6 +176,7 @@ usermod -a -G dialout $SERVICE_USER 2>/dev/null || true
 usermod -a -G gpio $SERVICE_USER 2>/dev/null || true
 usermod -a -G i2c $SERVICE_USER 2>/dev/null || true
 usermod -a -G spi $SERVICE_USER 2>/dev/null || true
+usermod -a -G plugdev $SERVICE_USER 2>/dev/null || true
 
 # udev правило для RFID ридеров
 cat > /etc/udev/rules.d/99-bookcabinet.rules << 'EOF'
@@ -148,13 +191,13 @@ udevadm control --reload-rules
 udevadm trigger
 
 # Права на директорию
-chown -R $SERVICE_USER:$SERVICE_USER $INSTALL_DIR
+chown -R $SERVICE_USER:$SERVICE_USER /home/$SERVICE_USER/bookcabinet
 
 echo ""
 echo -e "${YELLOW}[9/9] Создание systemd сервисов...${NC}"
 
 # Основной сервис
-cat > /etc/systemd/system/bookcabinet.service << 'EOF'
+cat > /etc/systemd/system/bookcabinet.service << EOF
 [Unit]
 Description=BookCabinet Library RFID Kiosk
 After=network.target pigpiod.service pcscd.service
@@ -162,10 +205,10 @@ Wants=pigpiod.service pcscd.service
 
 [Service]
 Type=simple
-User=pi
-Group=pi
-WorkingDirectory=/home/pi/bookcabinet
-ExecStart=/home/pi/bookcabinet/venv/bin/python3 main.py
+User=$SERVICE_USER
+Group=$SERVICE_USER
+WorkingDirectory=$INSTALL_DIR
+ExecStart=/usr/bin/python3 main.py
 Restart=always
 RestartSec=5
 Environment=MOCK_MODE=false
@@ -183,16 +226,16 @@ WantedBy=multi-user.target
 EOF
 
 # Сервис автобэкапа
-cat > /etc/systemd/system/bookcabinet-backup.service << 'EOF'
+cat > /etc/systemd/system/bookcabinet-backup.service << EOF
 [Unit]
 Description=BookCabinet Backup Service
 After=bookcabinet.service
 
 [Service]
 Type=oneshot
-User=pi
-WorkingDirectory=/home/pi/bookcabinet
-ExecStart=/home/pi/bookcabinet/venv/bin/python3 -c "from bookcabinet.monitoring.backup import backup_manager; backup_manager.create_backup('scheduled')"
+User=$SERVICE_USER
+WorkingDirectory=$INSTALL_DIR
+ExecStart=/usr/bin/python3 -c "from bookcabinet.monitoring.backup import backup_manager; backup_manager.create_backup('scheduled')"
 EOF
 
 cat > /etc/systemd/system/bookcabinet-backup.timer << 'EOF'
@@ -212,6 +255,7 @@ systemctl enable bookcabinet
 systemctl enable bookcabinet-backup.timer
 
 # Создать дефолтный calibration.json v2.1
+if [ ! -f $INSTALL_DIR/calibration.json ]; then
 cat > $INSTALL_DIR/calibration.json << 'EOF'
 {
   "version": "2.1",
@@ -263,8 +307,11 @@ cat > $INSTALL_DIR/calibration.json << 'EOF'
   }
 }
 EOF
-
 chown $SERVICE_USER:$SERVICE_USER $INSTALL_DIR/calibration.json
+echo -e "${GREEN}✓ calibration.json создан${NC}"
+else
+echo -e "${GREEN}✓ calibration.json уже существует${NC}"
+fi
 
 echo ""
 echo "========================================"
@@ -285,8 +332,6 @@ fi
 # Проверка PC/SC
 if systemctl is-active --quiet pcscd; then
     echo -e "${GREEN}✓ PC/SC демон: работает${NC}"
-    READERS=$(pcsc_scan -n 2>/dev/null | head -1 || echo "Нет ридеров")
-    echo "  $READERS"
 else
     echo -e "${YELLOW}⚠ PC/SC демон: не работает${NC}"
 fi
@@ -309,19 +354,16 @@ fi
 echo ""
 echo "Следующие шаги:"
 echo "---------------"
-echo "1. Скопируйте файлы проекта:"
-echo "   scp -r bookcabinet/* pi@<IP>:$INSTALL_DIR/"
-echo ""
-echo "2. Перезагрузите Raspberry Pi:"
+echo "1. Перезагрузите Raspberry Pi:"
 echo "   sudo reboot"
 echo ""
-echo "3. Проверьте статус сервиса:"
+echo "2. Проверьте статус сервиса:"
 echo "   sudo systemctl status bookcabinet"
 echo ""
-echo "4. Смотрите логи:"
+echo "3. Смотрите логи:"
 echo "   journalctl -u bookcabinet -f"
 echo ""
-echo "5. Веб-интерфейс:"
+echo "4. Веб-интерфейс:"
 echo "   http://<IP>:5000"
 echo ""
 echo "Лог установки: $LOG_FILE"
