@@ -1,0 +1,53 @@
+admin42@Shkaf:~/pigpio-master $ pip3 install --break-system-packages pyscard
+Defaulting to user installation because normal site-packages is not writeable
+Looking in indexes: https://pypi.org/simple, https://www.piwheels.org/simple
+Collecting pyscard
+  Downloading pyscard-2.3.1.tar.gz (160 kB)
+  Installing build dependencies ... done
+  Getting requirements to build wheel ... done
+  Preparing metadata (pyproject.toml) ... done
+Building wheels for collected packages: pyscard
+  Building wheel for pyscard (pyproject.toml) ... error
+  error: subprocess-exited-with-error
+  
+  × Building wheel for pyscard (pyproject.toml) did not run successfully.
+  │ exit code: 1
+  ╰─> [31 lines of output]
+      Package libpcsclite was not found in the pkg-config search path.
+      Perhaps you should add the directory containing `libpcsclite.pc'
+      to the PKG_CONFIG_PATH environment variable
+      Package 'libpcsclite', required by 'virtual:world', not found
+      /tmp/pip-build-env-riuqtdss/overlay/local/lib/python3.13/dist-packages/setuptools/dist.py:759: SetuptoolsDeprecationWarning: License classifiers are deprecated.
+      !!
+      
+              ********************************************************************************
+              Please consider removing the following classifiers in favor of a SPDX license expression:
+      
+              License :: OSI Approved :: GNU Lesser General Public License v2 or later (LGPLv2+)
+      
+              See https://packaging.python.org/en/latest/guides/writing-pyproject-toml/#license for details.
+              ********************************************************************************
+      
+      !!
+        self._finalize_license_expression()
+      running bdist_wheel
+      running build
+      running build_py
+      running build_ext
+      building 'smartcard.scard._scard' extension
+      swigging src/smartcard/scard/scard.i to src/smartcard/scard/scard_wrap.c
+      swig -python -outdir src/smartcard/scard -DPCSCLITE -o src/smartcard/scard/scard_wrap.c src/smartcard/scard/scard.i
+      creating build/temp.linux-aarch64-cpython-313/src/smartcard/scard
+      aarch64-linux-gnu-gcc -fno-strict-overflow -Wsign-compare -DNDEBUG -g -O2 -Wall -fPIC -DVER_PRODUCTVERSION=2,3,1,0000 -DVER_PRODUCTVERSION_STR=2.3.1 -DPCSCLITE=1 -Isrc/smartcard/scard/ -I/usr/include/PCSC -I/usr/local/include/PCSC -I/usr/include/python3.13 -c src/smartcard/scard/helpers.c -o build/temp.linux-aarch64-cpython-313/src/smartcard/scard/helpers.o
+      src/smartcard/scard/helpers.c:28:10: fatal error: winscard.h: No such file or directory
+         28 | #include <winscard.h>
+            |          ^~~~~~~~~~~~
+      compilation terminated.
+      error: command '/usr/bin/aarch64-linux-gnu-gcc' failed with exit code 1
+      [end of output]
+  
+  note: This error originates from a subprocess, and is likely not a problem with pip.
+  ERROR: Failed building wheel for pyscard
+Failed to build pyscard
+ERROR: Failed to build installable wheels for some pyproject.toml based projects (pyscard)
+admin42@Shkaf:~/pigpio-master $ 
