@@ -1,0 +1,65 @@
+admin42@Shkaf:~/pigpio-master $ sudo systemctl enable pigpiod
+sudo systemctl start pigpiod
+Failed to enable unit: Unit pigpiod.service does not exist
+Failed to start pigpiod.service: Unit pigpiod.service not found.
+admin42@Shkaf:~/pigpio-master $ cd ~/pigpio-master
+admin42@Shkaf:~/pigpio-master $ make
+make: Nothing to be done for 'all'.
+admin42@Shkaf:~/pigpio-master $ sudo make install
+install -m 0755 -d                             /opt/pigpio/cgi
+install -m 0755 -d                             /usr/local/include
+install -m 0644 pigpio.h                       /usr/local/include
+install -m 0644 pigpiod_if.h                   /usr/local/include
+install -m 0644 pigpiod_if2.h                  /usr/local/include
+install -m 0755 -d                             /usr/local/lib
+install -m 0755 libpigpio.so.1      /usr/local/lib
+install -m 0755 libpigpiod_if.so.1  /usr/local/lib
+install -m 0755 libpigpiod_if2.so.1 /usr/local/lib
+cd /usr/local/lib && ln -fs libpigpio.so.1      libpigpio.so
+cd /usr/local/lib && ln -fs libpigpiod_if.so.1  libpigpiod_if.so
+cd /usr/local/lib && ln -fs libpigpiod_if2.so.1 libpigpiod_if2.so
+install -m 0755 -d                             /usr/local/bin
+install -m 0755 pig2vcd                        /usr/local/bin
+install -m 0755 pigpiod                        /usr/local/bin
+install -m 0755 pigs                           /usr/local/bin
+if which python2; then python2 setup.py install ; fi
+if which python3; then python3 setup.py install ; fi
+/usr/bin/python3
+/usr/lib/python3/dist-packages/setuptools/_distutils/cmd.py:90: SetuptoolsDeprecationWarning: setup.py install is deprecated.
+!!
+
+        ********************************************************************************
+        Please avoid running ``setup.py`` directly.
+        Instead, use pypa/build, pypa/installer or other
+        standards-based tools.
+
+        See https://blog.ganssle.io/articles/2021/10/setup-py-deprecated.html for details.
+        ********************************************************************************
+
+!!
+  self.initialize_options()
+/usr/lib/python3/dist-packages/setuptools/_distutils/cmd.py:90: EasyInstallDeprecationWarning: easy_install command is deprecated.
+!!
+
+        ********************************************************************************
+        Please avoid running ``setup.py`` and ``easy_install``.
+        Instead, use pypa/build, pypa/installer or other
+        standards-based tools.
+
+        See https://github.com/pypa/setuptools/issues/917 for details.
+        ********************************************************************************
+
+!!
+  self.initialize_options()
+zip_safe flag not set; analyzing archive contents...
+install -m 0755 -d                             /usr/local/man/man1
+install -m 0644 p*.1                           /usr/local/man/man1
+install -m 0755 -d                             /usr/local/man/man3
+install -m 0644 p*.3                           /usr/local/man/man3
+ldconfig
+admin42@Shkaf:~/pigpio-master $ sudo systemctl enable pigpiod
+sudo systemctl start pigpiod
+Failed to enable unit: Unit pigpiod.service does not exist
+Failed to start pigpiod.service: Unit pigpiod.service not found.
+admin42@Shkaf:~/pigpio-master $ ^C
+admin42@Shkaf:~/pigpio-master $ 
