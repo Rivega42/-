@@ -164,6 +164,42 @@ PathPlanner класс реализует:
 - 300мс стабилизация после движения
 - Верификация конечной позиции
 
+### IRBIS64 интеграция
+
+**Модули (irbis/):**
+- `client.py` - Полноценный TCP клиент ИРБИС64 (команды A/B/C/D/K/G)
+- `mock.py` - Mock реализация с правильной структурой полей ИРБИС
+- `service.py` - LibraryService с автоматическим переключением mock/real
+
+**Конфигурация (config.py):**
+```python
+IRBIS = {
+    'host': '192.168.1.100',
+    'port': 6666,
+    'username': 'MASTER',
+    'password': 'MASTERKEY',
+    'database': 'IBIS',
+    'readers_database': 'RDR',
+    'loan_days': 30,
+    'location_code': '09',
+    'mock': True,  # IRBIS_MOCK=true для тестирования
+}
+```
+
+**Структура полей ИРБИС:**
+- RDR (читатели): 10=ФИО (^A^B^G), 30=UID карты, 40=выдачи (^A^B^C^D^E^F^H...), 50=категория
+- IBIS (книги): 200=название (^A), 700=автор (^A^B^G), 903=шифр, 910=экземпляры (^a^b^c^d^h)
+
+**Индексы поиска:**
+- RI= (читатель по UID), EKP= (Единая карта петербуржца)
+- H= / HI= (книга по RFID), HIN= (книга выданная читателю)
+
+**Helper функции (utils/irbis_helpers.py):**
+- `normalize_rfid()` - нормализация RFID в единый HEX формат
+- `make_uid_variants()` - генерация вариантов UID для поиска
+- `parse_subfields()` / `format_subfields()` - работа с подполями ^A^B
+- `find_exemplar_by_rfid()` - поиск экземпляра в поле 910
+
 ### Role-Based Access Control
 
 API endpoints защищены role_check():
@@ -205,7 +241,8 @@ sudo bash bookcabinet/install_raspberry.sh
   /hardware                   # GPIO, моторы, датчики
   /mechanics                  # Алгоритмы, CoreXY, калибровка
   /rfid                       # Card/Book readers
-  /irbis                      # Mock IRBIS64
+  /irbis                      # IRBIS64 TCP client + mock
+  /utils                      # Helpers (irbis_helpers.py)
   /business                   # Бизнес-логика
   /database                   # SQLite
   /server                     # aiohttp + static UI

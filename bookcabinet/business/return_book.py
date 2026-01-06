@@ -1,18 +1,17 @@
 """
 Возврат книги
 """
-from typing import Dict
+from typing import Dict, Optional
 from datetime import datetime
 
 from ..database import db
 from ..mechanics.algorithms import algorithms
-from ..irbis.mock import mock_irbis
-from ..config import IRBIS
+from ..irbis.service import library_service
 
 
 class ReturnService:
     def __init__(self):
-        self.irbis = mock_irbis if IRBIS['mock'] else None
+        self.irbis = library_service
     
     async def return_book(self, book_rfid: str, on_progress=None) -> Dict:
         start_time = datetime.now()
@@ -20,9 +19,7 @@ class ReturnService:
         book = db.get_book_by_rfid(book_rfid)
         
         if not book:
-            book_info = None
-            if self.irbis:
-                book_info = await self.irbis.get_book(book_rfid)
+            book_info = await self.irbis.get_book_info(book_rfid)
             
             if not book_info:
                 return {'success': False, 'error': 'Книга не найдена в системе'}
@@ -31,8 +28,13 @@ class ReturnService:
             if not cell:
                 return {'success': False, 'error': 'Нет свободных ячеек'}
             
-            book_id = db.create_book(book_rfid, book_info['title'], book_info.get('author'))
+            title = book_info.get('title', 'Неизвестная книга')
+            author = book_info.get('author', '')
+            book_id = db.create_book(book_rfid, title, author or '')
             book = db.get_book_by_rfid(book_rfid)
+            
+            if not book:
+                return {'success': False, 'error': 'Ошибка создания записи книги'}
         else:
             cell = db.find_empty_cell()
             if not cell:
@@ -59,8 +61,9 @@ class ReturnService:
             needs_extraction=True
         )
         
-        if self.irbis:
-            await self.irbis.register_return(book_rfid)
+        irbis_success, irbis_msg = await self.irbis.return_book(book_rfid)
+        if not irbis_success:
+            db.add_system_log('WARNING', f"ИРБИС: {irbis_msg}", 'return')
         
         duration = int((datetime.now() - start_time).total_seconds() * 1000)
         db.log_operation('RETURN',

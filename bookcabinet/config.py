@@ -93,6 +93,12 @@ RFID = {
 IRBIS = {
     'host': os.environ.get('IRBIS_HOST', '192.168.1.100'),
     'port': int(os.environ.get('IRBIS_PORT', 6666)),
+    'username': os.environ.get('IRBIS_USERNAME', 'MASTER'),
+    'password': os.environ.get('IRBIS_PASSWORD', 'MASTERKEY'),
+    'database': os.environ.get('IRBIS_DATABASE', 'IBIS'),
+    'readers_database': os.environ.get('IRBIS_READERS_DB', 'RDR'),
+    'loan_days': int(os.environ.get('IRBIS_LOAN_DAYS', 30)),
+    'location_code': os.environ.get('IRBIS_LOCATION_CODE', '09'),
     'mock': os.environ.get('IRBIS_MOCK', 'true').lower() == 'true',
 }
 

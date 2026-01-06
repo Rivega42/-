@@ -6,9 +6,13 @@ from datetime import datetime
 
 from ..database import db
 from ..mechanics.algorithms import algorithms
+from ..irbis.service import library_service
 
 
 class UnloadService:
+    def __init__(self):
+        self.irbis = library_service
+    
     async def extract_book(self, cell_id: int, on_progress=None) -> Dict:
         start_time = datetime.now()
         
@@ -37,6 +41,11 @@ class UnloadService:
                 status='extracted',
                 cell_id=None
             )
+        
+        if cell.get('book_rfid'):
+            verification = await self.irbis.verify_book_for_extraction(cell['book_rfid'])
+            if verification.get('action'):
+                db.add_system_log('INFO', f"ИРБИС: {verification['action']}", 'unload')
         
         db.update_cell(cell_id,
             status='empty',
@@ -183,6 +192,11 @@ class UnloadService:
             details=f'found={found}, missing={missing}, mismatch={mismatched}'
         )
         
+        irbis_verification = await self.irbis.verify_cabinet_inventory([
+            {'rfid': cell.get('book_rfid'), 'cell': (cell['row'], cell['x'], cell['y'])}
+            for cell in cells if cell.get('book_rfid')
+        ])
+        
         return {
             'success': len(errors) == 0,
             'found': found,
@@ -192,6 +206,7 @@ class UnloadService:
             'total': total,
             'errors': errors,
             'results': results,
+            'irbis_verification': irbis_verification,
             'message': summary
         }
     

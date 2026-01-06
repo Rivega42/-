@@ -6,32 +6,37 @@ from datetime import datetime
 
 from ..database import db
 from ..mechanics.algorithms import algorithms
-from ..irbis.mock import mock_irbis
-from ..config import IRBIS
+from ..irbis.service import library_service
 
 
 class LoadService:
     def __init__(self):
-        self.irbis = mock_irbis if IRBIS['mock'] else None
+        self.irbis = library_service
     
-    async def load_book(self, book_rfid: str, title: str = None, author: str = None, 
-                        cell_id: int = None, on_progress=None) -> Dict:
+    async def load_book(self, book_rfid: str, title: Optional[str] = None, author: Optional[str] = None, 
+                        cell_id: Optional[int] = None, on_progress=None) -> Dict:
         start_time = datetime.now()
         
         book = db.get_book_by_rfid(book_rfid)
         
         if not book:
             if not title:
-                if self.irbis:
-                    book_info = await self.irbis.get_book(book_rfid)
-                    if book_info:
-                        title = book_info.get('title', 'Без названия')
-                        author = book_info.get('author')
+                book_info = await self.irbis.get_book_info(book_rfid)
+                if book_info:
+                    title = book_info.get('title', 'Без названия')
+                    author = book_info.get('author', '')
                 else:
                     return {'success': False, 'error': 'Укажите название книги'}
             
-            book_id = db.create_book(book_rfid, title, author)
+            book_id = db.create_book(book_rfid, title or 'Без названия', author or '')
             book = db.get_book_by_rfid(book_rfid)
+            
+            if not book:
+                return {'success': False, 'error': 'Ошибка создания записи книги'}
+        
+        verification = await self.irbis.verify_book_for_loading(book_rfid)
+        if verification.get('warning'):
+            db.add_system_log('WARNING', f"ИРБИС: {verification['warning']}", 'load')
         
         if cell_id:
             cell = db.get_cell(cell_id)
@@ -75,6 +80,7 @@ class LoadService:
             'success': True,
             'book': book,
             'cell': cell,
+            'irbis_warning': verification.get('warning'),
             'message': f'Книга загружена в ячейку'
         }
 

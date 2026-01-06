@@ -6,20 +6,22 @@ from datetime import datetime
 
 from ..database import db
 from ..mechanics.algorithms import algorithms
-from ..irbis.mock import mock_irbis
-from ..config import IRBIS
+from ..irbis.service import library_service
 
 
 class IssueService:
     def __init__(self):
-        self.irbis = mock_irbis if IRBIS['mock'] else None
+        self.irbis = library_service
     
     async def issue_book(self, book_rfid: str, user_rfid: str, on_progress=None) -> Dict:
         start_time = datetime.now()
         
         book = db.get_book_by_rfid(book_rfid)
         if not book:
-            return {'success': False, 'error': 'Книга не найдена'}
+            irbis_book = await self.irbis.get_book_info(book_rfid)
+            if not irbis_book:
+                return {'success': False, 'error': 'Книга не найдена'}
+            return {'success': False, 'error': 'Книга не загружена в шкаф'}
         
         if book['status'] == 'issued':
             return {'success': False, 'error': 'Книга уже выдана'}
@@ -57,8 +59,9 @@ class IssueService:
             reserved_for=None
         )
         
-        if self.irbis:
-            await self.irbis.register_issue(book_rfid, user_rfid)
+        irbis_success, irbis_msg = await self.irbis.issue_book(book_rfid, user_rfid)
+        if not irbis_success:
+            db.add_system_log('WARNING', f"ИРБИС: {irbis_msg}", 'issue')
         
         duration = int((datetime.now() - start_time).total_seconds() * 1000)
         db.log_operation('ISSUE',
