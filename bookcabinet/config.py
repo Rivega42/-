@@ -1,5 +1,8 @@
 """
 Конфигурация системы BookCabinet
+
+GPIO пины настроены для GPIO Expansion Board с пружинными клеммниками
+Схема подключения: RPI3_WIRING_FINAL.md v3.0
 """
 import os
 
@@ -14,25 +17,42 @@ PORT = int(os.environ.get('PORT', 5000))
 # База данных
 DATABASE_PATH = os.environ.get('DATABASE_PATH', 'bookcabinet/shelf_data.db')
 
-# GPIO пины (Raspberry Pi)
+# =============================================================================
+# GPIO пины (Raspberry Pi + GPIO Expansion Board)
+# Схема: RPI3_WIRING_FINAL.md v3.0
+# =============================================================================
 GPIO_PINS = {
-    'MOTOR_A_STEP': 18,
-    'MOTOR_A_DIR': 27,
-    'MOTOR_B_STEP': 23,
-    'MOTOR_B_DIR': 22,
-    'TRAY_STEP': 24,
-    'TRAY_DIR': 25,
-    'SERVO_LOCK_1': 12,
-    'SERVO_LOCK_2': 13,
-    'SHUTTER_OUTER': 4,
-    'SHUTTER_INNER': 5,
-    'SENSOR_X_BEGIN': 16,
-    'SENSOR_X_END': 20,
-    'SENSOR_Y_BEGIN': 21,
-    'SENSOR_Y_END': 26,
-    'SENSOR_TRAY_BEGIN': 19,
-    'SENSOR_TRAY_END': 6,
+    # Моторы XY (CoreXY) — Блок A
+    'MOTOR_A_STEP': 2,      # Клемма 2 (SDA1)
+    'MOTOR_A_DIR': 3,       # Клемма 3 (SCL1)
+    
+    # Мотор B — Блок C
+    'MOTOR_B_STEP': 19,     # Клемма L (PCMfs)
+    'MOTOR_B_DIR': 21,      # Клемма N (PCMo)
+    
+    # Мотор Tray — Штыревой разъём
+    'TRAY_STEP': 24,        # Pin 18 (GPIO24)
+    'TRAY_DIR': 25,         # Pin 22 (GPIO25)
+    
+    # Сервоприводы замков — Блок C (PWM)
+    'SERVO_LOCK_1': 18,     # Клемма J (PWM0) — передний замок
+    'SERVO_LOCK_2': 13,     # Клемма K (PWM1) — задний замок
+    
+    # Шторки (реле) — Блок A
+    'SHUTTER_OUTER': 14,    # Клемма 7 (TX0) — внешняя
+    'SHUTTER_INNER': 15,    # Клемма 6 (RX0) — внутренняя
+    
+    # Датчики концевиков — Блок B (SPI пины)
+    'SENSOR_X_BEGIN': 10,   # Клемма B (MOSI) — левый
+    'SENSOR_X_END': 9,      # Клемма C (MISO) — правый
+    'SENSOR_Y_BEGIN': 11,   # Клемма D (SCLK) — нижний
+    'SENSOR_Y_END': 8,      # Клемма E (CE0) — верхний
+    'SENSOR_TRAY_BEGIN': 7, # Клемма F (CE1) — платформа назад
+    'SENSOR_TRAY_END': 20,  # Клемма M (PCMi) — платформа вперёд
 }
+
+# Использовать встроенную подтяжку RPi для датчиков (резисторы 10K не нужны!)
+SENSOR_USE_PULLUP = True
 
 # Параметры моторов
 MOTOR_SPEEDS = {
@@ -58,7 +78,7 @@ CABINET = {
     'window': {'row': 'FRONT', 'x': 1, 'y': 9},
 }
 
-# Заблокированные ячейки
+# Заблокированные ячейки (механизм, окно выдачи)
 BLOCKED_CELLS = {
     'FRONT': [
         {'x': 1, 'y': 7}, {'x': 1, 'y': 8}, {'x': 1, 'y': 9}, {'x': 1, 'y': 10},
@@ -109,7 +129,7 @@ WIFI_AP = {
     'ip': '192.168.4.1',
 }
 
-# Telegram
+# Telegram уведомления
 TELEGRAM = {
     'bot_token': os.environ.get('TELEGRAM_BOT_TOKEN', ''),
     'chat_id': os.environ.get('TELEGRAM_CHAT_ID', ''),
