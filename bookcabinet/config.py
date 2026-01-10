@@ -109,17 +109,20 @@ RFID = {
     'book_baudrate': 57600,
 }
 
-# IRBIS64
+# =============================================================================
+# IRBIS64 — Библиотечная система
+# Сервер: 172.29.67.70:6666
+# =============================================================================
 IRBIS = {
-    'host': os.environ.get('IRBIS_HOST', '192.168.1.100'),
+    'host': os.environ.get('IRBIS_HOST', '172.29.67.70'),
     'port': int(os.environ.get('IRBIS_PORT', 6666)),
-    'username': os.environ.get('IRBIS_USERNAME', 'MASTER'),
-    'password': os.environ.get('IRBIS_PASSWORD', 'MASTERKEY'),
-    'database': os.environ.get('IRBIS_DATABASE', 'IBIS'),
+    'username': os.environ.get('IRBIS_USERNAME', '09f00st'),
+    'password': os.environ.get('IRBIS_PASSWORD', 'f00st'),
+    'database': os.environ.get('IRBIS_DATABASE', 'KAT%SERV09%'),
     'readers_database': os.environ.get('IRBIS_READERS_DB', 'RDR'),
     'loan_days': int(os.environ.get('IRBIS_LOAN_DAYS', 30)),
     'location_code': os.environ.get('IRBIS_LOCATION_CODE', '09'),
-    'mock': os.environ.get('IRBIS_MOCK', 'true').lower() == 'true',
+    'mock': os.environ.get('IRBIS_MOCK', 'false').lower() == 'true',
 }
 
 # Wi-Fi AP (для Raspberry Pi)
