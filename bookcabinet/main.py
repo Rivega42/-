@@ -11,12 +11,14 @@ import os
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from bookcabinet.config import HOST, PORT, MOCK_MODE, LOG_LEVEL
+from bookcabinet.config import HOST, PORT, MOCK_MODE, LOG_LEVEL, RFID
 from bookcabinet.server.web_server import create_app
 from bookcabinet.database import db
 from bookcabinet.mechanics.algorithms import algorithms
 from bookcabinet.rfid.card_reader import card_reader
 from bookcabinet.rfid.book_reader import book_reader
+from bookcabinet.rfid.unified_card_reader import unified_reader
+from bookcabinet.server.websocket_handler import ws_handler
 from aiohttp import web
 
 
@@ -25,6 +27,72 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger('bookcabinet')
+
+# Фоновая задача для опроса карт
+_card_polling_task = None
+
+
+async def on_card_detected(uid: str, source: str):
+    """
+    Callback при обнаружении карты
+    Отправляет событие через WebSocket для обработки интерфейсом
+    """
+    logger.info(f'Карта обнаружена: {uid} (источник: {source})')
+    
+    # Отправляем событие клиентам через WebSocket
+    await ws_handler.broadcast({
+        'type': 'card_detected',
+        'uid': uid,
+        'source': source,  # 'nfc' или 'uhf'
+    })
+
+
+async def start_card_polling():
+    """Запуск параллельного опроса NFC + UHF считывателей карт"""
+    global _card_polling_task
+    
+    # Конфигурация из config.py
+    unified_reader.configure(
+        uhf_port=RFID.get('uhf_card_reader', '/dev/ttyUSB0'),
+        mock_mode=MOCK_MODE
+    )
+    
+    # Подключение
+    status = await unified_reader.connect()
+    logger.info(f'Считыватели карт: NFC={status["nfc"]}, UHF={status["uhf"]}')
+    
+    if not status['nfc'] and not status['uhf']:
+        logger.warning('Нет доступных считывателей карт!')
+        return False
+    
+    # Устанавливаем callback
+    def sync_callback(uid: str, source: str):
+        asyncio.create_task(on_card_detected(uid, source))
+    
+    unified_reader.on_card_read = sync_callback
+    
+    # Запускаем опрос в фоновой задаче
+    poll_interval = RFID.get('card_poll_interval', 0.3)
+    _card_polling_task = asyncio.create_task(
+        unified_reader.start(poll_interval=poll_interval)
+    )
+    
+    logger.info('Опрос карт запущен (NFC + UHF)')
+    return True
+
+
+def stop_card_polling():
+    """Остановка опроса карт"""
+    global _card_polling_task
+    
+    unified_reader.stop()
+    unified_reader.disconnect()
+    
+    if _card_polling_task:
+        _card_polling_task.cancel()
+        _card_polling_task = None
+    
+    logger.info('Опрос карт остановлен')
 
 
 async def startup_checks():
@@ -41,11 +109,18 @@ async def startup_checks():
     
     if MOCK_MODE:
         checks.append(('GPIO (mock)', True))
-        checks.append(('RFID карты (mock)', True))
+        checks.append(('RFID карты NFC (mock)', True))
+        checks.append(('RFID карты UHF (mock)', True))
         checks.append(('RFID книги (mock)', True))
     else:
         checks.append(('GPIO', await init_gpio()))
-        checks.append(('RFID карты', await card_reader.connect()))
+        
+        # Подключение unified_reader для карт
+        card_status = await unified_reader.connect()
+        checks.append(('RFID карты NFC', card_status['nfc']))
+        checks.append(('RFID карты UHF', card_status['uhf']))
+        unified_reader.disconnect()  # Отключаем, запустим позже
+        
         checks.append(('RFID книги', await book_reader.connect()))
     
     checks.append(('ИРБИС (mock)', True))
@@ -86,6 +161,9 @@ async def on_startup(app):
     
     await startup_checks()
     
+    # Запуск опроса карт (NFC + UHF)
+    await start_card_polling()
+    
     db.add_system_log('INFO', 'Система запущена', 'main')
     
     logger.info(f'Сервер запущен на http://{HOST}:{PORT}')
@@ -97,7 +175,7 @@ async def on_shutdown(app):
     logger.info('Остановка BookCabinet...')
     
     algorithms.stop()
-    card_reader.stop_monitoring()
+    stop_card_polling()
     book_reader.stop_polling()
     
     db.add_system_log('INFO', 'Система остановлена', 'main')
