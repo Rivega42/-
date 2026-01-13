@@ -169,27 +169,55 @@ async def get_status(request):
 
 
 async def get_diagnostics(request):
-    # Получаем статус считывателей
+    """
+    Диагностика оборудования
+    
+    RFID считыватели:
+    - ACR1281U-C: NFC 13.56MHz для читательских билетов
+    - IQRFID-5102: UHF 900MHz для карт ЕКП (внешняя панель)  
+    - RRU9816: UHF для книжных меток (внутри шкафа)
+    """
+    # Получаем статус считывателей карт
     card_status = unified_reader.get_status()
+    nfc_connected = card_status.get('nfc_connected', False)
+    uhf_card_connected = card_status.get('uhf_connected', False)
+    
+    # TODO: добавить реальный статус book_reader (RRU9816)
+    book_reader_connected = True  # Пока заглушка
     
     return json_response({
         'sensors': sensors.read_all(),
+        'motors': 'ok',
         'position': motors.get_position(),
         'servos': servos.get_all_states(),
         'shutters': shutters.get_all_states(),
         'rfid': {
-            'nfc': card_status.get('nfc_connected', False),
-            'uhf_card': card_status.get('uhf_connected', False),
-            'book': True,  # TODO: добавить статус book_reader
+            # Формат совместимый с фронтендом: key -> 'connected' | 'disconnected'
+            'ACR1281U-C (карты NFC)': 'connected' if nfc_connected else 'disconnected',
+            'IQRFID-5102 (карты ЕКП)': 'connected' if uhf_card_connected else 'disconnected',
+            'RRU9816 (книги)': 'connected' if book_reader_connected else 'disconnected',
         },
         'irbisConnected': not IRBIS['mock'],
     })
 
 
 async def get_card_readers_status(request):
-    """Статус считывателей карт"""
+    """Детальный статус считывателей карт"""
     status = unified_reader.get_status()
-    return json_response(status)
+    return json_response({
+        'nfc': {
+            'name': 'ACR1281U-C',
+            'description': 'NFC 13.56MHz для читательских билетов',
+            'connected': status.get('nfc_connected', False),
+        },
+        'uhf_card': {
+            'name': 'IQRFID-5102',
+            'description': 'UHF 900MHz для карт ЕКП',
+            'connected': status.get('uhf_connected', False),
+        },
+        'polling': status.get('polling', False),
+        'last_card': status.get('last_card'),
+    })
 
 
 # ============ CELLS ============
