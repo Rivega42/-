@@ -13,7 +13,7 @@ REAL_PORT = "COM2"
 REAL_BAUD = 57600
 
 # Виртуальный порт (от com0com) - сюда подключается приложение
-# Пара: COM17 <-> COM18, приложение на COM17, скрипт слушает COM18
+# Пара: COM1 <-> COM18, приложение на COM1, скрипт слушает COM18
 VIRTUAL_PORT = "COM18"
 
 def hex_dump(data, direction):
@@ -44,7 +44,7 @@ def main():
     print(f"Реальный ридер: {REAL_PORT} @ {REAL_BAUD}")
     print(f"Виртуальный порт: {VIRTUAL_PORT}")
     print(f"")
-    print(f"В демо приложении RRU9816 выбери COM17")
+    print(f"В демо приложении RRU9816 выбери COM1")
     print(f"")
     print(f"Ctrl+C для выхода")
     print(f"=" * 40)
