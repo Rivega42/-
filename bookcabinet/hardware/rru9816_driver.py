@@ -1,48 +1,54 @@
 # rru9816_driver.py
 # Драйвер RRU9816 для Raspberry Pi
 # Протокол реверснут через serial sniffer
-#
-# Использование:
-#   from rru9816_driver import RRU9816
-#   reader = RRU9816('/dev/ttyUSB0')  # или 'COM2' на Windows
-#   reader.connect()
-#   tags = reader.inventory()
-#   for tag in tags:
-#       print(tag)
-#   reader.disconnect()
 
 import serial
-import struct
 import time
 from typing import List, Optional
 
 class RRU9816:
     """Драйвер для UHF RFID ридера RRU9816"""
     
-    BAUDRATE = 57600
     TIMEOUT = 1.0
     
     # Команды
     CMD_GET_INFO = 0x21
     CMD_INVENTORY = 0x01
     
-    def __init__(self, port: str):
+    def __init__(self, port: str, baudrate: int = 57600, debug: bool = False):
         self.port = port
+        self.baudrate = baudrate
+        self.debug = debug
         self.serial: Optional[serial.Serial] = None
-        self.address = 0x00  # адрес ридера
+        self.address = 0x00
     
     def connect(self) -> bool:
         """Подключение к ридеру"""
         try:
             self.serial = serial.Serial(
                 self.port,
-                self.BAUDRATE,
+                self.baudrate,
                 timeout=self.TIMEOUT
             )
             time.sleep(0.1)
-            # Проверяем связь
+            
+            # Пробуем получить инфо
             info = self.get_info()
-            return info is not None
+            if info:
+                return True
+            
+            # Может другой baudrate?
+            if self.baudrate != 115200:
+                self.serial.baudrate = 115200
+                self.baudrate = 115200
+                if self.debug:
+                    print(f"  Пробуем 115200...")
+                info = self.get_info()
+                if info:
+                    return True
+            
+            return False
+            
         except serial.SerialException as e:
             print(f"Ошибка подключения: {e}")
             return False
@@ -53,8 +59,8 @@ class RRU9816:
             self.serial.close()
             self.serial = None
     
-    def _crc16(self, data: bytes) -> bytes:
-        """CRC-16/CCITT-FALSE (poly=0x1021, init=0xFFFF)"""
+    def _crc16_ccitt(self, data: bytes) -> int:
+        """CRC-16/CCITT-FALSE"""
         crc = 0xFFFF
         for byte in data:
             crc ^= byte << 8
@@ -64,113 +70,98 @@ class RRU9816:
                 else:
                     crc <<= 1
                 crc &= 0xFFFF
-        return struct.pack('<H', crc)  # little-endian
+        return crc
     
-    def _send_command(self, cmd: int, data: bytes = b'', addr: int = None) -> Optional[bytes]:
-        """Отправка команды и получение ответа"""
+    def _crc16_modbus(self, data: bytes) -> int:
+        """CRC-16/MODBUS"""
+        crc = 0xFFFF
+        for byte in data:
+            crc ^= byte
+            for _ in range(8):
+                if crc & 0x0001:
+                    crc = (crc >> 1) ^ 0xA001
+                else:
+                    crc >>= 1
+        return crc
+    
+    def _send_raw(self, packet: bytes) -> Optional[bytes]:
+        """Отправка сырого пакета (для тестирования известных команд)"""
         if not self.serial:
             return None
         
-        if addr is None:
-            addr = self.address
+        if self.debug:
+            print(f"  TX: {packet.hex(' ')}")
         
-        # Формируем пакет: [len] [addr] [cmd] [data] [crc16]
-        payload = bytes([addr, cmd]) + data
-        length = len(payload) + 2  # +2 для CRC
-        packet = bytes([length]) + payload
-        crc = self._crc16(packet)
-        packet += crc
-        
-        # Отправляем
         self.serial.reset_input_buffer()
         self.serial.write(packet)
+        time.sleep(0.1)
         
         # Читаем ответ
-        time.sleep(0.05)
-        
-        # Первый байт - длина
         len_byte = self.serial.read(1)
         if not len_byte:
+            if self.debug:
+                print(f"  RX: нет ответа")
             return None
         
         resp_len = len_byte[0]
         response = self.serial.read(resp_len)
         
-        if len(response) < resp_len:
-            return None
+        full_response = len_byte + response
+        if self.debug:
+            print(f"  RX: {full_response.hex(' ')}")
         
         return response
     
     def get_info(self) -> Optional[dict]:
-        """Получить информацию о ридере"""
-        response = self._send_command(self.CMD_GET_INFO, addr=0xFF)
+        """Получить информацию о ридере (используем точную команду из снифера)"""
+        # Точная команда из снифера: 04 ff 21 19 95
+        packet = bytes([0x04, 0xff, 0x21, 0x19, 0x95])
+        response = self._send_raw(packet)
         
         if not response or len(response) < 10:
             return None
         
-        # Парсим ответ
-        # 00 21 00 03 01 10 02 4e 00 07 0a 01 01 00 00 [crc]
         return {
             'address': response[0],
             'command': response[1],
-            'version_major': response[3],
-            'version_minor': response[4],
-            'power': response[7],
+            'version_major': response[3] if len(response) > 3 else 0,
+            'version_minor': response[4] if len(response) > 4 else 0,
             'raw': response.hex(' ')
         }
     
-    def inventory(self, rounds: int = 1) -> List[str]:
-        """
-        Поиск меток
+    def inventory(self) -> List[str]:
+        """Поиск меток (используем точную команду из снифера)"""
+        tags = set()
         
-        Returns:
-            Список EPC меток (hex строки)
-        """
-        tags = set()  # используем set для дедупликации
+        # Точная команда из снифера: 09 00 01 01 00 00 80 0a 76 fc
+        packet = bytes([0x09, 0x00, 0x01, 0x01, 0x00, 0x00, 0x80, 0x0a, 0x76, 0xfc])
         
-        # Данные команды Inventory (из снифера)
-        # 01 01 00 00 80 0a
-        inv_data = bytes([0x01, 0x00, 0x00, 0x80, 0x0a])
-        
-        for _ in range(rounds):
-            response = self._send_command(self.CMD_INVENTORY, inv_data)
+        for _ in range(10):  # несколько попыток
+            response = self._send_raw(packet)
             
-            if not response or len(response) < 5:
-                continue
-            
-            # Парсим ответ
-            # [addr] [cmd] [???] [status] [count] [epc_len] [epc...] [crc]
-            # 00     01    01    01       01      0c        [12 bytes EPC] [crc]
-            
-            status = response[3] if len(response) > 3 else 0
-            count = response[4] if len(response) > 4 else 0
-            
-            if status == 0x01 and count > 0 and len(response) > 6:
-                epc_len = response[5]
-                if len(response) >= 6 + epc_len:
-                    epc_bytes = response[6:6+epc_len]
-                    epc = epc_bytes.hex().upper()
-                    tags.add(epc)
+            if response and len(response) > 6:
+                # [addr] [cmd] [???] [status] [count] [epc_len] [epc...] [crc]
+                status = response[3] if len(response) > 3 else 0
+                count = response[4] if len(response) > 4 else 0
+                
+                if status == 0x01 and count > 0:
+                    epc_len = response[5]
+                    if len(response) >= 6 + epc_len:
+                        epc_bytes = response[6:6+epc_len]
+                        epc = epc_bytes.hex().upper()
+                        tags.add(epc)
         
         return list(tags)
     
     def inventory_continuous(self, duration: float = 2.0) -> List[str]:
-        """
-        Непрерывный поиск меток в течение указанного времени
-        
-        Args:
-            duration: время сканирования в секундах
-            
-        Returns:
-            Список уникальных EPC меток
-        """
+        """Непрерывный поиск меток"""
         tags = set()
         start = time.time()
         
-        inv_data = bytes([0x01, 0x00, 0x00, 0x80, 0x0a])
+        packet = bytes([0x09, 0x00, 0x01, 0x01, 0x00, 0x00, 0x80, 0x0a, 0x76, 0xfc])
         
         while time.time() - start < duration:
-            response = self._send_command(self.CMD_INVENTORY, inv_data)
+            response = self._send_raw(packet)
             
             if response and len(response) > 6:
                 status = response[3]
@@ -186,11 +177,10 @@ class RRU9816:
         return list(tags)
 
 
-# Тест
 if __name__ == "__main__":
     import sys
     
-    # Определяем порт
+    # Порт
     if sys.platform == 'win32':
         port = "COM2"
     else:
@@ -201,25 +191,26 @@ if __name__ == "__main__":
     
     print(f"=== Тест RRU9816 на {port} ===")
     
-    reader = RRU9816(port)
+    reader = RRU9816(port, baudrate=57600, debug=True)
     
     if reader.connect():
-        print("✓ Подключено!")
+        print(f"✓ Подключено! (baudrate={reader.baudrate})")
         
         info = reader.get_info()
         if info:
-            print(f"✓ Ридер: версия {info.get('version_major')}.{info.get('version_minor')}")
+            print(f"✓ Версия: {info.get('version_major')}.{info.get('version_minor')}")
         
         print("\nСканирование меток (2 сек)...")
         tags = reader.inventory_continuous(2.0)
         
         if tags:
-            print(f"✓ Найдено меток: {len(tags)}")
+            print(f"\n✓ Найдено меток: {len(tags)}")
             for tag in tags:
                 print(f"  EPC: {tag}")
         else:
-            print("  Меток не найдено")
+            print("  Меток не найдено (поднеси метку к ридеру)")
         
         reader.disconnect()
     else:
         print("✗ Не удалось подключиться")
+        print("  Проверь что порт не занят другой программой")
