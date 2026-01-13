@@ -2,8 +2,8 @@
 Unified Card Reader - параллельный опрос ACR1281U-C (NFC) и IQRFID-5102 (UHF)
 
 Для идентификации пользователя используются ДВА считывателя одновременно:
-- ACR1281U-C (NFC 13.56MHz) → читательский билет библиотеки
-- IQRFID-5102 (UHF 900MHz) → ЕКП (Единая Карта Петербуржца) или UHF-карты
+- ACR1281U-C (NFC 13.56MHz) → ЕКП (Единая Карта Петербуржца)
+- IQRFID-5102 (UHF 900MHz) → читательский билет библиотеки
 
 Оба сливаются в единый callback on_card_read() с нормализованным UID.
 
@@ -355,8 +355,22 @@ class UnifiedCardReader:
         self._handle_card(uid, source)
     
     def get_status(self) -> Dict:
-        """Получение статуса считывателей"""
+        """
+        Получение статуса считывателей
+        
+        Возвращает dict с ключами для совместимости с API:
+        - nfc_connected: bool
+        - uhf_connected: bool
+        - polling: bool
+        - И детальную информацию
+        """
         return {
+            # Ключи для API routes (get_diagnostics, get_card_readers_status)
+            'nfc_connected': self._nfc_available,
+            'uhf_connected': self._uhf_available,
+            'polling': self._running,
+            
+            # Дополнительная информация
             'running': self._running,
             'mock_mode': self.mock_mode,
             'nfc': {
