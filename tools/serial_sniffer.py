@@ -1,13 +1,6 @@
 # serial_sniffer.py
 # Перехват трафика между приложением и COM портом
 # 
-# Как использовать:
-# 1. Установи com0com: https://sourceforge.net/projects/com0com/
-# 2. Создай пару виртуальных портов: COM20 <-> COM21
-# 3. Запусти этот скрипт: py serial_sniffer.py
-# 4. В приложении RRU9816 выбери COM20 (вместо COM16)
-# 5. Скрипт покажет весь трафик
-#
 # Требуется: py -m pip install pyserial
 
 import serial
@@ -20,7 +13,8 @@ REAL_PORT = "COM16"
 REAL_BAUD = 57600
 
 # Виртуальный порт (от com0com) - сюда подключается приложение
-VIRTUAL_PORT = "COM21"
+# Пара: COM17 <-> COM18, приложение на COM17, скрипт слушает COM18
+VIRTUAL_PORT = "COM18"
 
 def hex_dump(data, direction):
     """Красивый вывод hex"""
@@ -47,12 +41,10 @@ def forward(src, dst, direction):
 
 def main():
     print(f"=== Serial Sniffer ===")
-    print(f"Реальный порт: {REAL_PORT} @ {REAL_BAUD}")
+    print(f"Реальный ридер: {REAL_PORT} @ {REAL_BAUD}")
     print(f"Виртуальный порт: {VIRTUAL_PORT}")
     print(f"")
-    print(f"1. Установи com0com и создай пару COM20 <-> COM21")
-    print(f"2. В приложении выбери COM20")
-    print(f"3. Трафик появится здесь")
+    print(f"В демо приложении RRU9816 выбери COM17")
     print(f"")
     print(f"Ctrl+C для выхода")
     print(f"=" * 40)
@@ -63,10 +55,6 @@ def main():
         virtual = serial.Serial(VIRTUAL_PORT, REAL_BAUD, timeout=0.1)
     except serial.SerialException as e:
         print(f"Ошибка открытия порта: {e}")
-        print(f"\nУбедись что:")
-        print(f"  - com0com установлен")
-        print(f"  - Порты COM20/COM21 созданы")
-        print(f"  - Ридер подключен к {REAL_PORT}")
         sys.exit(1)
 
     # Два потока: APP -> READER и READER -> APP
