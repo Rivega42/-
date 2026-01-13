@@ -957,7 +957,7 @@ async def post_test_shutter(request):
 
 
 async def post_test_rfid(request):
-    """Тест RFID - только админ"""
+    """Тест RFID (симуляция) - только админ"""
     error = role_check('admin')
     if error:
         return error
@@ -966,13 +966,141 @@ async def post_test_rfid(request):
     rfid_type = data.get('type', 'card')
     
     if rfid_type == 'card':
-        # Используем unified_reader для симуляции
         unified_reader.simulate_card('TEST001', 'nfc')
     else:
         book_reader.simulate_tag('TESTBOOK001')
     
-    db.add_system_log('INFO', f'Тест RFID: {rfid_type}', 'diagnostics')
-    return json_response({'success': True})
+    db.add_system_log('INFO', f'Тест RFID (симуляция): {rfid_type}', 'diagnostics')
+    return json_response({'success': True, 'simulated': True})
+
+
+async def post_test_rfid_read_card(request):
+    """
+    Реальный тест чтения карты - ожидает карту с таймаутом
+    
+    POST /api/test/rfid/read-card
+    Body: {"timeout": 10, "reader": "any"}  # reader: "nfc", "uhf", "any"
+    
+    Поднесите карту к считывателю в течение timeout секунд.
+    Возвращает UID прочитанной карты или ошибку таймаута.
+    """
+    error = role_check('admin')
+    if error:
+        return error
+    
+    data = await request.json() if request.body_exists else {}
+    timeout = min(data.get('timeout', 10), 30)  # Макс 30 сек
+    reader_type = data.get('reader', 'any')  # 'nfc', 'uhf', 'any'
+    
+    # Результат будет записан сюда из callback
+    result = {'uid': None, 'source': None, 'event': asyncio.Event()}
+    
+    def on_card_read(uid: str, source: str):
+        # Фильтруем по типу ридера если указан
+        if reader_type == 'any' or reader_type == source:
+            result['uid'] = uid
+            result['source'] = source
+            result['event'].set()
+    
+    # Сохраняем старый callback
+    old_callback = unified_reader.on_card_read
+    
+    try:
+        # Устанавливаем тестовый callback
+        unified_reader.on_card_read = on_card_read
+        
+        # Ждём карту или таймаут
+        try:
+            await asyncio.wait_for(result['event'].wait(), timeout=timeout)
+            
+            db.add_system_log(
+                'INFO', 
+                f"Тест RFID: прочитана карта {result['uid']} ({result['source']})", 
+                'diagnostics'
+            )
+            
+            return json_response({
+                'success': True,
+                'uid': result['uid'],
+                'source': result['source'],
+                'reader': 'ACR1281U-C' if result['source'] == 'nfc' else 'IQRFID-5102',
+                'message': f"Карта прочитана: {result['uid']}"
+            })
+            
+        except asyncio.TimeoutError:
+            return json_response({
+                'success': False,
+                'error': 'timeout',
+                'message': f'Карта не обнаружена за {timeout} сек'
+            })
+            
+    finally:
+        # Восстанавливаем старый callback
+        unified_reader.on_card_read = old_callback
+
+
+async def post_test_rfid_read_book(request):
+    """
+    Реальный тест чтения книжной метки - ожидает метку с таймаутом
+    
+    POST /api/test/rfid/read-book
+    Body: {"timeout": 10}
+    
+    Поместите книгу в зону считывания RRU9816.
+    Возвращает данные метки или ошибку таймаута.
+    """
+    error = role_check('admin')
+    if error:
+        return error
+    
+    data = await request.json() if request.body_exists else {}
+    timeout = min(data.get('timeout', 10), 30)  # Макс 30 сек
+    
+    try:
+        # Проверяем есть ли async метод у book_reader
+        if hasattr(book_reader, 'read_tag_async'):
+            tag_data = await asyncio.wait_for(
+                book_reader.read_tag_async(),
+                timeout=timeout
+            )
+        else:
+            # Fallback: синхронное чтение в executor
+            loop = asyncio.get_event_loop()
+            tag_data = await asyncio.wait_for(
+                loop.run_in_executor(None, book_reader.read_tag),
+                timeout=timeout
+            )
+        
+        if tag_data:
+            uid = tag_data.get('uid', tag_data.get('epc', 'unknown'))
+            db.add_system_log('INFO', f"Тест RFID: прочитана метка {uid}", 'diagnostics')
+            
+            return json_response({
+                'success': True,
+                'tag': tag_data,
+                'reader': 'RRU9816',
+                'message': f"Метка прочитана: {uid}"
+            })
+        else:
+            return json_response({
+                'success': False,
+                'error': 'no_tag',
+                'message': 'Метка не обнаружена'
+            })
+            
+    except asyncio.TimeoutError:
+        return json_response({
+            'success': False,
+            'error': 'timeout',
+            'message': f'Метка не обнаружена за {timeout} сек'
+        })
+    except Exception as e:
+        db.add_system_log('ERROR', f"Ошибка теста RFID книг: {e}", 'diagnostics')
+        return json_response({
+            'success': False,
+            'error': str(e),
+            'message': f'Ошибка чтения: {e}'
+        })
 
 
 async def post_test_telegram(request):
@@ -1107,6 +1235,8 @@ def setup_routes(app: web.Application):
     app.router.add_post('/api/test/lock', post_test_lock)
     app.router.add_post('/api/test/shutter', post_test_shutter)
     app.router.add_post('/api/test/rfid', post_test_rfid)
+    app.router.add_post('/api/test/rfid/read-card', post_test_rfid_read_card)
+    app.router.add_post('/api/test/rfid/read-book', post_test_rfid_read_book)
     app.router.add_post('/api/test/telegram', post_test_telegram)
     app.router.add_post('/api/test/irbis', post_test_irbis)
     
