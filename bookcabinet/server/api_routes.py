@@ -23,7 +23,7 @@ from ..monitoring.backup import backup_manager
 from ..rfid.card_reader import card_reader
 from ..rfid.book_reader import book_reader
 from ..rfid.unified_card_reader import unified_reader
-from ..config import TIMEOUTS, IRBIS, TELEGRAM
+from ..config import TIMEOUTS, IRBIS, TELEGRAM, RFID, MOCK_MODE
 from .websocket_handler import ws_handler
 
 
@@ -106,9 +106,9 @@ async def start_card_readers(app: web.Application):
     print("[CardReader] Инициализация считывателей...")
     
     # Конфигурация из config.py
-    from ..config import RFID, MOCK_MODE
+    uhf_port = RFID.get('uhf_card_reader', '/dev/ttyUSB0')
+    poll_interval = RFID.get('card_poll_interval', 0.3)
     
-    uhf_port = RFID.get('external_uhf_port', '/dev/ttyUSB0')
     unified_reader.configure(uhf_port=uhf_port, mock_mode=MOCK_MODE)
     
     # Регистрируем callback
@@ -121,7 +121,7 @@ async def start_card_readers(app: web.Application):
     if status['nfc'] or status['uhf']:
         # Запускаем опрос в фоне
         _card_reader_task = asyncio.create_task(
-            unified_reader.start(poll_interval=0.3)
+            unified_reader.start(poll_interval=poll_interval)
         )
         print("[CardReader] Опрос запущен")
     else:
@@ -169,14 +169,18 @@ async def get_status(request):
 
 
 async def get_diagnostics(request):
+    # Получаем статус считывателей
+    card_status = unified_reader.get_status()
+    
     return json_response({
         'sensors': sensors.read_all(),
         'position': motors.get_position(),
         'servos': servos.get_all_states(),
         'shutters': shutters.get_all_states(),
         'rfid': {
-            'card': True,
-            'book': True,
+            'nfc': card_status.get('nfc_connected', False),
+            'uhf_card': card_status.get('uhf_connected', False),
+            'book': True,  # TODO: добавить статус book_reader
         },
         'irbisConnected': not IRBIS['mock'],
     })
@@ -849,6 +853,11 @@ async def get_settings(request):
             'interval': 24,
         },
         'irbis': IRBIS,
+        'rfid': {
+            'uhf_card_reader': RFID.get('uhf_card_reader'),
+            'poll_interval': RFID.get('card_poll_interval'),
+            'debounce_ms': RFID.get('card_debounce_ms'),
+        },
     })
 
 
