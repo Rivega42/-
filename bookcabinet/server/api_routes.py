@@ -3,6 +3,7 @@ REST API Routes - полная версия
 """
 from aiohttp import web
 import json
+import asyncio
 from datetime import datetime
 
 from ..database import db
@@ -21,8 +22,13 @@ from ..monitoring.telegram import telegram
 from ..monitoring.backup import backup_manager
 from ..rfid.card_reader import card_reader
 from ..rfid.book_reader import book_reader
+from ..rfid.unified_card_reader import unified_reader
 from ..config import TIMEOUTS, IRBIS, TELEGRAM
 from .websocket_handler import ws_handler
+
+
+# Глобальная задача для card reader polling
+_card_reader_task = None
 
 
 def json_response(data, status=200):
@@ -47,6 +53,99 @@ def role_check(*roles):
     if not check.get('success'):
         return json_response(check, check.get('code', 403))
     return None
+
+
+# ============ CARD READER INTEGRATION ============
+
+async def _on_card_detected(uid: str, source: str):
+    """
+    Callback при обнаружении карты на NFC или UHF считывателе
+    
+    Автоматически:
+    1. Отправляет событие card_detected по WebSocket
+    2. Вызывает auth_service.authenticate()
+    3. Отправляет результат auth_result по WebSocket
+    """
+    print(f"[CardReader] Обнаружена карта: {uid} (источник: {source})")
+    
+    # 1. Отправляем событие обнаружения карты
+    await ws_handler.send_card_detected(uid, source)
+    
+    # 2. Автоматическая авторизация
+    try:
+        result = await auth_service.authenticate(uid)
+        
+        # 3. Отправляем результат авторизации
+        await ws_handler.send_auth_result(result)
+        
+        if result.get('success'):
+            user = result.get('user', {})
+            print(f"[CardReader] Авторизован: {user.get('name', uid)}")
+        else:
+            print(f"[CardReader] Ошибка авторизации: {result.get('error', 'unknown')}")
+            
+    except Exception as e:
+        print(f"[CardReader] Ошибка при авторизации: {e}")
+        await ws_handler.send_auth_result({
+            'success': False,
+            'error': str(e)
+        })
+
+
+def _on_card_sync(uid: str, source: str):
+    """Синхронная обёртка для async callback"""
+    asyncio.create_task(_on_card_detected(uid, source))
+
+
+async def start_card_readers(app: web.Application):
+    """
+    Startup handler - запуск параллельного опроса NFC + UHF считывателей
+    """
+    global _card_reader_task
+    
+    print("[CardReader] Инициализация считывателей...")
+    
+    # Конфигурация из config.py
+    from ..config import RFID, MOCK_MODE
+    
+    uhf_port = RFID.get('external_uhf_port', '/dev/ttyUSB0')
+    unified_reader.configure(uhf_port=uhf_port, mock_mode=MOCK_MODE)
+    
+    # Регистрируем callback
+    unified_reader.on_card_read = _on_card_sync
+    
+    # Подключаемся к считывателям
+    status = await unified_reader.connect()
+    print(f"[CardReader] Статус подключения: NFC={status['nfc']}, UHF={status['uhf']}")
+    
+    if status['nfc'] or status['uhf']:
+        # Запускаем опрос в фоне
+        _card_reader_task = asyncio.create_task(
+            unified_reader.start(poll_interval=0.3)
+        )
+        print("[CardReader] Опрос запущен")
+    else:
+        print("[CardReader] Нет доступных считывателей!")
+
+
+async def stop_card_readers(app: web.Application):
+    """
+    Cleanup handler - остановка считывателей при shutdown
+    """
+    global _card_reader_task
+    
+    print("[CardReader] Остановка...")
+    unified_reader.stop()
+    
+    if _card_reader_task:
+        _card_reader_task.cancel()
+        try:
+            await _card_reader_task
+        except asyncio.CancelledError:
+            pass
+    
+    unified_reader.disconnect()
+    print("[CardReader] Остановлен")
 
 
 # ============ STATUS ============
@@ -81,6 +180,12 @@ async def get_diagnostics(request):
         },
         'irbisConnected': not IRBIS['mock'],
     })
+
+
+async def get_card_readers_status(request):
+    """Статус считывателей карт"""
+    status = unified_reader.get_status()
+    return json_response(status)
 
 
 # ============ CELLS ============
@@ -124,6 +229,16 @@ async def post_auth_card(request):
     
     result = await auth_service.authenticate(rfid)
     return json_response(result)
+
+
+async def post_simulate_card(request):
+    """Симуляция карты для тестирования"""
+    data = await request.json()
+    uid = data.get('uid', 'TEST001')
+    source = data.get('source', 'nfc')
+    
+    unified_reader.simulate_card(uid, source)
+    return json_response({'success': True, 'uid': uid, 'source': source})
 
 
 # ============ BOOK OPERATIONS ============
@@ -814,7 +929,8 @@ async def post_test_rfid(request):
     rfid_type = data.get('type', 'card')
     
     if rfid_type == 'card':
-        card_reader.simulate_card('TEST001', 'library')
+        # Используем unified_reader для симуляции
+        unified_reader.simulate_card('TEST001', 'nfc')
     else:
         book_reader.simulate_tag('TESTBOOK001')
     
@@ -890,6 +1006,7 @@ def setup_routes(app: web.Application):
     # Status & Diagnostics
     app.router.add_get('/api/status', get_status)
     app.router.add_get('/api/diagnostics', get_diagnostics)
+    app.router.add_get('/api/card-readers/status', get_card_readers_status)
     
     # Cells
     app.router.add_get('/api/cells', get_cells)
@@ -902,6 +1019,7 @@ def setup_routes(app: web.Application):
     
     # Auth
     app.router.add_post('/api/auth/card', post_auth_card)
+    app.router.add_post('/api/auth/simulate', post_simulate_card)
     
     # Book Operations
     app.router.add_post('/api/issue', post_issue)
@@ -962,3 +1080,7 @@ def setup_routes(app: web.Application):
     
     # WebSocket
     app.router.add_get('/ws', ws_handler.handle)
+    
+    # Startup/Shutdown handlers для card readers
+    app.on_startup.append(start_card_readers)
+    app.on_cleanup.append(stop_card_readers)
