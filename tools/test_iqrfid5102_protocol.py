@@ -1,80 +1,65 @@
 # test_iqrfid5102_protocol.py
-# Тест IQRFID-5102 с протоколом 0xA0 (стандартный китайский UHF)
+# Тест IQRFID-5102 с правильным протоколом
 #
-# Запуск: py tools/test_iqrfid5102_protocol.py COM3
-# Требуется: py -m pip install pyserial
+# Протокол: [LEN][ADR][CMD][DATA...][CRC_LOW][CRC_HIGH]
+# CRC-16: polynomial 0x8408, init 0xFFFF
+# Baudrate: 57600
+#
+# Запуск: py tools/test_iqrfid5102_protocol.py COM2
 
 import serial
 import time
 import sys
 
-PORT = "COM3"  # Поменяй на свой порт
-BAUDRATES = [115200, 57600, 38400, 9600]
+PORT = "COM2"
+BAUDRATE = 57600
 
-def checksum_0xa0(data):
-    """Китайский UHF checksum: (~SUM + 1) & 0xFF"""
-    return (~sum(data) + 1) & 0xFF
+def crc16_8408(data):
+    """CRC-16 с полиномом 0x8408 (CRC-CCITT reversed)"""
+    crc = 0xFFFF
+    for byte in data:
+        crc ^= byte
+        for _ in range(8):
+            if crc & 0x0001:
+                crc = (crc >> 1) ^ 0x8408
+            else:
+                crc >>= 1
+    # LSB first
+    return bytes([crc & 0xFF, (crc >> 8) & 0xFF])
 
-def build_cmd_0xa0(addr, cmd, data=b''):
+def build_cmd(addr, cmd, data=b''):
     """
-    Протокол 0xA0:
-    [0xA0] [len] [addr] [cmd] [data...] [checksum]
-    len = addr + cmd + data + checksum = len(data) + 3
-    checksum = (~SUM + 1) & 0xFF от всех байт после 0xA0
+    Формат: [LEN][ADR][CMD][DATA...][CRC_LOW][CRC_HIGH]
+    LEN = длина после LEN (addr + cmd + data + 2 байта CRC)
     """
-    length = len(data) + 3  # addr + cmd + checksum
-    packet = bytes([0xA0, length, addr, cmd]) + data
-    cs = checksum_0xa0(packet[1:])  # checksum без 0xA0
-    packet += bytes([cs])
+    length = 1 + 1 + len(data) + 2  # addr + cmd + data + crc
+    packet = bytes([length, addr, cmd]) + data
+    crc = crc16_8408(packet)
+    packet += crc
     return packet
 
-# Команды для протокола 0xA0
-COMMANDS = [
-    ("Inventory (0x01)", build_cmd_0xa0(0x00, 0x01)),
-    ("Inventory (0x80)", build_cmd_0xa0(0x00, 0x80)),
-    ("Inventory (0x80) + Q=4", build_cmd_0xa0(0x00, 0x80, bytes([0x04]))),
-    ("GetVersion (0x03)", build_cmd_0xa0(0x00, 0x03)),
-    ("GetVersion FF", build_cmd_0xa0(0xFF, 0x03)),
-    ("Reset (0x70)", build_cmd_0xa0(0x00, 0x70)),
-    ("SetRegion EU (0x07)", build_cmd_0xa0(0x00, 0x07, bytes([0x02]))),  # EU band
-]
-
-def test_baudrate(port, baud):
-    """Тест одного baudrate"""
-    print(f"\n--- Baudrate: {baud} ---")
-    try:
-        ser = serial.Serial(port, baud, timeout=0.5)
-        time.sleep(0.2)
-        
-        # Очистим буфер
-        ser.reset_input_buffer()
-        
-        # Проверим не шлёт ли ридер что-то сам
-        time.sleep(0.3)
-        initial = ser.read(64)
-        if initial:
-            print(f"  [!] Ридер сам прислал: {initial.hex(' ')}")
-        
-        for name, cmd in COMMANDS:
-            ser.reset_input_buffer()
-            ser.write(cmd)
-            time.sleep(0.15)
-            response = ser.read(64)
-            
-            cmd_hex = cmd.hex(' ')
-            if response:
-                resp_hex = response.hex(' ')
-                print(f"  {name}")
-                print(f"    TX: {cmd_hex}")
-                print(f"    RX: {resp_hex}")
-                print(f"    [+] ОТВЕТ ПОЛУЧЕН!")
-            else:
-                print(f"  {name}: {cmd_hex} -> нет ответа")
-        
-        ser.close()
-        
-    except serial.SerialException as e:
-        print(f"  Ошибка: {e}")
+def parse_response(data):
+    """Разбор ответа"""
+    if len(data) < 5:
+        return None
+    
+    length = data[0]
+    addr = data[1]
+    cmd = data[2]
+    
+    if cmd == 0x01:  # Inventory response
+        if len(data) >= 4:
+            status = data[3]
+            if status == 0xFB:
+                return {'cmd': 'inventory', 'status': 'no_tags'}
+            elif status == 0x01 and len(data) > 6:
+                count = data[4] if len(data) > 4 else 0
+                epc_len = data[5] if len(data) > 5 else 0
+                if len(data) >= 6 + epc_len:
+                    epc = data[6:6+epc_len].hex().upper()
+                    return {'cmd': 'inventory', 'status': 'tag_found', 'count': count, 'epc': epc}
+    
+    return {'cmd': hex(cmd), 'raw': data.hex(' ')}
 
 def main():
     global PORT
@@ -83,17 +68,63 @@ def main():
         PORT = sys.argv[1]
     
     print(f"=== Тест IQRFID-5102 на {PORT} ===")
-    print(f"Протокол: 0xA0 (стандартный китайский UHF)")
-    print(f"Checksum: (~SUM + 1) & 0xFF")
+    print(f"Baudrate: {BAUDRATE}")
+    print(f"Протокол: [LEN][ADR][CMD][DATA][CRC16]")
+    print(f"CRC-16: poly=0x8408, init=0xFFFF")
+    print()
     
-    for baud in BAUDRATES:
-        test_baudrate(PORT, baud)
+    # Команда Inventory: 04 00 01 DB 4B
+    inventory_cmd = build_cmd(0x00, 0x01)
+    print(f"Inventory команда: {inventory_cmd.hex(' ')}")
+    print(f"Ожидаемая:         04 00 01 db 4b")
+    print()
     
-    print("\n=== Тест завершён ===")
-    print("\nЕсли ни один baudrate не дал ответа:")
-    print("  1. Проверь питание ридера (нужен внешний БП)")
-    print("  2. Проверь что TX/RX не перепутаны")
-    print("  3. Попробуй другой USB-TTL адаптер")
+    try:
+        ser = serial.Serial(PORT, BAUDRATE, timeout=1)
+        time.sleep(0.2)
+        
+        print("Подключено! Сканирование меток (5 сек)...")
+        print("Поднеси метку к ридеру!")
+        print()
+        
+        start = time.time()
+        tags_found = set()
+        
+        while time.time() - start < 5:
+            ser.reset_input_buffer()
+            ser.write(inventory_cmd)
+            time.sleep(0.1)
+            
+            response = ser.read(64)
+            if response:
+                print(f"  TX: {inventory_cmd.hex(' ')}")
+                print(f"  RX: {response.hex(' ')}")
+                
+                parsed = parse_response(response)
+                if parsed:
+                    if parsed.get('status') == 'tag_found':
+                        epc = parsed.get('epc', '')
+                        if epc and epc not in tags_found:
+                            tags_found.add(epc)
+                            print(f"  [+] МЕТКА: {epc}")
+                    elif parsed.get('status') == 'no_tags':
+                        print(f"  [.] нет меток")
+                print()
+            
+            time.sleep(0.2)
+        
+        ser.close()
+        
+        print("=" * 40)
+        if tags_found:
+            print(f"✓ Найдено меток: {len(tags_found)}")
+            for tag in tags_found:
+                print(f"  EPC: {tag}")
+        else:
+            print("Меток не найдено")
+            
+    except serial.SerialException as e:
+        print(f"Ошибка: {e}")
 
 if __name__ == "__main__":
     main()
