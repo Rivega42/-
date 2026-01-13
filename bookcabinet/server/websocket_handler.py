@@ -160,6 +160,14 @@ class WebSocketHandler:
                 else:
                     await ws.send_json({'type': 'error', 'message': f'Unknown shutter command: {cmd}'})
             
+            elif action == 'simulate_card':
+                # Симуляция карты для тестирования
+                from ..rfid.unified_card_reader import unified_reader
+                uid = message.get('uid', 'TEST001')
+                source = message.get('source', 'nfc')
+                unified_reader.simulate_card(uid, source)
+                await ws.send_json({'type': 'simulate_result', 'success': True, 'uid': uid, 'source': source})
+            
         except json.JSONDecodeError:
             await ws.send_json({'type': 'error', 'message': 'Invalid JSON'})
         except Exception as e:
@@ -195,6 +203,32 @@ class WebSocketHandler:
             'x': x,
             'y': y,
             'tray': tray
+        })
+    
+    async def send_card_detected(self, uid: str, source: str):
+        """
+        Отправка события обнаружения карты всем клиентам
+        
+        Args:
+            uid: Нормализованный UID карты
+            source: 'nfc' или 'uhf'
+        """
+        await self.broadcast({
+            'type': 'card_detected',
+            'uid': uid,
+            'source': source
+        })
+    
+    async def send_auth_result(self, result: Dict[str, Any]):
+        """
+        Отправка результата автоматической авторизации всем клиентам
+        
+        Args:
+            result: Результат от auth_service.authenticate()
+        """
+        await self.broadcast({
+            'type': 'auth_result',
+            'data': result
         })
 
 
