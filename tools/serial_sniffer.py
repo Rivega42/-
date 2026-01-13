@@ -9,7 +9,7 @@ import time
 import sys
 
 # Реальный ридер
-REAL_PORT = "COM16"
+REAL_PORT = "COM2"
 REAL_BAUD = 57600
 
 # Виртуальный порт (от com0com) - сюда подключается приложение
