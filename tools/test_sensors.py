@@ -18,9 +18,9 @@ SENSORS = {
 }
 
 SAMPLES = 50
-THRESHOLD_HIGH = 95
-THRESHOLD_LOW = 80
-DEBOUNCE_COUNT = 3
+THRESHOLD_HIGH = 98
+THRESHOLD_LOW = 95
+DEBOUNCE_COUNT = 5
 
 # Состояние датчиков
 state = {name: False for name in SENSORS}
