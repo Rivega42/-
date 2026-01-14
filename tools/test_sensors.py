@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Тестирование датчиков TCST2103 BookCabinet
-Логика без внешних резисторов: ≥95% HIGH = нажат
+С гистерезисом для стабильного отображения
 
 Запуск: python3 tools/test_sensors.py
 """
@@ -17,12 +17,25 @@ SENSORS = {
     'TRAY_END': 20,
 }
 
-THRESHOLD = 95
 SAMPLES = 50
+THRESHOLD_HIGH = 95  # ≥95% → сработал
+THRESHOLD_LOW = 80   # ≤80% → свободен
+                     # 80-95% → без изменений (гистерезис)
+
+# Состояние датчиков
+state = {name: False for name in SENSORS}
 
 def read_percent(pin):
     readings = sum(GPIO.input(pin) for _ in range(SAMPLES))
     return readings * 100 // SAMPLES
+
+def update_state(name, pct):
+    """Обновляет состояние с гистерезисом"""
+    if pct >= THRESHOLD_HIGH:
+        state[name] = True
+    elif pct <= THRESHOLD_LOW:
+        state[name] = False
+    # между 80-95% — не меняем
 
 def main():
     GPIO.setmode(GPIO.BCM)
@@ -32,9 +45,9 @@ def main():
         GPIO.setup(pin, GPIO.IN, pull_up_down=GPIO.PUD_UP)
     
     print("=" * 60)
-    print("  МОНИТОРИНГ ДАТЧИКОВ TCST2103")
+    print("  МОНИТОРИНГ ДАТЧИКОВ TCST2103 (с гистерезисом)")
     print("=" * 60)
-    print(f"Логика: ≥{THRESHOLD}% = СРАБОТАЛ 🔴 | <{THRESHOLD}% = свободен ⚪")
+    print(f"Логика: ≥{THRESHOLD_HIGH}%=🔴 | ≤{THRESHOLD_LOW}%=⚪ | между=без изменений")
     print("Ctrl+C для выхода\n")
     
     try:
@@ -42,8 +55,8 @@ def main():
             parts = []
             for name, pin in SENSORS.items():
                 pct = read_percent(pin)
-                triggered = pct >= THRESHOLD
-                icon = "🔴" if triggered else "⚪"
+                update_state(name, pct)
+                icon = "🔴" if state[name] else "⚪"
                 parts.append(f"{name}:{icon}")
             
             print(f"\r{' | '.join(parts)}    ", end="", flush=True)
@@ -53,7 +66,7 @@ def main():
         print("\n\nСостояние при выходе:")
         for name, pin in SENSORS.items():
             pct = read_percent(pin)
-            status = "СРАБОТАЛ" if pct >= THRESHOLD else "свободен"
+            status = "СРАБОТАЛ" if state[name] else "свободен"
             print(f"  {name}: {status} ({pct}%)")
     finally:
         GPIO.cleanup()
