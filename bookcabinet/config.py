@@ -111,16 +111,23 @@ TIMEOUTS = {
 #
 # Внутри шкафа: один считыватель для книг
 # - RRU9816 (UHF 900MHz) → книжные RFID-метки
+#
+# ВАЖНО: После установки udev правил используются символические ссылки
+# См. bookcabinet/udev/99-bookcabinet-rfid.rules
 # =============================================================================
 RFID = {
     # Внешняя панель - считыватели карт пользователей
-    'nfc_card_reader': '/dev/pcsc',       # ACR1281U-C (NFC, PC/SC)
-    'uhf_card_reader': '/dev/ttyUSB0',    # IQRFID-5102 (UHF, Serial)
+    'nfc_card_reader': '/dev/pcsc',           # ACR1281U-C (NFC, PC/SC)
+    'uhf_card_reader': '/dev/rfid_uhf_card',  # IQRFID-5102 (UHF, Serial) - символическая ссылка
     'uhf_card_baudrate': 57600,
     
     # Внутри шкафа - считыватель книг
-    'book_reader': '/dev/ttyUSB1',        # RRU9816 (UHF, Serial)
+    'book_reader': '/dev/rfid_book',          # RRU9816 (UHF, Serial) - символическая ссылка
     'book_baudrate': 57600,
+    
+    # Fallback на прямые порты если символические ссылки не созданы
+    'uhf_card_reader_fallback': '/dev/ttyUSB0',
+    'book_reader_fallback': '/dev/ttyUSB1',
     
     # Параметры опроса карт
     'card_poll_interval': 0.3,            # Интервал опроса (сек)
