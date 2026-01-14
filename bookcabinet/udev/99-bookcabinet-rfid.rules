@@ -1,0 +1,20 @@
+# BookCabinet RFID Readers - стабильные имена на основе USB пути
+# Файл должен быть скопирован в /etc/udev/rules.d/
+#
+# После установки выполнить:
+# sudo udevadm control --reload-rules
+# sudo udevadm trigger
+
+# IQRFID-5102 (UHF карты ЕКП) - порт 1-1.5.4
+SUBSYSTEM=="tty", ATTRS{idVendor}=="10c4", ATTRS{idProduct}=="ea60", DEVPATH=="*1-1.5.4*", SYMLINK+="rfid_uhf_card", MODE="0666", GROUP="dialout"
+
+# RRU9816 (UHF книги) - порт 1-1.5.1.3  
+SUBSYSTEM=="tty", ATTRS{idVendor}=="10c4", ATTRS{idProduct}=="ea60", DEVPATH=="*1-1.5.1.3*", SYMLINK+="rfid_book", MODE="0666", GROUP="dialout"
+
+# ACR1281U-C NFC Reader (через PC/SC)
+SUBSYSTEM=="usb", ATTR{idVendor}=="072f", ATTR{idProduct}=="2224", MODE="0666", GROUP="plugdev"
+
+# Запасные правила на случай других USB портов
+# Если устройства подключены в другие порты, раскомментируйте и настройте:
+# SUBSYSTEM=="tty", ATTRS{idVendor}=="10c4", ATTRS{idProduct}=="ea60", KERNELS=="1-1.2:1.0", SYMLINK+="rfid_uhf_card", MODE="0666", GROUP="dialout"
+# SUBSYSTEM=="tty", ATTRS{idVendor}=="10c4", ATTRS{idProduct}=="ea60", KERNELS=="1-1.3:1.0", SYMLINK+="rfid_book", MODE="0666", GROUP="dialout"
