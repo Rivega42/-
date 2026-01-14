@@ -1,9 +1,6 @@
 #!/usr/bin/env python3
 """
-Тестирование датчиков TCST2103 BookCabinet
-Логика без внешних резисторов: 100%=нажат, <95%=открыт
-
-Запуск: python3 tools/test_sensors.py
+Диагностика датчиков TCST2103 с логами min/max
 """
 import RPi.GPIO as GPIO
 import time
@@ -17,18 +14,14 @@ SENSORS = {
     'TRAY_END': 20,
 }
 
-THRESHOLD = 95  # % для определения "нажат"
-SAMPLES = 50    # Количество чтений для усреднения
+SAMPLES = 50
 
-def read_sensor(pin):
-    """Читает датчик, возвращает True если нажат (>=95% HIGH)"""
+# Статистика
+stats = {name: {'min': 100, 'max': 0, 'current': 0} for name in SENSORS}
+
+def read_percent(pin):
     readings = sum(GPIO.input(pin) for _ in range(SAMPLES))
-    percent = readings * 100 // SAMPLES
-    return percent >= THRESHOLD
-
-def read_all_sensors():
-    """Возвращает словарь {имя: True/False}"""
-    return {name: read_sensor(pin) for name, pin in SENSORS.items()}
+    return readings * 100 // SAMPLES
 
 def main():
     GPIO.setmode(GPIO.BCM)
@@ -37,29 +30,46 @@ def main():
     for pin in SENSORS.values():
         GPIO.setup(pin, GPIO.IN, pull_up_down=GPIO.PUD_UP)
     
-    print("=" * 60)
-    print("  МОНИТОРИНГ ДАТЧИКОВ TCST2103")
-    print("=" * 60)
-    print(f"Логика: ≥{THRESHOLD}% HIGH = СРАБОТАЛ 🔴 | <{THRESHOLD}% = свободен ⚪")
-    print("Ctrl+C для выхода\n")
+    print("=" * 70)
+    print("  ДИАГНОСТИКА ДАТЧИКОВ — логи min/max")
+    print("=" * 70)
+    print("Формат: имя:текущий% [min-max]")
+    print("Ctrl+C для итогов\n")
     
     try:
         while True:
-            sensors = read_all_sensors()
             parts = []
-            for name, triggered in sensors.items():
-                icon = "🔴" if triggered else "⚪"
-                parts.append(f"{name}:{icon}")
+            for name, pin in SENSORS.items():
+                pct = read_percent(pin)
+                stats[name]['current'] = pct
+                stats[name]['min'] = min(stats[name]['min'], pct)
+                stats[name]['max'] = max(stats[name]['max'], pct)
+                
+                s = stats[name]
+                parts.append(f"{name}:{pct:3d}% [{s['min']:2d}-{s['max']:3d}]")
             
-            print(f"\r{' | '.join(parts)}    ", end="", flush=True)
+            print(f"\r{' | '.join(parts)}", end="", flush=True)
             time.sleep(0.1)
             
     except KeyboardInterrupt:
-        print("\n\nСостояние при выходе:")
-        sensors = read_all_sensors()
-        for name, triggered in sensors.items():
-            status = "СРАБОТАЛ" if triggered else "свободен"
-            print(f"  {name}: {status}")
+        print("\n\n" + "=" * 70)
+        print("  ИТОГИ (min-max за всё время)")
+        print("=" * 70)
+        for name in SENSORS:
+            s = stats[name]
+            spread = s['max'] - s['min']
+            if s['min'] >= 95:
+                status = "✓ стабильно НАЖАТ"
+            elif s['max'] <= 10:
+                status = "✓ стабильно ОТКРЫТ"
+            elif spread <= 20:
+                status = "~ почти стабильно"
+            else:
+                status = f"✗ МОРГАЕТ (разброс {spread}%)"
+            print(f"  {name:12s}: {s['min']:3d}% - {s['max']:3d}%  {status}")
+        
+        print("\n" + "-" * 70)
+        print("Рекомендуемый threshold: выше максимума открытого датчика")
     finally:
         GPIO.cleanup()
 
