@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """
 Тестирование датчиков TCST2103 BookCabinet
-Индивидуальная калибровка каждого датчика
+Индивидуальная пошаговая калибровка
 
 Запуск: python3 tools/test_sensors.py              (мониторинг)
-        python3 tools/test_sensors.py --calibrate  (калибровка)
+        python3 tools/test_sensors.py --calibrate  (калибровка всех сразу)
+        python3 tools/test_sensors.py --step       (пошаговая калибровка)
 """
 import RPi.GPIO as GPIO
 import time
@@ -25,19 +26,10 @@ SAMPLES = 50
 DEBOUNCE_COUNT = 3
 CALIBRATION_FILE = os.path.expanduser('~/bookcabinet/sensor_calibration.json')
 
-# Дефолтные пороги (если нет калибровки)
-DEFAULT_THRESHOLDS = {
-    'high': 98,
-    'low': 89,
-}
+DEFAULT_THRESHOLDS = {'high': 98, 'low': 89}
 
-# Загружаем калибровку
 def load_calibration():
-    """Загружает индивидуальные пороги для каждого датчика"""
-    thresholds = {}
-    for name in SENSORS:
-        thresholds[name] = DEFAULT_THRESHOLDS.copy()
-    
+    thresholds = {name: DEFAULT_THRESHOLDS.copy() for name in SENSORS}
     if os.path.exists(CALIBRATION_FILE):
         try:
             with open(CALIBRATION_FILE, 'r') as f:
@@ -47,21 +39,18 @@ def load_calibration():
                         thresholds[name] = saved[name]
             print(f"✓ Загружена калибровка из {CALIBRATION_FILE}")
         except Exception as e:
-            print(f"⚠ Ошибка загрузки калибровки: {e}")
-    
+            print(f"⚠ Ошибка загрузки: {e}")
     return thresholds
 
 def save_calibration(thresholds):
-    """Сохраняет калибровку в файл"""
     try:
         os.makedirs(os.path.dirname(CALIBRATION_FILE), exist_ok=True)
         with open(CALIBRATION_FILE, 'w') as f:
             json.dump(thresholds, f, indent=2)
-        print(f"\n✓ Калибровка сохранена в {CALIBRATION_FILE}")
+        print(f"✓ Сохранено в {CALIBRATION_FILE}")
     except Exception as e:
-        print(f"\n⚠ Ошибка сохранения: {e}")
+        print(f"⚠ Ошибка сохранения: {e}")
 
-# Состояние датчиков
 state = {name: False for name in SENSORS}
 pending = {name: None for name in SENSORS}
 counter = {name: 0 for name in SENSORS}
@@ -73,8 +62,8 @@ def read_percent(pin):
 
 def update_state(name, pct):
     global state, pending, counter
+    th = thresholds.get(name, DEFAULT_THRESHOLDS)
     
-    th = thresholds[name]
     if pct >= th['high']:
         desired = True
     elif pct <= th['low']:
@@ -92,14 +81,12 @@ def update_state(name, pct):
         state[name] = desired
 
 def monitor_mode():
-    """Мониторинг в реальном времени с индивидуальными порогами"""
     global thresholds
     thresholds = load_calibration()
     
     print("\n" + "=" * 80)
-    print("  МОНИТОРИНГ ДАТЧИКОВ (индивидуальные пороги)")
+    print("  МОНИТОРИНГ ДАТЧИКОВ")
     print("=" * 80)
-    print("Пороги:")
     for name in SENSORS:
         th = thresholds[name]
         print(f"  {name}: high={th['high']}%, low={th['low']}%")
@@ -116,32 +103,133 @@ def monitor_mode():
             
             print(f"\r{' | '.join(parts)}", end="", flush=True)
             time.sleep(0.05)
-            
     except KeyboardInterrupt:
-        print("\n\nСостояние при выходе:")
-        for name, pin in SENSORS.items():
-            pct = read_percent(pin)
-            status = "СРАБОТАЛ" if state[name] else "свободен"
-            print(f"  {name}: {status} ({pct}%)")
+        print("\n")
 
-def calibrate_mode():
-    """Калибровка каждого датчика отдельно"""
+def calibrate_one_sensor(name, pin):
+    """Калибровка одного датчика"""
+    print(f"\n{'='*50}")
+    print(f"  КАЛИБРОВКА: {name} (GPIO {pin})")
+    print(f"{'='*50}")
+    
+    # Фаза 1: открытое состояние
+    print("\n[1/2] НЕ НАЖИМАЙ датчик. Записываю 'открытое' состояние...")
+    print("      (5 сек или Enter для продолжения)")
+    
+    open_values = []
+    start = time.time()
+    try:
+        while time.time() - start < 5:
+            pct = read_percent(pin)
+            open_values.append(pct)
+            remaining = 5 - int(time.time() - start)
+            print(f"\r      Значение: {pct:3d}%  [{remaining}с]  ", end="", flush=True)
+            time.sleep(0.1)
+            # Проверяем Enter (неблокирующий не работает просто, пропустим)
+    except KeyboardInterrupt:
+        pass
+    
+    if not open_values:
+        print("\n⚠ Нет данных!")
+        return None
+    
+    max_open = max(open_values)
+    print(f"\n      Открытое: min={min(open_values)}%, max={max_open}%")
+    
+    # Фаза 2: нажатое состояние
+    print("\n[2/2] НАЖМИ И ДЕРЖИ датчик. Записываю 'нажатое' состояние...")
+    print("      (5 сек или Enter для продолжения)")
+    
+    pressed_values = []
+    start = time.time()
+    try:
+        while time.time() - start < 5:
+            pct = read_percent(pin)
+            pressed_values.append(pct)
+            remaining = 5 - int(time.time() - start)
+            print(f"\r      Значение: {pct:3d}%  [{remaining}с]  ", end="", flush=True)
+            time.sleep(0.1)
+    except KeyboardInterrupt:
+        pass
+    
+    if not pressed_values:
+        print("\n⚠ Нет данных!")
+        return None
+    
+    min_pressed = min(pressed_values)
+    print(f"\n      Нажатое: min={min_pressed}%, max={max(pressed_values)}%")
+    
+    # Результат
+    gap = min_pressed - max_open
+    print(f"\n      Зазор: {gap}%")
+    
+    if gap > 0:
+        result = {
+            'high': min_pressed,
+            'low': max_open + 1
+        }
+        print(f"      ✓ Пороги: high={result['high']}%, low={result['low']}%")
+        return result
+    else:
+        print(f"      ⚠ Нет зазора! Используем дефолт")
+        return DEFAULT_THRESHOLDS.copy()
+
+def step_calibrate_mode():
+    """Пошаговая калибровка каждого датчика"""
+    print("=" * 60)
+    print("  ПОШАГОВАЯ КАЛИБРОВКА ДАТЧИКОВ")
+    print("=" * 60)
+    print("Будем калибровать каждый датчик отдельно.\n")
+    
+    # Загружаем текущую калибровку
+    current = load_calibration()
+    
+    sensor_list = list(SENSORS.items())
+    
+    for i, (name, pin) in enumerate(sensor_list):
+        print(f"\n[{i+1}/{len(sensor_list)}] Датчик {name}")
+        
+        choice = input(f"    Калибровать? (y/n/q=выход): ").strip().lower()
+        
+        if choice == 'q':
+            break
+        elif choice == 'y':
+            result = calibrate_one_sensor(name, pin)
+            if result:
+                current[name] = result
+        else:
+            th = current[name]
+            print(f"    Пропущен. Текущие пороги: high={th['high']}%, low={th['low']}%")
+    
+    # Итоговая таблица
+    print("\n" + "=" * 60)
+    print("  ИТОГОВЫЕ ПОРОГИ")
+    print("=" * 60)
+    print(f"\n{'Датчик':<12} {'HIGH':<6} {'LOW':<6}")
+    print("-" * 24)
+    for name in SENSORS:
+        th = current[name]
+        print(f"{name:<12} {th['high']:<6} {th['low']:<6}")
+    
+    save = input("\nСохранить? (y/n): ").strip().lower()
+    if save == 'y':
+        save_calibration(current)
+
+def calibrate_all_mode():
+    """Калибровка всех сразу (старый режим)"""
     stats = {name: {'min': 100, 'max': 0, 'values': []} for name in SENSORS}
     
     print("=" * 70)
-    print("  КАЛИБРОВКА ДАТЧИКОВ TCST2103 (индивидуально)")
+    print("  КАЛИБРОВКА ВСЕХ ДАТЧИКОВ (30 сек)")
     print("=" * 70)
-    print("Понажимай все датчики несколько раз.")
-    print("Через 30 сек или по Ctrl+C — выведу рекомендации.\n")
+    print("Понажимай все датчики несколько раз. Ctrl+C для завершения.\n")
     
     start_time = time.time()
     duration = 30
     
     try:
         while time.time() - start_time < duration:
-            elapsed = int(time.time() - start_time)
-            remaining = duration - elapsed
-            
+            remaining = duration - int(time.time() - start_time)
             parts = []
             for name, pin in SENSORS.items():
                 pct = read_percent(pin)
@@ -149,72 +237,36 @@ def calibrate_mode():
                 stats[name]['max'] = max(stats[name]['max'], pct)
                 stats[name]['values'].append(pct)
                 parts.append(f"{name}:{pct:3d}%")
-            
             print(f"\r[{remaining:2d}с] {' | '.join(parts)}", end="", flush=True)
             time.sleep(0.1)
-            
     except KeyboardInterrupt:
         pass
     
-    # Анализ по каждому датчику
+    # Анализ
     print("\n\n" + "=" * 70)
-    print("  РЕЗУЛЬТАТЫ КАЛИБРОВКИ (по каждому датчику)")
-    print("=" * 70)
-    
     new_thresholds = {}
     
     for name in SENSORS:
         s = stats[name]
-        print(f"\n{name}:")
-        print(f"  MIN: {s['min']:3d}%  |  MAX: {s['max']:3d}%")
+        open_vals = [v for v in s['values'] if v < 90]
+        pressed_vals = [v for v in s['values'] if v >= 95]
         
-        if s['max'] >= 95:
-            # Разделяем на "открытые" и "нажатые" значения
-            open_vals = [v for v in s['values'] if v < 90]
-            pressed_vals = [v for v in s['values'] if v >= 95]
-            
-            if open_vals and pressed_vals:
-                max_open = max(open_vals)
-                min_pressed = min(pressed_vals)
-                gap = min_pressed - max_open
-                
-                print(f"  Открыт: {min(open_vals)}-{max_open}%")
-                print(f"  Нажат:  {min_pressed}-{max(pressed_vals)}%")
-                print(f"  Зазор:  {gap}%")
-                
-                if gap > 0:
-                    new_thresholds[name] = {
-                        'high': min_pressed,
-                        'low': max_open + 1
-                    }
-                    print(f"  ✓ Пороги: high={min_pressed}%, low={max_open + 1}%")
-                else:
-                    new_thresholds[name] = DEFAULT_THRESHOLDS.copy()
-                    print(f"  ⚠ Нет зазора! Используем дефолт")
+        if open_vals and pressed_vals:
+            max_open = max(open_vals)
+            min_pressed = min(pressed_vals)
+            if min_pressed > max_open:
+                new_thresholds[name] = {'high': min_pressed, 'low': max_open + 1}
             else:
                 new_thresholds[name] = DEFAULT_THRESHOLDS.copy()
-                print(f"  ⚠ Недостаточно данных, используем дефолт")
         else:
             new_thresholds[name] = DEFAULT_THRESHOLDS.copy()
-            print(f"  ⚠ Датчик не был нажат (max={s['max']}%)")
-    
-    # Сводная таблица
-    print("\n" + "=" * 70)
-    print("  ИТОГОВЫЕ ПОРОГИ")
-    print("=" * 70)
-    print(f"\n{'Датчик':<12} {'HIGH':<6} {'LOW':<6}")
-    print("-" * 24)
-    for name in SENSORS:
+        
         th = new_thresholds[name]
-        print(f"{name:<12} {th['high']:<6} {th['low']:<6}")
+        print(f"{name}: high={th['high']}%, low={th['low']}%")
     
-    # Сохранение
-    print("\n" + "=" * 70)
-    save = input("Сохранить калибровку? (y/n): ").strip().lower()
+    save = input("\nСохранить? (y/n): ").strip().lower()
     if save == 'y':
         save_calibration(new_thresholds)
-    else:
-        print("Калибровка не сохранена")
 
 def main():
     GPIO.setmode(GPIO.BCM)
@@ -224,8 +276,10 @@ def main():
         GPIO.setup(pin, GPIO.IN, pull_up_down=GPIO.PUD_UP)
     
     try:
-        if '--calibrate' in sys.argv or '-c' in sys.argv:
-            calibrate_mode()
+        if '--step' in sys.argv or '-s' in sys.argv:
+            step_calibrate_mode()
+        elif '--calibrate' in sys.argv or '-c' in sys.argv:
+            calibrate_all_mode()
         else:
             monitor_mode()
     finally:
