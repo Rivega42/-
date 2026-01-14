@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Test TCST2103 sensors for BookCabinet
-Individual step-by-step calibration
+Individual step-by-step calibration with median filtering
 
 Usage: python3 tools/test_sensors.py              (monitor)
        python3 tools/test_sensors.py --calibrate  (calibrate all)
@@ -27,6 +27,25 @@ DEBOUNCE_COUNT = 3
 CALIBRATION_FILE = os.path.expanduser('~/bookcabinet/sensor_calibration.json')
 
 DEFAULT_THRESHOLDS = {'high': 98, 'low': 89}
+
+def median(values):
+    """Calculate median of a list"""
+    if not values:
+        return 0
+    s = sorted(values)
+    n = len(s)
+    if n % 2 == 0:
+        return (s[n//2 - 1] + s[n//2]) // 2
+    return s[n//2]
+
+def percentile(values, p):
+    """Calculate p-th percentile (0-100)"""
+    if not values:
+        return 0
+    s = sorted(values)
+    idx = int(len(s) * p / 100)
+    idx = min(idx, len(s) - 1)
+    return s[idx]
 
 def load_calibration():
     thresholds = {name: DEFAULT_THRESHOLDS.copy() for name in SENSORS}
@@ -114,7 +133,7 @@ def monitor_mode():
         print("\n")
 
 def calibrate_one_sensor(name, pin):
-    """Calibrate single sensor"""
+    """Calibrate single sensor using median (ignores noise spikes)"""
     print(f"\n{'='*50}")
     print(f"  CALIBRATING: {name} (GPIO {pin})")
     print(f"{'='*50}")
@@ -139,8 +158,9 @@ def calibrate_one_sensor(name, pin):
         print("\n[WARN] No data!")
         return None
     
-    max_open = max(open_values)
-    print(f"\n      Open: min={min(open_values)}%, max={max_open}%")
+    open_median = median(open_values)
+    open_p90 = percentile(open_values, 90)
+    print(f"\n      Open: median={open_median}%, p90={open_p90}%, max={max(open_values)}%")
     
     # Phase 2: pressed state
     print("\n[2/2] PRESS AND HOLD sensor. Recording 'pressed' state...")
@@ -162,22 +182,37 @@ def calibrate_one_sensor(name, pin):
         print("\n[WARN] No data!")
         return None
     
-    min_pressed = min(pressed_values)
-    print(f"\n      Pressed: min={min_pressed}%, max={max(pressed_values)}%")
+    pressed_median = median(pressed_values)
+    pressed_p10 = percentile(pressed_values, 10)
+    print(f"\n      Pressed: median={pressed_median}%, p10={pressed_p10}%, min={min(pressed_values)}%")
     
-    # Result
-    gap = min_pressed - max_open
-    print(f"\n      Gap: {gap}%")
+    # Calculate gap using MEDIAN (ignores spikes!)
+    gap = pressed_median - open_median
+    print(f"\n      Gap (median): {gap}%")
     
-    if gap > 0:
+    if gap >= 10:
+        # LOW = between open_median and pressed, closer to open
+        # HIGH = between open and pressed_median, closer to pressed
+        threshold_low = open_p90 + 2
+        threshold_high = pressed_p10
+        
+        # Ensure valid range
+        if threshold_high <= threshold_low:
+            threshold_high = threshold_low + 5
+        
         result = {
-            'high': min_pressed,
-            'low': max_open + 1
+            'high': min(threshold_high, 100),
+            'low': threshold_low
         }
         print(f"      [OK] Thresholds: high={result['high']}%, low={result['low']}%")
         return result
     else:
-        print(f"      [WARN] No gap! Using default")
+        print(f"      [WARN] Gap too small ({gap}%)!")
+        # Fallback: use fixed thresholds based on pressed_median
+        if pressed_median >= 95:
+            result = {'high': 98, 'low': open_median + 5}
+            print(f"      [FALLBACK] high=98%, low={result['low']}%")
+            return result
         return DEFAULT_THRESHOLDS.copy()
 
 def step_calibrate_mode():
@@ -185,7 +220,7 @@ def step_calibrate_mode():
     print("=" * 60)
     print("  STEP-BY-STEP CALIBRATION")
     print("=" * 60)
-    print("Calibrating each sensor individually.\n")
+    print("Using MEDIAN to ignore noise spikes.\n")
     
     current = load_calibration()
     sensor_list = list(SENSORS.items())
@@ -221,7 +256,7 @@ def step_calibrate_mode():
 
 def calibrate_all_mode():
     """Calibrate all at once"""
-    stats = {name: {'min': 100, 'max': 0, 'values': []} for name in SENSORS}
+    stats = {name: {'values': []} for name in SENSORS}
     
     print("=" * 70)
     print("  CALIBRATE ALL SENSORS (30 sec)")
@@ -237,8 +272,6 @@ def calibrate_all_mode():
             parts = []
             for name, pin in SENSORS.items():
                 pct = read_percent(pin)
-                stats[name]['min'] = min(stats[name]['min'], pct)
-                stats[name]['max'] = max(stats[name]['max'], pct)
                 stats[name]['values'].append(pct)
                 parts.append(f"{name}:{pct:3d}%")
             print(f"\r[{remaining:2d}s] {' | '.join(parts)}", end="", flush=True)
@@ -246,27 +279,25 @@ def calibrate_all_mode():
     except KeyboardInterrupt:
         pass
     
-    # Analysis
+    # Analysis using percentiles
     print("\n\n" + "=" * 70)
     new_thresholds = {}
     
     for name in SENSORS:
-        s = stats[name]
-        open_vals = [v for v in s['values'] if v < 90]
-        pressed_vals = [v for v in s['values'] if v >= 95]
+        values = stats[name]['values']
+        med = median(values)
+        p10 = percentile(values, 10)
+        p90 = percentile(values, 90)
         
-        if open_vals and pressed_vals:
-            max_open = max(open_vals)
-            min_pressed = min(pressed_vals)
-            if min_pressed > max_open:
-                new_thresholds[name] = {'high': min_pressed, 'low': max_open + 1}
-            else:
-                new_thresholds[name] = DEFAULT_THRESHOLDS.copy()
+        print(f"{name}: p10={p10}%, median={med}%, p90={p90}%")
+        
+        if p90 >= 98 and p10 < 90:
+            new_thresholds[name] = {'high': 98, 'low': p10 + 5}
         else:
             new_thresholds[name] = DEFAULT_THRESHOLDS.copy()
         
         th = new_thresholds[name]
-        print(f"{name}: high={th['high']}%, low={th['low']}%")
+        print(f"         -> high={th['high']}%, low={th['low']}%")
     
     save = safe_input("\nSave? (y/n): ")
     if save == 'y':
