@@ -23,9 +23,9 @@ SENSORS = {
     'TRAY_END': 20,
 }
 
-SAMPLES = 100           # More samples for stability
-DEBOUNCE_COUNT = 5      # Consecutive readings needed
-DEBOUNCE_TIME = 0.2     # Minimum 200ms between state changes
+SAMPLES = 100
+DEBOUNCE_ON = 2         # Fast response when pressing
+DEBOUNCE_OFF = 4        # Slower release to avoid flicker
 CALIBRATION_FILE = os.path.expanduser('~/bookcabinet/sensor_calibration.json')
 
 DEFAULT_THRESHOLDS = {'high': 98, 'low': 89}
@@ -34,8 +34,7 @@ def median(values):
     if not values:
         return 0
     s = sorted(values)
-    n = len(s)
-    return s[n//2]
+    return s[len(s)//2]
 
 def std_dev(values):
     if len(values) < 2:
@@ -70,7 +69,6 @@ def save_calibration(thresholds):
 state = {name: False for name in SENSORS}
 pending = {name: None for name in SENSORS}
 counter = {name: 0 for name in SENSORS}
-last_change = {name: 0.0 for name in SENSORS}  # Time of last state change
 thresholds = {}
 
 def read_percent(pin):
@@ -78,32 +76,27 @@ def read_percent(pin):
     return readings * 100 // SAMPLES
 
 def update_state(name, pct):
-    global state, pending, counter, last_change
+    global state, pending, counter
     th = thresholds.get(name, DEFAULT_THRESHOLDS)
-    now = time.time()
     
-    # Determine desired state based on thresholds with hysteresis
     if pct >= th['high']:
         desired = True
     elif pct <= th['low']:
         desired = False
     else:
-        desired = state[name]  # Keep current in hysteresis zone
+        desired = state[name]
     
-    # Count consecutive readings
     if desired == pending[name]:
         counter[name] += 1
     else:
         pending[name] = desired
         counter[name] = 1
     
-    # Change state only if:
-    # 1. Enough consecutive readings (debounce count)
-    # 2. Enough time passed since last change (debounce time)
-    if counter[name] >= DEBOUNCE_COUNT and state[name] != desired:
-        if now - last_change[name] >= DEBOUNCE_TIME:
-            state[name] = desired
-            last_change[name] = now
+    # Asymmetric debounce: fast ON, slower OFF
+    required = DEBOUNCE_ON if desired else DEBOUNCE_OFF
+    
+    if counter[name] >= required and state[name] != desired:
+        state[name] = desired
 
 def safe_input(prompt):
     try:
@@ -121,7 +114,7 @@ def monitor_mode():
     for name in SENSORS:
         th = thresholds[name]
         print(f"  {name}: high={th['high']}%, low={th['low']}%")
-    print(f"\nFilter: {SAMPLES} samples, {DEBOUNCE_COUNT}x debounce, {int(DEBOUNCE_TIME*1000)}ms lockout")
+    print(f"\nFilter: {SAMPLES} samples, debounce ON={DEBOUNCE_ON} OFF={DEBOUNCE_OFF}")
     print("Ctrl+C to exit\n")
     
     try:
@@ -144,7 +137,6 @@ def calibrate_one_sensor(name, pin):
     print(f"  CALIBRATING: {name} (GPIO {pin})")
     print(f"{'='*55}")
     
-    # Phase 1: open state
     print("\n[1/2] DO NOT PRESS sensor (5 sec)...")
     
     open_values = []
@@ -166,7 +158,6 @@ def calibrate_one_sensor(name, pin):
     open_std = std_dev(open_values)
     print(f"\n      Open: median={open_med}%, std={open_std:.1f}, range={min(open_values)}-{max(open_values)}%")
     
-    # Phase 2: pressed state
     print("\n[2/2] PRESS AND HOLD sensor (5 sec)...")
     
     pressed_values = []
@@ -188,7 +179,6 @@ def calibrate_one_sensor(name, pin):
     pressed_std = std_dev(pressed_values)
     print(f"\n      Pressed: median={pressed_med}%, std={pressed_std:.1f}, range={min(pressed_values)}-{max(pressed_values)}%")
     
-    # Analysis
     gap = pressed_med - open_med
     print(f"\n      Gap (median): {gap}%")
     print(f"      Stability: open_std={open_std:.1f}, pressed_std={pressed_std:.1f}")
@@ -241,7 +231,6 @@ def step_calibrate_mode():
             th = current[name]
             print(f"    Skipped. Current: high={th['high']}%, low={th['low']}%")
     
-    # Summary
     print("\n" + "=" * 60)
     print("  FINAL THRESHOLDS")
     print("=" * 60)
