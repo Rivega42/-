@@ -2,8 +2,8 @@
 Unified Card Reader - параллельный опрос ACR1281U-C (NFC) и IQRFID-5102 (UHF)
 
 Для идентификации пользователя используются ДВА считывателя одновременно:
-- ACR1281U-C (NFC 13.56MHz) → ЕКП (Единая Карта Петербуржца)
-- IQRFID-5102 (UHF 900MHz) → читательский билет библиотеки
+- ACR1281U-C (NFC 13.56MHz) → читательский билет библиотеки  
+- IQRFID-5102 (UHF 900MHz) → ЕКП (Единая Карта Петербуржца)
 
 Оба сливаются в единый callback on_card_read() с нормализованным UID.
 
@@ -128,6 +128,9 @@ class UnifiedCardReader:
             print("[UnifiedReader] Mock режим активен")
             return {'nfc': True, 'uhf': True}
         
+        # Сначала отключаемся, если уже были подключены
+        self._disconnect_readers()
+        
         # Подключение NFC (PC/SC)
         results['nfc'] = await self._connect_nfc()
         
@@ -171,29 +174,49 @@ class UnifiedCardReader:
     def _connect_uhf(self) -> bool:
         """Подключение к IQRFID-5102 через существующий драйвер"""
         try:
-            self._uhf_reader = IQRFID5102(self._uhf_port, debug=False)
+            # Проверяем fallback порт если основной не доступен
+            import os
+            uhf_port = self._uhf_port
+            if not os.path.exists(uhf_port):
+                # Пробуем fallback
+                if uhf_port == '/dev/rfid_uhf_card':
+                    fallback = '/dev/ttyUSB0'
+                    if os.path.exists(fallback):
+                        print(f"[UHF] Используем fallback порт: {fallback}")
+                        uhf_port = fallback
+            
+            self._uhf_reader = IQRFID5102(uhf_port, debug=False)
             
             if self._uhf_reader.connect():
                 self._uhf_available = True
-                print(f"[UHF] Подключен: {self._uhf_port}")
+                print(f"[UHF] Подключен: {uhf_port}")
                 return True
             else:
-                print(f"[UHF] Не удалось подключиться к {self._uhf_port}")
+                print(f"[UHF] Не удалось подключиться к {uhf_port}")
                 return False
                 
         except Exception as e:
             print(f"[UHF] Ошибка подключения: {e}")
             return False
     
-    def disconnect(self):
-        """Отключение от считывателей"""
-        self._running = False
-        
+    def _disconnect_readers(self):
+        """Отключение только объектов считывателей, без сброса флагов доступности"""
         if self._uhf_reader:
-            self._uhf_reader.disconnect()
+            try:
+                self._uhf_reader.disconnect()
+            except:
+                pass
             self._uhf_reader = None
         
         self._nfc_reader = None
+    
+    def disconnect(self):
+        """Полное отключение от считывателей"""
+        self._running = False
+        
+        self._disconnect_readers()
+        
+        # Сбрасываем флаги доступности
         self._nfc_available = False
         self._uhf_available = False
         print("[UnifiedReader] Отключен")
