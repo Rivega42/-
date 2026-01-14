@@ -1,12 +1,11 @@
 #!/usr/bin/env python3
 """
-Тестирование оптических датчиков TCST2103
-Щелевые оптопары с открытым коллектором
-
-Запуск: python3 tools/test_sensors.py
+Диагностика сырых значений датчиков TCST2103
+Показывает % HIGH за последнюю секунду
 """
 import RPi.GPIO as GPIO
 import time
+from collections import deque
 
 SENSORS = {
     'X_BEGIN': 10,
@@ -21,38 +20,49 @@ def main():
     GPIO.setmode(GPIO.BCM)
     GPIO.setwarnings(False)
     
-    # TCST2103 = открытый коллектор, нужен PUD_UP!
+    # Пробуем без подтяжки - читаем что реально даёт датчик
     for pin in SENSORS.values():
-        GPIO.setup(pin, GPIO.IN, pull_up_down=GPIO.PUD_UP)
+        GPIO.setup(pin, GPIO.IN, pull_up_down=GPIO.PUD_OFF)
     
-    print("=" * 60)
-    print("  ТЕСТ ДАТЧИКОВ TCST2103 (оптопары)")
-    print("=" * 60)
-    print("PUD_UP | Щель открыта=LOW(0)⚪ | Щель закрыта=HIGH(1)🔴")
+    print("=" * 65)
+    print("  ДИАГНОСТИКА ДАТЧИКОВ (без подтяжки RPi)")
+    print("=" * 65)
+    print("Показывает % времени в HIGH за последние 100 чтений")
+    print("100% = всегда HIGH | 0% = всегда LOW | 50% = моргает")
     print("Ctrl+C для выхода\n")
     
-    # Состояние с фильтром
-    state = {name: 0 for name in SENSORS}
+    # История последних 100 чтений
+    history = {name: deque(maxlen=100) for name in SENSORS}
     
     try:
         while True:
             parts = []
             for name, pin in SENSORS.items():
-                # Фильтр: 10 чтений, нужно 8+ для смены
-                readings = sum(GPIO.input(pin) for _ in range(10))
-                if readings >= 8:
-                    state[name] = 1
-                elif readings <= 2:
-                    state[name] = 0
+                val = GPIO.input(pin)
+                history[name].append(val)
+                
+                if len(history[name]) >= 10:
+                    pct = sum(history[name]) * 100 // len(history[name])
+                    # Интерпретация
+                    if pct >= 95:
+                        status = f"🔴{pct:3d}%"  # Стабильно HIGH
+                    elif pct <= 5:
+                        status = f"⚪{pct:3d}%"  # Стабильно LOW
+                    else:
+                        status = f"❓{pct:3d}%"  # Нестабильно
+                else:
+                    status = " ... "
                     
-                icon = "🔴" if state[name] == 1 else "⚪"
-                parts.append(f"{name}:{icon}")
+                parts.append(f"{name}:{status}")
             
             print(f"\r{' | '.join(parts)}    ", end="", flush=True)
-            time.sleep(0.05)
+            time.sleep(0.01)
             
     except KeyboardInterrupt:
-        print("\n")
+        print("\n\n--- ИНТЕРПРЕТАЦИЯ ---")
+        print("🔴 95-100% = нажат (или проблема с датчиком)")
+        print("⚪ 0-5%    = свободен (норма)")
+        print("❓ 6-94%   = нестабильно (проблема: наводки/питание/подключение)")
     finally:
         GPIO.cleanup()
 
