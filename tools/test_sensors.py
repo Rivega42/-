@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Тестирование датчиков и концевиков BookCabinet
-С агрессивным программным фильтром
+Тестирование оптических датчиков TCST2103
+Щелевые оптопары с открытым коллектором
 
 Запуск: python3 tools/test_sensors.py
 """
@@ -17,39 +17,34 @@ SENSORS = {
     'TRAY_END': 20,
 }
 
-# Состояние с гистерезисом
-state = {name: 0 for name in SENSORS}
-
-def read_stable(pin, samples=10):
-    """Читает пин много раз, требует 80% согласия"""
-    readings = sum(GPIO.input(pin) for _ in range(samples))
-    # Нужно 8 из 10 одинаковых чтобы изменить состояние
-    if readings >= 8:
-        return 1
-    elif readings <= 2:
-        return 0
-    return None  # Неопределённо
-
 def main():
     GPIO.setmode(GPIO.BCM)
     GPIO.setwarnings(False)
     
+    # TCST2103 = открытый коллектор, нужен PUD_UP!
     for pin in SENSORS.values():
-        GPIO.setup(pin, GPIO.IN, pull_up_down=GPIO.PUD_DOWN)
+        GPIO.setup(pin, GPIO.IN, pull_up_down=GPIO.PUD_UP)
     
     print("=" * 60)
-    print("  МОНИТОРИНГ ДАТЧИКОВ (агрессивный фильтр)")
+    print("  ТЕСТ ДАТЧИКОВ TCST2103 (оптопары)")
     print("=" * 60)
-    print("PUD_DOWN | HIGH(1)=СРАБОТАЛ 🔴 | LOW(0)=свободен ⚪")
+    print("PUD_UP | Щель открыта=LOW(0)⚪ | Щель закрыта=HIGH(1)🔴")
     print("Ctrl+C для выхода\n")
+    
+    # Состояние с фильтром
+    state = {name: 0 for name in SENSORS}
     
     try:
         while True:
             parts = []
             for name, pin in SENSORS.items():
-                val = read_stable(pin, samples=15)
-                if val is not None:
-                    state[name] = val
+                # Фильтр: 10 чтений, нужно 8+ для смены
+                readings = sum(GPIO.input(pin) for _ in range(10))
+                if readings >= 8:
+                    state[name] = 1
+                elif readings <= 2:
+                    state[name] = 0
+                    
                 icon = "🔴" if state[name] == 1 else "⚪"
                 parts.append(f"{name}:{icon}")
             
@@ -57,9 +52,7 @@ def main():
             time.sleep(0.05)
             
     except KeyboardInterrupt:
-        print("\n\n--- ИТОГ ---")
-        print("Моргание = нужны резисторы 4.7K-10K между GPIO и GND")
-        print("Это аппаратная проблема, программный фильтр — костыль.")
+        print("\n")
     finally:
         GPIO.cleanup()
 
