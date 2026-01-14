@@ -2,22 +2,24 @@
 Датчики TCST2103 (оптопары)
 
 ЛОГИКА БЕЗ ВНЕШНИХ РЕЗИСТОРОВ + ГИСТЕРЕЗИС + DEBOUNCE:
-- Щель открыта → выход "плавает" (~30-70% HIGH)
-- Щель закрыта → PUD_UP тянет к HIGH (100%)
+- Щель открыта → выход "плавает" (0-88% HIGH)
+- Щель закрыта → PUD_UP тянет к HIGH (98-100%)
 
-Гистерезис: ≥98% = сработал, ≤95% = свободен
-Debounce: 5 стабильных чтений для смены состояния
+Калибровка 2025-01-14:
+  Открыт:  0% — 88%
+  Нажат:   98% — 100%
+  Зазор:   10%
 """
 from typing import Dict, Callable
 from .gpio_manager import gpio
 from ..config import GPIO_PINS, MOCK_MODE
 
 
-# Параметры фильтрации для TCST2103 без резисторов
+# Калиброванные параметры для TCST2103 без резисторов
 SENSOR_SAMPLES = 50
 SENSOR_THRESHOLD_HIGH = 98  # ≥98% → сработал
-SENSOR_THRESHOLD_LOW = 95   # ≤95% → свободен
-SENSOR_DEBOUNCE = 5         # Нужно 5 стабильных чтений
+SENSOR_THRESHOLD_LOW = 89   # ≤89% → свободен
+SENSOR_DEBOUNCE = 3         # 3 стабильных чтения
 
 
 class Sensors:
