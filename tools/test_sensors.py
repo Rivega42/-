@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Test TCST2103 sensors for BookCabinet
-Individual step-by-step calibration with median filtering
+Calibration based on stability (std deviation)
 
 Usage: python3 tools/test_sensors.py              (monitor)
        python3 tools/test_sensors.py --calibrate  (calibrate all)
@@ -12,6 +12,7 @@ import time
 import sys
 import json
 import os
+import math
 
 SENSORS = {
     'X_BEGIN': 10,
@@ -29,23 +30,19 @@ CALIBRATION_FILE = os.path.expanduser('~/bookcabinet/sensor_calibration.json')
 DEFAULT_THRESHOLDS = {'high': 98, 'low': 89}
 
 def median(values):
-    """Calculate median of a list"""
     if not values:
         return 0
     s = sorted(values)
     n = len(s)
-    if n % 2 == 0:
-        return (s[n//2 - 1] + s[n//2]) // 2
     return s[n//2]
 
-def percentile(values, p):
-    """Calculate p-th percentile (0-100)"""
-    if not values:
+def std_dev(values):
+    """Standard deviation"""
+    if len(values) < 2:
         return 0
-    s = sorted(values)
-    idx = int(len(s) * p / 100)
-    idx = min(idx, len(s) - 1)
-    return s[idx]
+    avg = sum(values) / len(values)
+    variance = sum((x - avg) ** 2 for x in values) / len(values)
+    return math.sqrt(variance)
 
 def load_calibration():
     thresholds = {name: DEFAULT_THRESHOLDS.copy() for name in SENSORS}
@@ -56,7 +53,7 @@ def load_calibration():
                 for name in SENSORS:
                     if name in saved:
                         thresholds[name] = saved[name]
-            print(f"[OK] Loaded calibration from {CALIBRATION_FILE}")
+            print(f"[OK] Loaded from {CALIBRATION_FILE}")
         except Exception as e:
             print(f"[WARN] Load error: {e}")
     return thresholds
@@ -100,7 +97,6 @@ def update_state(name, pct):
         state[name] = desired
 
 def safe_input(prompt):
-    """Input with encoding error handling"""
     try:
         return input(prompt).strip().lower()
     except (UnicodeDecodeError, EOFError):
@@ -133,14 +129,13 @@ def monitor_mode():
         print("\n")
 
 def calibrate_one_sensor(name, pin):
-    """Calibrate single sensor using median (ignores noise spikes)"""
-    print(f"\n{'='*50}")
+    """Calibrate using median and stability"""
+    print(f"\n{'='*55}")
     print(f"  CALIBRATING: {name} (GPIO {pin})")
-    print(f"{'='*50}")
+    print(f"{'='*55}")
     
     # Phase 1: open state
-    print("\n[1/2] DO NOT PRESS sensor. Recording 'open' state...")
-    print("      (5 sec)")
+    print("\n[1/2] DO NOT PRESS sensor (5 sec)...")
     
     open_values = []
     start = time.time()
@@ -155,16 +150,14 @@ def calibrate_one_sensor(name, pin):
         pass
     
     if not open_values:
-        print("\n[WARN] No data!")
         return None
     
-    open_median = median(open_values)
-    open_p90 = percentile(open_values, 90)
-    print(f"\n      Open: median={open_median}%, p90={open_p90}%, max={max(open_values)}%")
+    open_med = median(open_values)
+    open_std = std_dev(open_values)
+    print(f"\n      Open: median={open_med}%, std={open_std:.1f}, range={min(open_values)}-{max(open_values)}%")
     
     # Phase 2: pressed state
-    print("\n[2/2] PRESS AND HOLD sensor. Recording 'pressed' state...")
-    print("      (5 sec)")
+    print("\n[2/2] PRESS AND HOLD sensor (5 sec)...")
     
     pressed_values = []
     start = time.time()
@@ -179,39 +172,46 @@ def calibrate_one_sensor(name, pin):
         pass
     
     if not pressed_values:
-        print("\n[WARN] No data!")
         return None
     
-    pressed_median = median(pressed_values)
-    pressed_p10 = percentile(pressed_values, 10)
-    print(f"\n      Pressed: median={pressed_median}%, p10={pressed_p10}%, min={min(pressed_values)}%")
+    pressed_med = median(pressed_values)
+    pressed_std = std_dev(pressed_values)
+    print(f"\n      Pressed: median={pressed_med}%, std={pressed_std:.1f}, range={min(pressed_values)}-{max(pressed_values)}%")
     
-    # Calculate gap using MEDIAN (ignores spikes!)
-    gap = pressed_median - open_median
+    # Analysis
+    gap = pressed_med - open_med
     print(f"\n      Gap (median): {gap}%")
+    print(f"      Stability: open_std={open_std:.1f}, pressed_std={pressed_std:.1f}")
     
-    if gap >= 10:
-        # LOW = between open_median and pressed, closer to open
-        # HIGH = between open and pressed_median, closer to pressed
-        threshold_low = open_p90 + 2
-        threshold_high = pressed_p10
+    # Key insight: when pressed, signal is STABLE (low std)
+    # When open, signal is NOISY (high std due to floating)
+    
+    if gap >= 5 and pressed_med >= 95:
+        # Set thresholds in the middle of the gap
+        mid = (open_med + pressed_med) // 2
+        
+        # HIGH: closer to pressed, but with margin
+        threshold_high = max(mid + 3, pressed_med - 5, 95)
+        threshold_high = min(threshold_high, 100)
+        
+        # LOW: closer to open, but above noise
+        threshold_low = min(mid - 3, open_med + 10)
+        threshold_low = max(threshold_low, 85)
         
         # Ensure valid range
-        if threshold_high <= threshold_low:
-            threshold_high = threshold_low + 5
+        if threshold_low >= threshold_high:
+            threshold_low = threshold_high - 5
         
-        result = {
-            'high': min(threshold_high, 100),
-            'low': threshold_low
-        }
-        print(f"      [OK] Thresholds: high={result['high']}%, low={result['low']}%")
+        result = {'high': threshold_high, 'low': threshold_low}
+        print(f"      [OK] high={result['high']}%, low={result['low']}%")
         return result
     else:
-        print(f"      [WARN] Gap too small ({gap}%)!")
-        # Fallback: use fixed thresholds based on pressed_median
-        if pressed_median >= 95:
-            result = {'high': 98, 'low': open_median + 5}
-            print(f"      [FALLBACK] high=98%, low={result['low']}%")
+        # Fallback for noisy sensors
+        print(f"      [WARN] Gap too small or pressed not stable!")
+        if pressed_med >= 98:
+            # If pressed gives stable 100%, use fixed high threshold
+            result = {'high': 98, 'low': min(open_med + 5, 93)}
+            print(f"      [FALLBACK] high={result['high']}%, low={result['low']}%")
             return result
         return DEFAULT_THRESHOLDS.copy()
 
@@ -220,7 +220,7 @@ def step_calibrate_mode():
     print("=" * 60)
     print("  STEP-BY-STEP CALIBRATION")
     print("=" * 60)
-    print("Using MEDIAN to ignore noise spikes.\n")
+    print("Analyzing median and stability.\n")
     
     current = load_calibration()
     sensor_list = list(SENSORS.items())
@@ -279,20 +279,19 @@ def calibrate_all_mode():
     except KeyboardInterrupt:
         pass
     
-    # Analysis using percentiles
     print("\n\n" + "=" * 70)
     new_thresholds = {}
     
     for name in SENSORS:
         values = stats[name]['values']
         med = median(values)
-        p10 = percentile(values, 10)
-        p90 = percentile(values, 90)
+        sd = std_dev(values)
         
-        print(f"{name}: p10={p10}%, median={med}%, p90={p90}%")
+        print(f"{name}: median={med}%, std={sd:.1f}")
         
-        if p90 >= 98 and p10 < 90:
-            new_thresholds[name] = {'high': 98, 'low': p10 + 5}
+        # If we see high values with low std, sensor was pressed
+        if max(values) >= 98 and min(values) < 90:
+            new_thresholds[name] = {'high': 98, 'low': 90}
         else:
             new_thresholds[name] = DEFAULT_THRESHOLDS.copy()
         
