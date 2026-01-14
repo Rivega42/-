@@ -1,20 +1,21 @@
 """
 Датчики TCST2103 (оптопары)
 
-ЛОГИКА БЕЗ ВНЕШНИХ РЕЗИСТОРОВ:
-- Щель открыта → фототранзистор открыт → выход "плавает" (~30-70% HIGH)
-- Щель закрыта → фототранзистор закрыт → PUD_UP тянет к HIGH (100%)
+ЛОГИКА БЕЗ ВНЕШНИХ РЕЗИСТОРОВ + ГИСТЕРЕЗИС:
+- Щель открыта → выход "плавает" (~30-70% HIGH)
+- Щель закрыта → PUD_UP тянет к HIGH (100%)
 
-Определение: ≥95% HIGH за 50 чтений = СРАБОТАЛ
+Гистерезис: ≥95% = сработал, ≤80% = свободен, между = без изменений
 """
-from typing import Dict, Callable, Optional
+from typing import Dict, Callable
 from .gpio_manager import gpio
 from ..config import GPIO_PINS, MOCK_MODE
 
 
 # Параметры фильтрации для TCST2103 без резисторов
-SENSOR_SAMPLES = 50      # Количество чтений
-SENSOR_THRESHOLD = 95    # % для определения "сработал"
+SENSOR_SAMPLES = 50
+SENSOR_THRESHOLD_HIGH = 95  # ≥95% → сработал
+SENSOR_THRESHOLD_LOW = 80   # ≤80% → свободен
 
 
 class Sensors:
@@ -31,7 +32,10 @@ class Sensors:
             'tray_end': 'SENSOR_TRAY_END',
         }
         
-        # Инициализация датчиков с PUD_UP (для открытого коллектора TCST2103)
+        # Состояние с гистерезисом
+        self._state = {name: False for name in self._pin_map.keys()}
+        
+        # Инициализация датчиков с PUD_UP
         for pin_name in self._pin_map.values():
             pin = GPIO_PINS[pin_name]
             gpio.setup_input(pin, pull_up=True)
@@ -44,6 +48,15 @@ class Sensors:
         readings = sum(gpio.read(pin) for _ in range(SENSOR_SAMPLES))
         return readings * 100 // SENSOR_SAMPLES
     
+    def _update_state(self, sensor: str, percent: int) -> bool:
+        """Обновляет состояние с гистерезисом, возвращает текущее состояние"""
+        if percent >= SENSOR_THRESHOLD_HIGH:
+            self._state[sensor] = True
+        elif percent <= SENSOR_THRESHOLD_LOW:
+            self._state[sensor] = False
+        # между порогами — не меняем
+        return self._state[sensor]
+    
     def read(self, sensor: str) -> int:
         """Читает состояние датчика (% времени в HIGH)"""
         pin_name = self._pin_map.get(sensor)
@@ -53,10 +66,10 @@ class Sensors:
     
     def is_triggered(self, sensor: str) -> bool:
         """
-        Проверяет сработал ли датчик (щель закрыта)
-        TCST2103 без резисторов: ≥95% HIGH = сработал
+        Проверяет сработал ли датчик (с гистерезисом)
         """
-        return self.read(sensor) >= SENSOR_THRESHOLD
+        percent = self.read(sensor)
+        return self._update_state(sensor, percent)
     
     def read_all(self) -> Dict[str, int]:
         """Читает все датчики (% HIGH)"""
@@ -103,7 +116,8 @@ class Sensors:
         return {
             'raw_percent': raw,
             'triggered': triggered,
-            'threshold': SENSOR_THRESHOLD,
+            'threshold_high': SENSOR_THRESHOLD_HIGH,
+            'threshold_low': SENSOR_THRESHOLD_LOW,
             'samples': SENSOR_SAMPLES,
             'tray_retracted': self.is_tray_retracted(),
             'tray_extended': self.is_tray_extended(),
