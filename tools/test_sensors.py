@@ -107,7 +107,7 @@ def monitor_mode():
     thresholds = load_calibration()
     
     print("\n" + "=" * 80)
-    print("  SENSOR MONITOR")
+    print("  SENSOR MONITOR  (🔴=triggered, ⚪=open)")
     print("=" * 80)
     for name in SENSORS:
         th = thresholds[name]
@@ -120,7 +120,7 @@ def monitor_mode():
             for name, pin in SENSORS.items():
                 pct = read_percent(pin)
                 update_state(name, pct)
-                icon = "[X]" if state[name] else "[ ]"
+                icon = "🔴" if state[name] else "⚪"
                 parts.append(f"{name}:{icon}{pct:3d}%")
             
             print(f"\r{' | '.join(parts)}", end="", flush=True)
@@ -183,22 +183,15 @@ def calibrate_one_sensor(name, pin):
     print(f"\n      Gap (median): {gap}%")
     print(f"      Stability: open_std={open_std:.1f}, pressed_std={pressed_std:.1f}")
     
-    # Key insight: when pressed, signal is STABLE (low std)
-    # When open, signal is NOISY (high std due to floating)
-    
     if gap >= 5 and pressed_med >= 95:
-        # Set thresholds in the middle of the gap
         mid = (open_med + pressed_med) // 2
         
-        # HIGH: closer to pressed, but with margin
         threshold_high = max(mid + 3, pressed_med - 5, 95)
         threshold_high = min(threshold_high, 100)
         
-        # LOW: closer to open, but above noise
         threshold_low = min(mid - 3, open_med + 10)
         threshold_low = max(threshold_low, 85)
         
-        # Ensure valid range
         if threshold_low >= threshold_high:
             threshold_low = threshold_high - 5
         
@@ -206,10 +199,8 @@ def calibrate_one_sensor(name, pin):
         print(f"      [OK] high={result['high']}%, low={result['low']}%")
         return result
     else:
-        # Fallback for noisy sensors
         print(f"      [WARN] Gap too small or pressed not stable!")
         if pressed_med >= 98:
-            # If pressed gives stable 100%, use fixed high threshold
             result = {'high': 98, 'low': min(open_med + 5, 93)}
             print(f"      [FALLBACK] high={result['high']}%, low={result['low']}%")
             return result
@@ -289,7 +280,6 @@ def calibrate_all_mode():
         
         print(f"{name}: median={med}%, std={sd:.1f}")
         
-        # If we see high values with low std, sensor was pressed
         if max(values) >= 98 and min(values) < 90:
             new_thresholds[name] = {'high': 98, 'low': 90}
         else:
