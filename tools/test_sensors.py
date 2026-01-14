@@ -23,8 +23,9 @@ SENSORS = {
     'TRAY_END': 20,
 }
 
-SAMPLES = 50
-DEBOUNCE_COUNT = 3
+SAMPLES = 100           # More samples for stability
+DEBOUNCE_COUNT = 5      # Consecutive readings needed
+DEBOUNCE_TIME = 0.2     # Minimum 200ms between state changes
 CALIBRATION_FILE = os.path.expanduser('~/bookcabinet/sensor_calibration.json')
 
 DEFAULT_THRESHOLDS = {'high': 98, 'low': 89}
@@ -37,7 +38,6 @@ def median(values):
     return s[n//2]
 
 def std_dev(values):
-    """Standard deviation"""
     if len(values) < 2:
         return 0
     avg = sum(values) / len(values)
@@ -70,6 +70,7 @@ def save_calibration(thresholds):
 state = {name: False for name in SENSORS}
 pending = {name: None for name in SENSORS}
 counter = {name: 0 for name in SENSORS}
+last_change = {name: 0.0 for name in SENSORS}  # Time of last state change
 thresholds = {}
 
 def read_percent(pin):
@@ -77,24 +78,32 @@ def read_percent(pin):
     return readings * 100 // SAMPLES
 
 def update_state(name, pct):
-    global state, pending, counter
+    global state, pending, counter, last_change
     th = thresholds.get(name, DEFAULT_THRESHOLDS)
+    now = time.time()
     
+    # Determine desired state based on thresholds with hysteresis
     if pct >= th['high']:
         desired = True
     elif pct <= th['low']:
         desired = False
     else:
-        desired = state[name]
+        desired = state[name]  # Keep current in hysteresis zone
     
+    # Count consecutive readings
     if desired == pending[name]:
         counter[name] += 1
     else:
         pending[name] = desired
         counter[name] = 1
     
+    # Change state only if:
+    # 1. Enough consecutive readings (debounce count)
+    # 2. Enough time passed since last change (debounce time)
     if counter[name] >= DEBOUNCE_COUNT and state[name] != desired:
-        state[name] = desired
+        if now - last_change[name] >= DEBOUNCE_TIME:
+            state[name] = desired
+            last_change[name] = now
 
 def safe_input(prompt):
     try:
@@ -112,7 +121,8 @@ def monitor_mode():
     for name in SENSORS:
         th = thresholds[name]
         print(f"  {name}: high={th['high']}%, low={th['low']}%")
-    print("\nCtrl+C to exit\n")
+    print(f"\nFilter: {SAMPLES} samples, {DEBOUNCE_COUNT}x debounce, {int(DEBOUNCE_TIME*1000)}ms lockout")
+    print("Ctrl+C to exit\n")
     
     try:
         while True:
@@ -124,7 +134,7 @@ def monitor_mode():
                 parts.append(f"{name}:{icon}{pct:3d}%")
             
             print(f"\r{' | '.join(parts)}", end="", flush=True)
-            time.sleep(0.05)
+            time.sleep(0.02)
     except KeyboardInterrupt:
         print("\n")
 
