@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Тестирование датчиков TCST2103 BookCabinet
-С гистерезисом для стабильного отображения
+С гистерезисом + временной фильтр (debounce)
 
 Запуск: python3 tools/test_sensors.py
 """
@@ -18,24 +18,40 @@ SENSORS = {
 }
 
 SAMPLES = 50
-THRESHOLD_HIGH = 95  # ≥95% → сработал
-THRESHOLD_LOW = 80   # ≤80% → свободен
-                     # 80-95% → без изменений (гистерезис)
+THRESHOLD_HIGH = 95
+THRESHOLD_LOW = 80
+DEBOUNCE_COUNT = 3  # Нужно N одинаковых чтений подряд для смены состояния
 
 # Состояние датчиков
 state = {name: False for name in SENSORS}
+pending = {name: None for name in SENSORS}  # Ожидающее состояние
+counter = {name: 0 for name in SENSORS}     # Счётчик стабильных чтений
 
 def read_percent(pin):
     readings = sum(GPIO.input(pin) for _ in range(SAMPLES))
     return readings * 100 // SAMPLES
 
 def update_state(name, pct):
-    """Обновляет состояние с гистерезисом"""
+    """Обновляет состояние с гистерезисом и debounce"""
+    global state, pending, counter
+    
+    # Определяем желаемое состояние
     if pct >= THRESHOLD_HIGH:
-        state[name] = True
+        desired = True
     elif pct <= THRESHOLD_LOW:
-        state[name] = False
-    # между 80-95% — не меняем
+        desired = False
+    else:
+        desired = state[name]  # В зоне гистерезиса — без изменений
+    
+    # Debounce: нужно DEBOUNCE_COUNT одинаковых чтений
+    if desired == pending[name]:
+        counter[name] += 1
+    else:
+        pending[name] = desired
+        counter[name] = 1
+    
+    if counter[name] >= DEBOUNCE_COUNT and state[name] != desired:
+        state[name] = desired
 
 def main():
     GPIO.setmode(GPIO.BCM)
@@ -45,9 +61,10 @@ def main():
         GPIO.setup(pin, GPIO.IN, pull_up_down=GPIO.PUD_UP)
     
     print("=" * 60)
-    print("  МОНИТОРИНГ ДАТЧИКОВ TCST2103 (с гистерезисом)")
+    print("  МОНИТОРИНГ ДАТЧИКОВ (гистерезис + debounce)")
     print("=" * 60)
-    print(f"Логика: ≥{THRESHOLD_HIGH}%=🔴 | ≤{THRESHOLD_LOW}%=⚪ | между=без изменений")
+    print(f"Порог: ≥{THRESHOLD_HIGH}%=🔴 | ≤{THRESHOLD_LOW}%=⚪")
+    print(f"Debounce: {DEBOUNCE_COUNT} стабильных чтений для смены")
     print("Ctrl+C для выхода\n")
     
     try:
@@ -60,7 +77,7 @@ def main():
                 parts.append(f"{name}:{icon}")
             
             print(f"\r{' | '.join(parts)}    ", end="", flush=True)
-            time.sleep(0.1)
+            time.sleep(0.05)
             
     except KeyboardInterrupt:
         print("\n\nСостояние при выходе:")
