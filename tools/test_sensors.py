@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """
-Диагностика сырых значений датчиков TCST2103
-Показывает % HIGH за последнюю секунду
+Тестирование датчиков TCST2103 BookCabinet
+Логика без внешних резисторов: 100%=нажат, <95%=открыт
+
+Запуск: python3 tools/test_sensors.py
 """
 import RPi.GPIO as GPIO
 import time
-from collections import deque
 
 SENSORS = {
     'X_BEGIN': 10,
@@ -16,53 +17,49 @@ SENSORS = {
     'TRAY_END': 20,
 }
 
+THRESHOLD = 95  # % для определения "нажат"
+SAMPLES = 50    # Количество чтений для усреднения
+
+def read_sensor(pin):
+    """Читает датчик, возвращает True если нажат (>=95% HIGH)"""
+    readings = sum(GPIO.input(pin) for _ in range(SAMPLES))
+    percent = readings * 100 // SAMPLES
+    return percent >= THRESHOLD
+
+def read_all_sensors():
+    """Возвращает словарь {имя: True/False}"""
+    return {name: read_sensor(pin) for name, pin in SENSORS.items()}
+
 def main():
     GPIO.setmode(GPIO.BCM)
     GPIO.setwarnings(False)
     
-    # Пробуем без подтяжки - читаем что реально даёт датчик
     for pin in SENSORS.values():
-        GPIO.setup(pin, GPIO.IN, pull_up_down=GPIO.PUD_OFF)
+        GPIO.setup(pin, GPIO.IN, pull_up_down=GPIO.PUD_UP)
     
-    print("=" * 65)
-    print("  ДИАГНОСТИКА ДАТЧИКОВ (без подтяжки RPi)")
-    print("=" * 65)
-    print("Показывает % времени в HIGH за последние 100 чтений")
-    print("100% = всегда HIGH | 0% = всегда LOW | 50% = моргает")
+    print("=" * 60)
+    print("  МОНИТОРИНГ ДАТЧИКОВ TCST2103")
+    print("=" * 60)
+    print(f"Логика: ≥{THRESHOLD}% HIGH = СРАБОТАЛ 🔴 | <{THRESHOLD}% = свободен ⚪")
     print("Ctrl+C для выхода\n")
-    
-    # История последних 100 чтений
-    history = {name: deque(maxlen=100) for name in SENSORS}
     
     try:
         while True:
+            sensors = read_all_sensors()
             parts = []
-            for name, pin in SENSORS.items():
-                val = GPIO.input(pin)
-                history[name].append(val)
-                
-                if len(history[name]) >= 10:
-                    pct = sum(history[name]) * 100 // len(history[name])
-                    # Интерпретация
-                    if pct >= 95:
-                        status = f"🔴{pct:3d}%"  # Стабильно HIGH
-                    elif pct <= 5:
-                        status = f"⚪{pct:3d}%"  # Стабильно LOW
-                    else:
-                        status = f"❓{pct:3d}%"  # Нестабильно
-                else:
-                    status = " ... "
-                    
-                parts.append(f"{name}:{status}")
+            for name, triggered in sensors.items():
+                icon = "🔴" if triggered else "⚪"
+                parts.append(f"{name}:{icon}")
             
             print(f"\r{' | '.join(parts)}    ", end="", flush=True)
-            time.sleep(0.01)
+            time.sleep(0.1)
             
     except KeyboardInterrupt:
-        print("\n\n--- ИНТЕРПРЕТАЦИЯ ---")
-        print("🔴 95-100% = нажат (или проблема с датчиком)")
-        print("⚪ 0-5%    = свободен (норма)")
-        print("❓ 6-94%   = нестабильно (проблема: наводки/питание/подключение)")
+        print("\n\nСостояние при выходе:")
+        sensors = read_all_sensors()
+        for name, triggered in sensors.items():
+            status = "СРАБОТАЛ" if triggered else "свободен"
+            print(f"  {name}: {status}")
     finally:
         GPIO.cleanup()
 
