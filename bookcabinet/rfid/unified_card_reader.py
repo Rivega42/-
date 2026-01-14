@@ -94,8 +94,8 @@ class UnifiedCardReader:
         self._running = False
         self._last_uid_time: Dict[str, float] = {}  # Для debounce
         
-        # NFC reader (ACR1281U-C через PC/SC)
-        self._nfc_reader = None
+        # NFC readers - список всех интерфейсов ACR1281
+        self._nfc_readers = []
         self._nfc_available = False
         
         # UHF reader (IQRFID-5102) - используем существующий драйвер
@@ -140,7 +140,7 @@ class UnifiedCardReader:
         return results
     
     async def _connect_nfc(self) -> bool:
-        """Подключение к ACR1281U-C через PC/SC"""
+        """Подключение к ACR1281U-C через PC/SC - все интерфейсы"""
         try:
             from smartcard.System import readers
             
@@ -149,19 +149,23 @@ class UnifiedCardReader:
                 print("[NFC] Считыватели не найдены")
                 return False
             
-            # Ищем ACR1281
+            # Собираем все ACR1281 интерфейсы
+            self._nfc_readers = []
             for r in available:
                 reader_name = str(r)
                 if 'ACR' in reader_name or 'ACS' in reader_name:
-                    self._nfc_reader = r
-                    self._nfc_available = True
-                    print(f"[NFC] Подключен: {reader_name}")
-                    return True
+                    self._nfc_readers.append(r)
+                    print(f"[NFC] Добавлен интерфейс: {reader_name}")
             
-            # Берём первый доступный
-            self._nfc_reader = available[0]
+            if self._nfc_readers:
+                self._nfc_available = True
+                print(f"[NFC] Подключено интерфейсов: {len(self._nfc_readers)}")
+                return True
+            
+            # Если ACR не найден, берём все доступные
+            self._nfc_readers = available
             self._nfc_available = True
-            print(f"[NFC] Подключен (fallback): {self._nfc_reader}")
+            print(f"[NFC] Подключено (fallback): {len(self._nfc_readers)} интерфейсов")
             return True
             
         except ImportError:
@@ -208,7 +212,7 @@ class UnifiedCardReader:
                 pass
             self._uhf_reader = None
         
-        self._nfc_reader = None
+        self._nfc_readers = []
     
     def disconnect(self):
         """Полное отключение от считывателей"""
@@ -258,16 +262,20 @@ class UnifiedCardReader:
         print("[UnifiedReader] Остановка опроса")
     
     async def _poll_nfc_loop(self, interval: float):
-        """Цикл опроса NFC считывателя"""
-        print("[NFC] Цикл опроса запущен")
+        """Цикл опроса NFC считывателей - проверяем все интерфейсы"""
+        print(f"[NFC] Цикл опроса запущен для {len(self._nfc_readers)} интерфейсов")
         
         while self._running:
-            try:
-                uid = self._read_nfc_card()
-                if uid:
-                    self._handle_card(uid, 'nfc')
-            except Exception as e:
-                if self._running:
+            # Проверяем все интерфейсы ACR1281
+            for reader in self._nfc_readers:
+                try:
+                    uid = self._read_nfc_card_from_reader(reader)
+                    if uid:
+                        self._handle_card(uid, 'nfc')
+                        # Нашли карту, делаем паузу перед следующим опросом
+                        await asyncio.sleep(0.5)
+                        break  # Выходим из цикла по интерфейсам
+                except Exception as e:
                     # Ошибка чтения - карта убрана или проблема связи
                     pass
             
@@ -295,13 +303,13 @@ class UnifiedCardReader:
         
         print("[UHF] Цикл опроса остановлен")
     
-    def _read_nfc_card(self) -> Optional[str]:
-        """Чтение карты с NFC считывателя"""
-        if not self._nfc_reader:
+    def _read_nfc_card_from_reader(self, reader) -> Optional[str]:
+        """Чтение карты с конкретного NFC интерфейса"""
+        if not reader:
             return None
         
         try:
-            connection = self._nfc_reader.createConnection()
+            connection = reader.createConnection()
             connection.connect()
             
             # GET UID command (APDU)
@@ -398,7 +406,8 @@ class UnifiedCardReader:
             'mock_mode': self.mock_mode,
             'nfc': {
                 'available': self._nfc_available,
-                'reader': str(self._nfc_reader) if self._nfc_reader else None,
+                'readers': [str(r) for r in self._nfc_readers],
+                'count': len(self._nfc_readers),
             },
             'uhf': {
                 'available': self._uhf_available,
