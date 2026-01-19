@@ -5,10 +5,10 @@
 Управление:
   W/S - движение по Y (вверх/вниз)
   A/D - движение по X (влево/вправо)
+  +/- - изменить скорость
   Q   - выход
 
-Логика: движение блокируется только если едем В датчик,
-а не ОТ него. Это позволяет съехать с концевика.
+При срабатывании концевика - остановка.
 
 Запуск:
   python3 tools/test_corexy_limits.py
@@ -21,7 +21,7 @@ import tty
 import termios
 import select
 
-# === GPIO пины ===
+# === GPIO пины (из config.py) ===
 # Моторы
 MOTOR_A_STEP = 2
 MOTOR_A_DIR = 3
@@ -34,9 +34,16 @@ SENSOR_RIGHT = 10
 SENSOR_BOTTOM = 8
 SENSOR_TOP = 11
 
-# Параметры
-STEP_DELAY = 0.002
-STEPS_PER_MOVE = 50
+# === Параметры движения ===
+# Скорость: шагов/сек (из config.py: xy=4000)
+# Но Python GPIO медленнее, начнём с 1000 и можно менять
+SPEED = 1000  # шагов/сек
+STEPS_PER_MOVE = 100  # шагов за одно нажатие
+
+
+def calc_delay(speed):
+    """Рассчитать задержку между импульсами"""
+    return 1.0 / (2 * speed)
 
 
 def setup_gpio():
@@ -73,36 +80,30 @@ def step_motors(a_dir, b_dir, steps, block_sensor=None):
       X- (влево):  A-, B-
       Y+ (вверх):  A+, B-
       Y- (вниз):   A-, B+
-    
-    Args:
-        a_dir: направление мотора A (1/0)
-        b_dir: направление мотора B (1/0)
-        steps: количество шагов
-        block_sensor: имя датчика который блокирует движение
-    
-    Returns:
-        имя сработавшего датчика или None
     """
+    global SPEED
+    delay = calc_delay(SPEED)
+    
     GPIO.output(MOTOR_A_DIR, a_dir)
     GPIO.output(MOTOR_B_DIR, b_dir)
     time.sleep(0.001)
     
-    for _ in range(steps):
+    for i in range(steps):
         # Проверяем только датчик в направлении движения
         if block_sensor:
             sensors = read_sensors()
             if sensors.get(block_sensor):
-                return block_sensor
+                return block_sensor, i
         
         # Шаг обоих моторов
         GPIO.output(MOTOR_A_STEP, GPIO.HIGH)
         GPIO.output(MOTOR_B_STEP, GPIO.HIGH)
-        time.sleep(STEP_DELAY)
+        time.sleep(delay)
         GPIO.output(MOTOR_A_STEP, GPIO.LOW)
         GPIO.output(MOTOR_B_STEP, GPIO.LOW)
-        time.sleep(STEP_DELAY)
+        time.sleep(delay)
     
-    return None
+    return None, steps
 
 
 def move_up(steps=STEPS_PER_MOVE):
@@ -129,17 +130,20 @@ def print_status():
     """Вывод состояния датчиков"""
     s = read_sensors()
     active = [k.upper() for k, v in s.items() if v]
-    print(f"  [{' '.join(active) if active else '---'}]")
+    sensors_str = ' '.join(active) if active else '---'
+    print(f"  [{sensors_str}] Speed: {SPEED} steps/sec")
 
 
 def get_key():
     """Неблокирующее чтение клавиши"""
     if select.select([sys.stdin], [], [], 0)[0]:
-        return sys.stdin.read(1).lower()
+        return sys.stdin.read(1)
     return None
 
 
 def main():
+    global SPEED
+    
     print("""
 ╔══════════════════════════════════════════════════════════════╗
 ║            ТЕСТ CoreXY С КОНЦЕВИКАМИ                         ║
@@ -147,10 +151,10 @@ def main():
 ║  Управление:                                                 ║
 ║    W - вверх      S - вниз                                   ║
 ║    A - влево      D - вправо                                 ║
+║    + - быстрее    - - медленнее                              ║
 ║    Q - выход                                                 ║
 ║                                                              ║
 ║  Движение блокируется только если едем В датчик!             ║
-║  Можно съехать с концевика в противоположную сторону.        ║
 ╚══════════════════════════════════════════════════════════════╝
 """)
     
@@ -162,45 +166,56 @@ def main():
     try:
         tty.setcbreak(sys.stdin.fileno())
         
-        print("Готов. WASD=движение, Q=выход\n")
+        print("Ready. WASD=move, +/-=speed, Q=quit\n")
         print_status()
         
         while True:
             key = get_key()
             
-            if key == 'q':
-                print("\nВыход...")
+            if key == 'q' or key == 'Q':
+                print("\nExit...")
                 break
             
+            # Изменение скорости
+            if key == '+' or key == '=':
+                SPEED = min(SPEED + 500, 5000)
+                print(f"Speed: {SPEED}")
+                continue
+            if key == '-' or key == '_':
+                SPEED = max(SPEED - 500, 500)
+                print(f"Speed: {SPEED}")
+                continue
+            
             triggered = None
+            done_steps = 0
             
-            if key == 'w':
+            if key == 'w' or key == 'W':
                 print("UP...", end=' ', flush=True)
-                triggered = move_up()
-                print("STOP" if triggered else "ok")
+                triggered, done_steps = move_up()
+                print(f"STOP @{done_steps}" if triggered else f"ok ({done_steps})")
                 
-            elif key == 's':
+            elif key == 's' or key == 'S':
                 print("DOWN...", end=' ', flush=True)
-                triggered = move_down()
-                print("STOP" if triggered else "ok")
+                triggered, done_steps = move_down()
+                print(f"STOP @{done_steps}" if triggered else f"ok ({done_steps})")
                 
-            elif key == 'a':
+            elif key == 'a' or key == 'A':
                 print("LEFT...", end=' ', flush=True)
-                triggered = move_left()
-                print("STOP" if triggered else "ok")
+                triggered, done_steps = move_left()
+                print(f"STOP @{done_steps}" if triggered else f"ok ({done_steps})")
                 
-            elif key == 'd':
+            elif key == 'd' or key == 'D':
                 print("RIGHT...", end=' ', flush=True)
-                triggered = move_right()
-                print("STOP" if triggered else "ok")
+                triggered, done_steps = move_right()
+                print(f"STOP @{done_steps}" if triggered else f"ok ({done_steps})")
             
-            if key in ['w', 'a', 's', 'd']:
+            if key and key.lower() in ['w', 'a', 's', 'd']:
                 print_status()
             
             time.sleep(0.05)
     
     except KeyboardInterrupt:
-        print("\n\nПрервано")
+        print("\n\nInterrupted")
     
     finally:
         termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)
