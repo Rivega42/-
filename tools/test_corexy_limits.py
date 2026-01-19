@@ -7,7 +7,8 @@
   A/D - движение по X (влево/вправо)
   Q   - выход
 
-При срабатывании концевика - автостоп и отскок назад.
+Логика: движение блокируется только если едем В датчик,
+а не ОТ него. Это позволяет съехать с концевика.
 
 Запуск:
   python3 tools/test_corexy_limits.py
@@ -16,9 +17,9 @@
 import RPi.GPIO as GPIO
 import time
 import sys
-import select
 import tty
 import termios
+import select
 
 # === GPIO пины ===
 # Моторы
@@ -27,16 +28,15 @@ MOTOR_A_DIR = 3
 MOTOR_B_STEP = 19
 MOTOR_B_DIR = 21
 
-# Концевики (HIGH = сработал!) - РЕАЛЬНАЯ МАППИРОВКА
-SENSOR_X_BEGIN = 9   # левый
-SENSOR_X_END = 10    # правый
-SENSOR_Y_BEGIN = 8   # нижний
-SENSOR_Y_END = 11    # верхний
+# Концевики (HIGH = сработал!)
+SENSOR_LEFT = 9
+SENSOR_RIGHT = 10
+SENSOR_BOTTOM = 8
+SENSOR_TOP = 11
 
-# Параметры движения
-STEP_DELAY = 0.002  # задержка между шагами (сек)
-STEPS_PER_MOVE = 50  # шагов за одно нажатие
-BOUNCE_STEPS = 100   # шагов отскока от концевика
+# Параметры
+STEP_DELAY = 0.002
+STEPS_PER_MOVE = 50
 
 
 def setup_gpio():
@@ -49,23 +49,22 @@ def setup_gpio():
         GPIO.setup(pin, GPIO.OUT)
         GPIO.output(pin, GPIO.LOW)
     
-    # Концевики - входы с подтяжкой
-    for pin in [SENSOR_X_BEGIN, SENSOR_X_END, SENSOR_Y_BEGIN, SENSOR_Y_END]:
+    # Датчики - входы с подтяжкой
+    for pin in [SENSOR_LEFT, SENSOR_RIGHT, SENSOR_BOTTOM, SENSOR_TOP]:
         GPIO.setup(pin, GPIO.IN, pull_up_down=GPIO.PUD_UP)
 
 
 def read_sensors():
-    """Чтение состояния концевиков (True = сработал)"""
-    # HIGH = сработал!
+    """Чтение датчиков (True = сработал)"""
     return {
-        'x_begin': GPIO.input(SENSOR_X_BEGIN) == GPIO.HIGH,
-        'x_end': GPIO.input(SENSOR_X_END) == GPIO.HIGH,
-        'y_begin': GPIO.input(SENSOR_Y_BEGIN) == GPIO.HIGH,
-        'y_end': GPIO.input(SENSOR_Y_END) == GPIO.HIGH,
+        'left': GPIO.input(SENSOR_LEFT) == GPIO.HIGH,
+        'right': GPIO.input(SENSOR_RIGHT) == GPIO.HIGH,
+        'bottom': GPIO.input(SENSOR_BOTTOM) == GPIO.HIGH,
+        'top': GPIO.input(SENSOR_TOP) == GPIO.HIGH,
     }
 
 
-def step_motors(a_dir, b_dir, steps, check_sensors=True):
+def step_motors(a_dir, b_dir, steps, block_sensor=None):
     """
     Шаги моторов CoreXY.
     
@@ -76,27 +75,26 @@ def step_motors(a_dir, b_dir, steps, check_sensors=True):
       Y- (вниз):   A-, B+
     
     Args:
-        a_dir: направление мотора A (1=вперёд, 0=назад)
-        b_dir: направление мотора B (1=вперёд, 0=назад)
+        a_dir: направление мотора A (1/0)
+        b_dir: направление мотора B (1/0)
         steps: количество шагов
-        check_sensors: проверять концевики
+        block_sensor: имя датчика который блокирует движение
     
     Returns:
-        sensor_name если сработал концевик, иначе None
+        имя сработавшего датчика или None
     """
     GPIO.output(MOTOR_A_DIR, a_dir)
     GPIO.output(MOTOR_B_DIR, b_dir)
     time.sleep(0.001)
     
     for _ in range(steps):
-        # Проверка концевиков
-        if check_sensors:
+        # Проверяем только датчик в направлении движения
+        if block_sensor:
             sensors = read_sensors()
-            for name, triggered in sensors.items():
-                if triggered:
-                    return name
+            if sensors.get(block_sensor):
+                return block_sensor
         
-        # Шаг обоих моторов одновременно
+        # Шаг обоих моторов
         GPIO.output(MOTOR_A_STEP, GPIO.HIGH)
         GPIO.output(MOTOR_B_STEP, GPIO.HIGH)
         time.sleep(STEP_DELAY)
@@ -107,37 +105,31 @@ def step_motors(a_dir, b_dir, steps, check_sensors=True):
     return None
 
 
-def move_x(direction, steps=STEPS_PER_MOVE):
-    """Движение по X. direction: 1=вправо, -1=влево"""
-    if direction > 0:  # вправо
-        return step_motors(1, 1, steps)
-    else:  # влево
-        return step_motors(0, 0, steps)
+def move_up(steps=STEPS_PER_MOVE):
+    """Вверх - блокируем только TOP"""
+    return step_motors(1, 0, steps, 'top')
 
 
-def move_y(direction, steps=STEPS_PER_MOVE):
-    """Движение по Y. direction: 1=вверх, -1=вниз"""
-    if direction > 0:  # вверх
-        return step_motors(1, 0, steps)
-    else:  # вниз
-        return step_motors(0, 1, steps)
+def move_down(steps=STEPS_PER_MOVE):
+    """Вниз - блокируем только BOTTOM"""
+    return step_motors(0, 1, steps, 'bottom')
 
 
-def bounce_from_sensor(sensor_name):
-    """Отскок от сработавшего концевика"""
-    print(f"  ! {sensor_name} - отскок...", end=' ', flush=True)
-    
-    # Определяем направление отскока (без проверки датчиков!)
-    if sensor_name == 'x_begin':  # левый - едем вправо
-        step_motors(1, 1, BOUNCE_STEPS, check_sensors=False)
-    elif sensor_name == 'x_end':  # правый - едем влево
-        step_motors(0, 0, BOUNCE_STEPS, check_sensors=False)
-    elif sensor_name == 'y_begin':  # нижний - едем вверх
-        step_motors(1, 0, BOUNCE_STEPS, check_sensors=False)
-    elif sensor_name == 'y_end':  # верхний - едем вниз
-        step_motors(0, 1, BOUNCE_STEPS, check_sensors=False)
-    
-    print("ok")
+def move_left(steps=STEPS_PER_MOVE):
+    """Влево - блокируем только LEFT"""
+    return step_motors(0, 0, steps, 'left')
+
+
+def move_right(steps=STEPS_PER_MOVE):
+    """Вправо - блокируем только RIGHT"""
+    return step_motors(1, 1, steps, 'right')
+
+
+def print_status():
+    """Вывод состояния датчиков"""
+    s = read_sensors()
+    active = [k.upper() for k, v in s.items() if v]
+    print(f"  [{' '.join(active) if active else '---'}]")
 
 
 def get_key():
@@ -145,22 +137,6 @@ def get_key():
     if select.select([sys.stdin], [], [], 0)[0]:
         return sys.stdin.read(1).lower()
     return None
-
-
-def print_status():
-    """Вывод состояния датчиков"""
-    s = read_sensors()
-    status = []
-    if s['x_begin']: status.append('LEFT!')
-    if s['x_end']: status.append('RIGHT!')
-    if s['y_begin']: status.append('BOTTOM!')
-    if s['y_end']: status.append('TOP!')
-    
-    if status:
-        print(f"  Датчики: {', '.join(status)}")
-    else:
-        print("  Датчики: ---")
-    return s
 
 
 def main():
@@ -173,10 +149,8 @@ def main():
 ║    A - влево      D - вправо                                 ║
 ║    Q - выход                                                 ║
 ║                                                              ║
-║  При срабатывании концевика - автоматический отскок!         ║
-║                                                              ║
-║  Датчики: HIGH = сработал                                    ║
-║    LEFT=GPIO9  RIGHT=GPIO10  BOTTOM=GPIO8  TOP=GPIO11       ║
+║  Движение блокируется только если едем В датчик!             ║
+║  Можно съехать с концевика в противоположную сторону.        ║
 ╚══════════════════════════════════════════════════════════════╝
 """)
     
@@ -186,10 +160,9 @@ def main():
     old_settings = termios.tcgetattr(sys.stdin)
     
     try:
-        # Переключаем терминал в raw режим
         tty.setcbreak(sys.stdin.fileno())
         
-        print("Готов. Жми WASD для движения, Q для выхода.\n")
+        print("Готов. WASD=движение, Q=выход\n")
         print_status()
         
         while True:
@@ -202,30 +175,25 @@ def main():
             triggered = None
             
             if key == 'w':
-                print("Y+ (вверх)...", end=' ', flush=True)
-                triggered = move_y(1)
-                print("ok" if not triggered else "")
+                print("UP...", end=' ', flush=True)
+                triggered = move_up()
+                print("STOP" if triggered else "ok")
                 
             elif key == 's':
-                print("Y- (вниз)...", end=' ', flush=True)
-                triggered = move_y(-1)
-                print("ok" if not triggered else "")
+                print("DOWN...", end=' ', flush=True)
+                triggered = move_down()
+                print("STOP" if triggered else "ok")
                 
             elif key == 'a':
-                print("X- (влево)...", end=' ', flush=True)
-                triggered = move_x(-1)
-                print("ok" if not triggered else "")
+                print("LEFT...", end=' ', flush=True)
+                triggered = move_left()
+                print("STOP" if triggered else "ok")
                 
             elif key == 'd':
-                print("X+ (вправо)...", end=' ', flush=True)
-                triggered = move_x(1)
-                print("ok" if not triggered else "")
+                print("RIGHT...", end=' ', flush=True)
+                triggered = move_right()
+                print("STOP" if triggered else "ok")
             
-            # Если сработал концевик - отскок
-            if triggered:
-                bounce_from_sensor(triggered)
-            
-            # Показать статус датчиков
             if key in ['w', 'a', 's', 'd']:
                 print_status()
             
@@ -235,7 +203,6 @@ def main():
         print("\n\nПрервано")
     
     finally:
-        # Восстанавливаем терминал
         termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)
         GPIO.cleanup()
         print("GPIO cleanup done")
