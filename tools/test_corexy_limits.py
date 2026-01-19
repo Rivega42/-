@@ -27,11 +27,11 @@ MOTOR_A_DIR = 3
 MOTOR_B_STEP = 19
 MOTOR_B_DIR = 21
 
-# Концевики (LOW = сработал)
-SENSOR_X_BEGIN = 10  # левый
-SENSOR_X_END = 9     # правый
-SENSOR_Y_BEGIN = 11  # нижний
-SENSOR_Y_END = 8     # верхний
+# Концевики (HIGH = сработал!) - РЕАЛЬНАЯ МАППИРОВКА
+SENSOR_X_BEGIN = 9   # левый
+SENSOR_X_END = 10    # правый
+SENSOR_Y_BEGIN = 8   # нижний
+SENSOR_Y_END = 11    # верхний
 
 # Параметры движения
 STEP_DELAY = 0.002  # задержка между шагами (сек)
@@ -56,11 +56,12 @@ def setup_gpio():
 
 def read_sensors():
     """Чтение состояния концевиков (True = сработал)"""
+    # HIGH = сработал!
     return {
-        'x_begin': GPIO.input(SENSOR_X_BEGIN) == GPIO.LOW,
-        'x_end': GPIO.input(SENSOR_X_END) == GPIO.LOW,
-        'y_begin': GPIO.input(SENSOR_Y_BEGIN) == GPIO.LOW,
-        'y_end': GPIO.input(SENSOR_Y_END) == GPIO.LOW,
+        'x_begin': GPIO.input(SENSOR_X_BEGIN) == GPIO.HIGH,
+        'x_end': GPIO.input(SENSOR_X_END) == GPIO.HIGH,
+        'y_begin': GPIO.input(SENSOR_Y_BEGIN) == GPIO.HIGH,
+        'y_end': GPIO.input(SENSOR_Y_END) == GPIO.HIGH,
     }
 
 
@@ -126,15 +127,15 @@ def bounce_from_sensor(sensor_name):
     """Отскок от сработавшего концевика"""
     print(f"  ! {sensor_name} - отскок...", end=' ', flush=True)
     
-    # Определяем направление отскока
+    # Определяем направление отскока (без проверки датчиков!)
     if sensor_name == 'x_begin':  # левый - едем вправо
-        move_x(1, BOUNCE_STEPS)
+        step_motors(1, 1, BOUNCE_STEPS, check_sensors=False)
     elif sensor_name == 'x_end':  # правый - едем влево
-        move_x(-1, BOUNCE_STEPS)
+        step_motors(0, 0, BOUNCE_STEPS, check_sensors=False)
     elif sensor_name == 'y_begin':  # нижний - едем вверх
-        move_y(1, BOUNCE_STEPS)
+        step_motors(1, 0, BOUNCE_STEPS, check_sensors=False)
     elif sensor_name == 'y_end':  # верхний - едем вниз
-        move_y(-1, BOUNCE_STEPS)
+        step_motors(0, 1, BOUNCE_STEPS, check_sensors=False)
     
     print("ok")
 
@@ -150,13 +151,15 @@ def print_status():
     """Вывод состояния датчиков"""
     s = read_sensors()
     status = []
-    if s['x_begin']: status.append('X_BEGIN!')
-    if s['x_end']: status.append('X_END!')
-    if s['y_begin']: status.append('Y_BEGIN!')
-    if s['y_end']: status.append('Y_END!')
+    if s['x_begin']: status.append('LEFT!')
+    if s['x_end']: status.append('RIGHT!')
+    if s['y_begin']: status.append('BOTTOM!')
+    if s['y_end']: status.append('TOP!')
     
     if status:
         print(f"  Датчики: {', '.join(status)}")
+    else:
+        print("  Датчики: ---")
     return s
 
 
@@ -171,6 +174,9 @@ def main():
 ║    Q - выход                                                 ║
 ║                                                              ║
 ║  При срабатывании концевика - автоматический отскок!         ║
+║                                                              ║
+║  Датчики: HIGH = сработал                                    ║
+║    LEFT=GPIO9  RIGHT=GPIO10  BOTTOM=GPIO8  TOP=GPIO11       ║
 ╚══════════════════════════════════════════════════════════════╝
 """)
     
