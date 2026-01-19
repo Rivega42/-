@@ -6,9 +6,7 @@ Motor A: GPIO 2 (STEP), GPIO 3 (DIR)
 Motor B: GPIO 19 (STEP), GPIO 21 (DIR)
 Tray:    GPIO 24 (STEP), GPIO 25 (DIR)
 
-CoreXY кинематика:
-- X движение: A и B в одном направлении
-- Y движение: A и B в разных направлениях
++ Мониторинг всех концевиков для проверки наводок
 """
 import time
 import sys
@@ -19,7 +17,7 @@ except ImportError:
     print("ERROR: RPi.GPIO not found. Run on Raspberry Pi!")
     sys.exit(1)
 
-# Конфигурация пинов
+# Конфигурация моторов
 MOTOR_A_STEP = 2
 MOTOR_A_DIR = 3
 MOTOR_B_STEP = 19
@@ -27,21 +25,72 @@ MOTOR_B_DIR = 21
 TRAY_STEP = 24
 TRAY_DIR = 25
 
-# Направления
 DIR_FORWARD = GPIO.HIGH
 DIR_BACKWARD = GPIO.LOW
 
-# Скорость (задержка между шагами в секундах)
-STEP_DELAY = 0.001  # 1ms = 1000 шагов/сек
+STEP_DELAY = 0.001  # 1ms
+
+# Конфигурация датчиков
+SENSORS = {
+    'X_BEGIN': 10,
+    'X_END': 9,
+    'Y_BEGIN': 11,
+    'Y_END': 8,
+    'TRAY_BEGIN': 7,
+    'TRAY_END': 20,
+}
+
+THRESHOLDS = {
+    'X_BEGIN': {'high': 95, 'low': 85},
+    'X_END': {'high': 95, 'low': 85},
+    'Y_BEGIN': {'high': 95, 'low': 85},
+    'Y_END': {'high': 95, 'low': 85},
+    'TRAY_BEGIN': {'high': 95, 'low': 85},
+    'TRAY_END': {'high': 95, 'low': 85},
+}
+
+SAMPLES = 50
 
 
 def setup():
     GPIO.setmode(GPIO.BCM)
     GPIO.setwarnings(False)
     
+    # Моторы
     for pin in [MOTOR_A_STEP, MOTOR_A_DIR, MOTOR_B_STEP, MOTOR_B_DIR, TRAY_STEP, TRAY_DIR]:
         GPIO.setup(pin, GPIO.OUT)
         GPIO.output(pin, GPIO.LOW)
+    
+    # Датчики
+    for pin in SENSORS.values():
+        GPIO.setup(pin, GPIO.IN, pull_up_down=GPIO.PUD_UP)
+
+
+def read_sensor_percent(pin, samples=SAMPLES):
+    """Читает датчик и возвращает % HIGH"""
+    high_count = sum(1 for _ in range(samples) if GPIO.input(pin) == GPIO.HIGH)
+    return int(high_count * 100 / samples)
+
+
+def get_sensor_state(name, percent):
+    """Определяет состояние датчика по порогам"""
+    th = THRESHOLDS.get(name, {'high': 95, 'low': 85})
+    if percent >= th['high']:
+        return '🔴'
+    elif percent <= th['low']:
+        return '⚪'
+    else:
+        return '🟡'
+
+
+def print_sensors(prefix=""):
+    """Вывести состояние всех датчиков"""
+    parts = []
+    for name, pin in SENSORS.items():
+        pct = read_sensor_percent(pin)
+        state = get_sensor_state(name, pct)
+        parts.append(f"{name}:{state}{pct:3d}%")
+    print(f"{prefix}[{' | '.join(parts)}]")
 
 
 def step_motor(step_pin, steps, delay=STEP_DELAY):
@@ -58,6 +107,7 @@ def move_motor_a(steps, direction=DIR_FORWARD):
     GPIO.output(MOTOR_A_DIR, direction)
     time.sleep(0.001)
     step_motor(MOTOR_A_STEP, abs(steps))
+    print_sensors("  Sensors: ")
 
 
 def move_motor_b(steps, direction=DIR_FORWARD):
@@ -65,6 +115,7 @@ def move_motor_b(steps, direction=DIR_FORWARD):
     GPIO.output(MOTOR_B_DIR, direction)
     time.sleep(0.001)
     step_motor(MOTOR_B_STEP, abs(steps))
+    print_sensors("  Sensors: ")
 
 
 def move_tray(steps, direction=DIR_FORWARD):
@@ -72,16 +123,11 @@ def move_tray(steps, direction=DIR_FORWARD):
     GPIO.output(TRAY_DIR, direction)
     time.sleep(0.001)
     step_motor(TRAY_STEP, abs(steps))
+    print_sensors("  Sensors: ")
 
 
 def move_xy_corexy(x_steps, y_steps):
-    """
-    CoreXY движение
-    X: A+B в одном направлении
-    Y: A+B в разных направлениях
-    
-    Упрощённо (без одновременного движения):
-    """
+    """CoreXY движение"""
     # Движение по X
     if x_steps != 0:
         dir_val = DIR_FORWARD if x_steps > 0 else DIR_BACKWARD
@@ -100,7 +146,7 @@ def move_xy_corexy(x_steps, y_steps):
     # Движение по Y
     if y_steps != 0:
         dir_a = DIR_FORWARD if y_steps > 0 else DIR_BACKWARD
-        dir_b = DIR_BACKWARD if y_steps > 0 else DIR_FORWARD  # Инверсия для B
+        dir_b = DIR_BACKWARD if y_steps > 0 else DIR_FORWARD
         GPIO.output(MOTOR_A_DIR, dir_a)
         GPIO.output(MOTOR_B_DIR, dir_b)
         time.sleep(0.001)
@@ -112,30 +158,35 @@ def move_xy_corexy(x_steps, y_steps):
             GPIO.output(MOTOR_A_STEP, GPIO.LOW)
             GPIO.output(MOTOR_B_STEP, GPIO.LOW)
             time.sleep(STEP_DELAY)
+    
+    print_sensors("  Sensors: ")
 
 
 def test_single_motor(name, step_fn):
     """Тест одного мотора"""
-    print(f"\n{'='*50}")
+    print(f"\n{'='*60}")
     print(f"  Testing {name}")
-    print(f"{'='*50}")
+    print(f"{'='*60}")
     
-    steps = 200  # 1 оборот для 200 step/rev мотора
+    steps = 200
+    print_sensors("  Before: ")
     
     input(f"Press Enter to move {name} FORWARD ({steps} steps)...")
+    print(f"  Moving {name} forward...")
     step_fn(steps, DIR_FORWARD)
-    print(f"  Done.")
     
     input(f"Press Enter to move {name} BACKWARD ({steps} steps)...")
+    print(f"  Moving {name} backward...")
     step_fn(steps, DIR_BACKWARD)
-    print(f"  Done.")
+    
+    print(f"  {name} test complete!")
 
 
 def interactive_mode():
     """Интерактивный режим"""
-    print("\n" + "="*50)
+    print("\n" + "="*60)
     print("  INTERACTIVE MODE")
-    print("="*50)
+    print("="*60)
     print("Commands:")
     print("  a+ / a-   — Motor A forward/backward (200 steps)")
     print("  b+ / b-   — Motor B forward/backward")
@@ -144,12 +195,15 @@ def interactive_mode():
     print("  y+ / y-   — CoreXY Y axis")
     print("  a:500     — Motor A 500 steps forward")
     print("  a:-500    — Motor A 500 steps backward")
-    print("  s:0.002   — Set step delay (slower)")
+    print("  d:0.002   — Set step delay (slower)")
+    print("  s         — Show sensors")
     print("  q         — Quit")
     print()
     
     global STEP_DELAY
     default_steps = 200
+    
+    print_sensors("Initial: ")
     
     while True:
         try:
@@ -159,6 +213,8 @@ def interactive_mode():
         
         if cmd == 'q':
             break
+        elif cmd == 's':
+            print_sensors("Sensors: ")
         elif cmd == 'a+':
             print(f"  Motor A forward {default_steps} steps...")
             move_motor_a(default_steps, DIR_FORWARD)
@@ -189,7 +245,7 @@ def interactive_mode():
         elif cmd == 'y-':
             print(f"  CoreXY Y- {default_steps} steps...")
             move_xy_corexy(0, -default_steps)
-        elif cmd.startswith('s:'):
+        elif cmd.startswith('d:'):
             try:
                 STEP_DELAY = float(cmd[2:])
                 print(f"  Step delay = {STEP_DELAY} sec")
@@ -220,13 +276,14 @@ def interactive_mode():
 
 
 def main():
-    print("="*50)
-    print("  STEPPER MOTOR TEST")
-    print("="*50)
+    print("="*60)
+    print("  STEPPER MOTOR TEST + SENSOR MONITOR")
+    print("="*60)
     print(f"Motor A: STEP=GPIO{MOTOR_A_STEP}, DIR=GPIO{MOTOR_A_DIR}")
     print(f"Motor B: STEP=GPIO{MOTOR_B_STEP}, DIR=GPIO{MOTOR_B_DIR}")
     print(f"Tray:    STEP=GPIO{TRAY_STEP}, DIR=GPIO{TRAY_DIR}")
     print(f"Step delay: {STEP_DELAY} sec")
+    print(f"Sensors: {', '.join(SENSORS.keys())}")
     
     setup()
     
@@ -238,9 +295,9 @@ def main():
             test_single_motor("Motor B", move_motor_b)
             test_single_motor("Tray", move_tray)
             
-            print("\n" + "="*50)
+            print("\n" + "="*60)
             print("  Run with -i for interactive mode")
-            print("="*50)
+            print("="*60)
     finally:
         GPIO.cleanup()
         print("\nGPIO cleanup done.")
