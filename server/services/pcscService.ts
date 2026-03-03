@@ -1,3 +1,8 @@
+/**
+ * PC/SC smartcard reader service.
+ * ISO 14443 NFC tag reading via pcsclite library.
+ * Emits tag events for library cards and book RFID tags.
+ */
 import { EventEmitter } from 'events';
 import type { TagReadEvent, RfidReaderStatus } from '@shared/schema';
 import { ReaderType } from '@shared/schema';

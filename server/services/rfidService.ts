@@ -1,3 +1,8 @@
+/**
+ * Serial RFID reader service (RRU9816 antenna).
+ * Reads UHF RFID book tags via RS232/USB serial connection.
+ * Broadcasts tag events via WebSocket to connected clients.
+ */
 import { SerialPort } from 'serialport';
 import { ReadlineParser } from '@serialport/parser-readline';
 import EventEmitter from 'events';

@@ -1,3 +1,8 @@
+/**
+ * HTTP and WebSocket route definitions.
+ * API endpoints for cabinet control, RFID operations, user management.
+ * WebSocket server for real-time tag events and status updates.
+ */
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { WebSocketServer, WebSocket } from "ws";

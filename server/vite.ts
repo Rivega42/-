@@ -1,3 +1,7 @@
+/**
+ * Vite development server integration.
+ * Hot module replacement for frontend, static file serving in production.
+ */
 import express, { type Express } from "express";
 import fs from "fs";
 import path from "path";

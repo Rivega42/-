@@ -1,3 +1,7 @@
+/**
+ * IRBIS library system integration service.
+ * User authentication, book catalog queries, library card validation.
+ */
 import { storage } from "../storage";
 import type { User, Book } from "@shared/schema";
 

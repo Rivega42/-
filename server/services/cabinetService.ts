@@ -1,3 +1,8 @@
+/**
+ * Cabinet business logic service.
+ * Book give/take operations, cell management, operation logging.
+ * Integrates with IRBIS library system for user/book validation.
+ */
 import { EventEmitter } from 'events';
 import { storage } from '../storage';
 import { irbisService } from './irbisService';

@@ -1,3 +1,8 @@
+/**
+ * In-memory data storage layer.
+ * Manages RFID tags, cells, users, books, system logs.
+ * Implements IStorage interface for data persistence.
+ */
 import { 
   type RfidTag, type InsertRfidTag, 
   type SystemLog, type InsertSystemLog,
