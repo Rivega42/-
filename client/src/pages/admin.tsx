@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -27,10 +28,19 @@ import {
   WifiOff,
   Database,
   Crosshair,
+  Cpu,
+  Radio,
+  CreditCard,
+  MonitorDot,
+
 } from "lucide-react";
 
 export default function AdminPage() {
   const [activeTab, setActiveTab] = useState("dashboard");
+  const [testReader, setTestReader] = useState<string | null>(null);
+  const [testLog, setTestLog] = useState<Array<{type: string; message?: string; uid?: string; epc?: string; reader?: string}>>([]);
+  const [testRunning, setTestRunning] = useState(false);
+  const testLogRef = useRef<HTMLDivElement>(null);
 
   const { data: status } = useQuery<SystemStatus>({
     queryKey: ['/api/status'],
@@ -58,6 +68,12 @@ export default function AdminPage() {
     queryKey: ['/api/operations'],
   });
 
+
+  const { data: rfidReaders = [] } = useQuery<any[]>({
+    queryKey: ['/api/rfid-readers'],
+    refetchInterval: 3000,
+  });
+
   const { data: logs = [] } = useQuery<SystemLog[]>({
     queryKey: ['/api/logs'],
     refetchInterval: 3000,
@@ -66,6 +82,22 @@ export default function AdminPage() {
   const toggleMaintenance = async () => {
     await apiRequest('POST', '/api/maintenance', { enabled: !status?.maintenanceMode });
     queryClient.invalidateQueries({ queryKey: ['/api/status'] });
+  };
+
+  const startReaderTest = (readerId: string) => {
+    setTestReader(readerId);
+    setTestLog([]);
+    setTestRunning(true);
+    const es = new EventSource(`/api/rfid-test/${readerId}`);
+    es.onmessage = (e) => {
+      try {
+        const data = JSON.parse(e.data);
+        setTestLog(prev => [...prev.slice(-99), data]);
+        if (data.type === 'done') { setTestRunning(false); es.close(); }
+        setTimeout(() => testLogRef.current?.scrollTo(0, testLogRef.current.scrollHeight), 50);
+      } catch {}
+    };
+    es.onerror = () => { setTestRunning(false); es.close(); };
   };
 
   const renderDashboard = () => (
@@ -169,6 +201,48 @@ export default function AdminPage() {
             </div>
           </CardContent>
         </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Radio className="w-4 h-4" />
+              RFID Считыватели
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {rfidReaders.map((reader: any) => (
+              <div key={reader.id} className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2 flex-1">
+                  {reader.id === 'acr1281' ? <CreditCard className="w-4 h-4 text-slate-400" /> : <Cpu className="w-4 h-4 text-slate-400" />}
+                  <div>
+                    <div className="text-sm font-medium">{reader.name}</div>
+                    <div className="text-xs text-slate-400">{reader.role} · {reader.port}</div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  {reader.connected ? (
+                    <Badge variant="default" className="flex items-center gap-1 bg-green-600">
+                      <CheckCircle className="w-3 h-3" /> Подключён
+                    </Badge>
+                  ) : (
+                    <Badge variant="destructive" className="flex items-center gap-1">
+                      <XCircle className="w-3 h-3" /> {reader.error || 'Отключён'}
+                    </Badge>
+                  )}
+                  <Button size="sm" variant="outline" className="h-7 px-2 text-xs"
+                    disabled={!reader.connected}
+                    onClick={() => startReaderTest(reader.id)}>
+                    <MonitorDot className="w-3 h-3 mr-1" /> Тест
+                  </Button>
+                </div>
+              </div>
+            ))}
+            {rfidReaders.length === 0 && (
+              <p className="text-sm text-slate-400">Загрузка...</p>
+            )}
+          </CardContent>
+        </Card>
+
       </div>
 
       <Card>
@@ -478,6 +552,36 @@ export default function AdminPage() {
           </TabsContent>
         </Tabs>
       </div>
+
+      {/* RFID Test Console */}
+      <Dialog open={!!testReader} onOpenChange={(open) => { if (!open) { setTestReader(null); setTestRunning(false); } }}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <MonitorDot className="w-4 h-4" />
+              Тест считывателя: {testReader?.toUpperCase()}
+              {testRunning && <RefreshCw className="w-4 h-4 animate-spin text-blue-500" />}
+            </DialogTitle>
+          </DialogHeader>
+          <div ref={testLogRef} className="bg-slate-900 rounded-md p-3 h-72 overflow-y-auto font-mono text-xs">
+            {testLog.length === 0 && <span className="text-slate-500">Ожидание событий...</span>}
+            {testLog.map((entry, i) => (
+              <div key={i} className={
+                entry.type === 'card' || entry.type === 'tag' ? 'text-green-400 font-bold' :
+                entry.type === 'error' ? 'text-red-400' :
+                entry.type === 'done' ? 'text-yellow-400' : 'text-slate-400'
+              }>
+                {entry.type === 'card' && `✅ КАРТА: ${entry.uid}  [${entry.reader}]`}
+                {entry.type === 'tag'  && `✅ МЕТКА: ${entry.epc}  [${entry.reader}]`}
+                {entry.type === 'info' && `ℹ  ${entry.message}`}
+                {entry.type === 'error' && `❌ ${entry.message}`}
+                {entry.type === 'done' && `⏹  ${entry.message}`}
+                {entry.type === 'raw' && entry.message}
+              </div>
+            ))}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -9,7 +9,7 @@ from .api_routes import setup_routes
 
 
 async def index_handler(request):
-    return web.FileResponse('bookcabinet/server/static/index.html')
+    return web.FileResponse('server/static/index.html')
 
 
 def create_app() -> web.Application:

@@ -10,6 +10,8 @@ import { storage } from "./storage";
 import { rfidService } from "./services/rfidService";
 import { cabinetService } from "./services/cabinetService";
 import { irbisService } from "./services/irbisService";
+import { execSync } from 'child_process';
+import * as fs from 'fs';
 import type { 
   WebSocketMessage, TagReadEvent, RfidReaderStatus, SystemLog,
   SystemStatus, User, Cell, Book, CalibrationData
@@ -121,6 +123,193 @@ export async function registerRoutes(app: Express): Promise<Server> {
   
   app.get("/api/status", (req, res) => {
     res.json(systemStatus);
+  });
+
+
+
+  // ─── RFID Test (SSE stream) ────────────────────────────
+  app.get("/api/rfid-test/:readerId", async (req, res) => {
+    const { readerId } = req.params;
+    const { spawn } = await import('child_process');
+    const fs = await import('fs');
+
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.flushHeaders();
+
+    const send = (data: object) => {
+      res.write(`data: ${JSON.stringify(data)}\n\n`);
+    };
+
+    send({ type: 'info', message: `Запуск теста ${readerId}...` });
+
+    let proc: any = null;
+
+    if (readerId === 'acr1281') {
+      const script = `
+import time, sys
+from smartcard.System import readers
+rs = readers()
+nfc = [r for r in rs if '00 01' in str(r)]
+if not nfc:
+    print('{"type":"error","message":"Считыватель не найден"}', flush=True)
+    sys.exit(1)
+reader = nfc[0]
+print('{"type":"info","message":"ACR1281 готов — поднеси ЕКП карту"}', flush=True)
+last = None
+deadline = time.time() + 30
+while time.time() < deadline:
+    try:
+        c = reader.createConnection()
+        c.connect()
+        data, sw1, sw2 = c.transmit([0xFF,0xCA,0x00,0x00,0x00])
+        c.disconnect()
+        if sw1 == 0x90:
+            uid = ''.join(f'{b:02X}' for b in data)
+            if uid != last:
+                last = uid
+                import json
+                print(json.dumps({"type":"card","uid":uid,"reader":"ACR1281","protocol":"NFC 13.56MHz"}), flush=True)
+        else:
+            if last:
+                last = None
+                print('{"type":"info","message":"Карта убрана"}', flush=True)
+    except:
+        if last:
+            last = None
+            print('{"type":"info","message":"Карта убрана"}', flush=True)
+    time.sleep(0.2)
+print('{"type":"done","message":"Тест завершён (30 сек)"}', flush=True)
+`;
+      proc = spawn('python3', ['-c', script]);
+
+    } else if (readerId === 'rru9816' || readerId === 'iqrfid5102') {
+      const port = readerId === 'rru9816' ? '/dev/ttyUSB0' : '/dev/ttyUSB2';
+      const script = `
+import serial, time, json, sys
+
+PORT = '${readerId === 'rru9816' ? '/dev/ttyUSB0' : '/dev/ttyUSB2'}'
+
+def crc16(data):
+    crc = 0xFFFF
+    for b in data:
+        crc ^= b
+        for _ in range(8):
+            crc = (crc >> 1) ^ 0x8408 if crc & 1 else crc >> 1
+    return bytes([crc & 0xFF, crc >> 8])
+
+def build_cmd(cmd, data=b''):
+    pkt = bytes([1+1+len(data)+2, 0x00, cmd]) + data
+    return pkt + crc16(pkt)
+
+CMD = build_cmd(0x01)
+
+try:
+    ser = serial.Serial(PORT, 57600, timeout=0.5)
+    reader_name = '${readerId === 'rru9816' ? 'RRU9816' : 'IQRFID-5102'}'
+    print(json.dumps({"type":"info","message":f"{reader_name} готов — поднеси метку/карту"}), flush=True)
+    found = set()
+    deadline = time.time() + 30
+    while time.time() < deadline:
+        ser.reset_input_buffer()
+        ser.write(CMD)
+        time.sleep(0.15)
+        resp = ser.read(256)
+        if resp and len(resp) > 6:
+            status = resp[3]
+            if status == 0x01:
+                count = resp[4]
+                off = 5
+                for _ in range(count):
+                    if off >= len(resp)-2: break
+                    off += 1
+                    epc_len = resp[off]; off += 1
+                    if off+epc_len > len(resp)-2: break
+                    epc = resp[off:off+epc_len].hex().upper()
+                    off += epc_len
+                    if epc and epc not in found:
+                        found.add(epc)
+                        print(json.dumps({"type":"tag","epc":epc,"reader":reader_name,"protocol":"UHF 860-960MHz"}), flush=True)
+        time.sleep(0.15)
+    ser.close()
+    print(json.dumps({"type":"done","message":"Тест завершён (30 сек)"}), flush=True)
+except Exception as e:
+    print(json.dumps({"type":"error","message":str(e)}), flush=True)
+`;
+      proc = spawn('python3', ['-c', script]);
+    } else {
+      send({ type: 'error', message: `Неизвестный считыватель: ${readerId}` });
+      res.end();
+      return;
+    }
+
+    if (proc) {
+      proc.stdout.on('data', (data: Buffer) => {
+        data.toString().split('\n').filter(Boolean).forEach(line => {
+          try { send(JSON.parse(line)); } catch { send({ type: 'raw', message: line }); }
+        });
+      });
+      proc.stderr.on('data', (data: Buffer) => {
+        send({ type: 'error', message: data.toString().trim() });
+      });
+      proc.on('close', () => {
+        send({ type: 'done', message: 'Соединение закрыто' });
+        res.end();
+      });
+      req.on('close', () => { proc?.kill(); });
+    }
+  });
+
+  // ─── RFID Reader Status ────────────────────────────────
+  app.get("/api/rfid-readers", (req, res) => {
+    const readers = [
+      {
+        id: 'acr1281',
+        name: 'ACR1281U-C',
+        type: 'NFC 13.56MHz',
+        role: 'ЕКП карты',
+        port: 'pcscd',
+        connected: false,
+        error: null as string | null,
+      },
+      {
+        id: 'rru9816',
+        name: 'RRU9816',
+        type: 'UHF 860-960MHz',
+        role: 'Метки книг',
+        port: '/dev/ttyUSB0',
+        connected: false,
+        error: null as string | null,
+      },
+      {
+        id: 'iqrfid5102',
+        name: 'IQRFID-5102',
+        type: 'UHF 860-960MHz',
+        role: 'Библ. карты',
+        port: '/dev/ttyUSB2',
+        connected: false,
+        error: null as string | null,
+      },
+    ];
+
+    // ACR1281: проверяем через pcscd
+    try {
+      const result = execSync('pgrep -x pcscd', { timeout: 1000 }).toString().trim();
+      readers[0].connected = result.length > 0;
+    } catch {
+      readers[0].connected = false;
+      readers[0].error = 'pcscd не запущен';
+    }
+
+    // RRU9816 + IQRFID-5102: проверяем наличие портов
+    readers[1].connected = fs.existsSync('/dev/ttyUSB0');
+    if (!readers[1].connected) readers[1].error = 'Устройство не обнаружено';
+
+    readers[2].connected = fs.existsSync('/dev/ttyUSB2');
+    if (!readers[2].connected) readers[2].error = 'Устройство не обнаружено';
+
+    res.json(readers);
   });
 
   app.post("/api/maintenance", async (req, res) => {
