@@ -153,6 +153,11 @@
                     <div class="icon">⚙️</div>
                     <h3>Настройки</h3>
                 </div>
+                <div class="menu-card" onclick="showScreen('teach-mode')" data-testid="card-teach">
+                    <div class="icon">🎓</div>
+                    <h3>Обучение</h3>
+                    <p>Запись последовательностей</p>
+                </div>
             </div>
         </div>
         
@@ -306,6 +311,9 @@
                 <div class="calibration-actions">
                     <button class="btn btn-primary btn-lg" onclick="saveCalibration()">💾 Сохранить калибровку</button>
                     <button class="btn btn-danger" onclick="resetCalibration()">🔄 Сбросить</button>
+                    <button class="btn btn-warning btn-lg" onclick="runAutoCalibration()" data-testid="btn-auto-calibrate">🤖 Авто-калибровка</button>
+                    <button class="btn btn-info btn-lg" onclick="runHomingXY()" data-testid="btn-homing-xy">🏠 Хоминг XY (по концевикам)</button>
+                    <button class="btn btn-info" onclick="runHomingTray()" data-testid="btn-homing-tray">🏠 Хоминг лотка</button>
                 </div>
             </div>
         </div>
@@ -506,6 +514,71 @@
                 <h2>Ошибка</h2>
                 <p id="error-message"></p>
                 <button class="btn btn-danger btn-lg" onclick="goBack()">Назад</button>
+            </div>
+        </div>
+
+        <!-- Режим обучения -->
+        <div id="teach-mode" class="screen">
+            <header>
+                <button class="btn-back" onclick="goBack()">← Назад</button>
+                <h2>🎓 Режим обучения</h2>
+                <div id="teach-status-badge" class="badge">⏹ Не активен</div>
+            </header>
+
+            <div class="teach-container">
+                <!-- Управление сессией -->
+                <div class="teach-section">
+                    <h3>Сессия записи</h3>
+                    <div class="teach-row">
+                        <input type="text" id="teach-name" placeholder="Название последовательности" style="flex:1">
+                        <button class="btn btn-danger" onclick="teachStart()" id="btn-teach-start">🔴 Начать запись</button>
+                        <button class="btn btn-success" onclick="teachSave()" id="btn-teach-save" disabled>💾 Сохранить</button>
+                        <button class="btn btn-secondary" onclick="teachDiscard()" id="btn-teach-discard" disabled>🗑 Отменить</button>
+                    </div>
+                </div>
+
+                <!-- Статус -->
+                <div id="teach-log" class="teach-log" style="max-height:150px;overflow-y:auto;background:#1a1a1a;padding:10px;border-radius:8px;margin:10px 0;font-family:monospace;font-size:13px;"></div>
+
+                <!-- Команды -->
+                <div class="teach-section" id="teach-commands" style="opacity:0.4">
+                    <h3>Команды</h3>
+                    <div class="teach-row" style="flex-wrap:wrap;gap:8px">
+                        <button class="btn btn-sm" onclick="teachExecute('open_shutters', {})">Открыть шторки</button>
+                        <button class="btn btn-sm" onclick="teachExecute('close_shutters', {})">Закрыть шторки</button>
+                        <button class="btn btn-sm" onclick="teachExecuteXY()">Перейти XY</button>
+                        <button class="btn btn-sm" onclick="teachExecute('extend_tray', {steps: 5000})">Выдвинуть лоток</button>
+                        <button class="btn btn-sm" onclick="teachExecute('retract_tray', {steps: 5000})">Убрать лоток</button>
+                        <button class="btn btn-sm" onclick="teachExecute('wait', {ms: 2000})">Пауза 2с</button>
+                    </div>
+                </div>
+
+                <!-- Джог -->
+                <div class="teach-section" id="teach-jog" style="opacity:0.4">
+                    <h3>Коррекция (джог)</h3>
+                    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+                        <label>Шаг:</label>
+                        <input type="number" id="jog-steps" value="100" style="width:80px">
+                        <button class="btn btn-sm btn-primary" onclick="teachJog('x', 1)">+X</button>
+                        <button class="btn btn-sm btn-primary" onclick="teachJog('x', -1)">-X</button>
+                        <button class="btn btn-sm btn-primary" onclick="teachJog('y', 1)">+Y</button>
+                        <button class="btn btn-sm btn-primary" onclick="teachJog('y', -1)">-Y</button>
+                        <button class="btn btn-sm btn-warning" onclick="teachJog('tray', 1)">+Лоток</button>
+                        <button class="btn btn-sm btn-warning" onclick="teachJog('tray', -1)">-Лоток</button>
+                    </div>
+                    <div style="margin-top:8px;display:flex;gap:8px">
+                        <button class="btn btn-success" onclick="teachConfirm()" id="btn-teach-confirm" disabled>✅ Зафиксировать</button>
+                        <button class="btn btn-secondary" onclick="teachSkip()" id="btn-teach-skip" disabled>⏭ Пропустить</button>
+                        <button class="btn btn-secondary" onclick="teachUndo()">↩ Отменить шаг</button>
+                    </div>
+                </div>
+
+                <!-- Сохранённые последовательности -->
+                <div class="teach-section">
+                    <h3>Сохранённые последовательности</h3>
+                    <div id="teach-sequences-list" style="font-family:monospace;font-size:13px"></div>
+                    <button class="btn btn-sm" onclick="loadTeachSequences()" style="margin-top:8px">🔄 Обновить</button>
+                </div>
             </div>
         </div>
     </div>
