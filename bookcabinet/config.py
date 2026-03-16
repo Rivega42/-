@@ -82,3 +82,21 @@ RFID = {
     'card_debounce_ms': 800,
     'uhf_card_uid_length': 24,
 }
+
+IRBIS = {
+    "host": os.environ.get("IRBIS_HOST", "172.29.67.70"),
+    "port": int(os.environ.get("IRBIS_PORT", 6666)),
+    "username": os.environ.get("IRBIS_USERNAME", "09f00st"),
+    "password": os.environ.get("IRBIS_PASSWORD", "f00st"),
+    "database": os.environ.get("IRBIS_DATABASE", "KAT%SERV09%"),
+    "readers_database": os.environ.get("IRBIS_READERS_DB", "RDR"),
+    "loan_days": int(os.environ.get("IRBIS_LOAN_DAYS", 30)),
+    "location_code": os.environ.get("IRBIS_LOCATION_CODE", "09"),
+    "mock": os.environ.get("IRBIS_MOCK", "false").lower() == "true",
+}
+
+LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO")
+LOG_FILE = os.environ.get("LOG_FILE", "/home/admin42/bookcabinet/logs/bookcabinet.log")
+
+DATABASE_PATH = os.environ.get("DATABASE_PATH", "/home/admin42/bookcabinet/data/bookcabinet.db")
+
