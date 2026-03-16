@@ -2,11 +2,13 @@
 Калибровка системы v2.1
 Полная поддержка wizard калибровки
 """
+import asyncio
 import json
 import os
+import time
 from datetime import datetime
 from typing import Dict, Any, List, Optional
-from ..config import CABINET
+from ..config import CABINET, GPIO_PINS
 
 
 class CalibrationWizard:
@@ -281,3 +283,112 @@ class Calibration:
 
 
 calibration = Calibration()
+
+
+class AutoCalibrator:
+    """
+    Автоматическое определение рабочего поля по концевикам.
+    Алгоритм:
+    1. Home XY (x=0, y=0 по концевикам)
+    2. Едем +X до SENSOR_X_END → записываем max_x
+    3. Возврат x=0
+    4. Едем +Y до SENSOR_Y_END → записываем max_y
+    5. Возврат y=0
+    6. Рассчитываем позиции ячеек по формуле с отступами
+    7. Сохраняем в calibration.json
+    """
+
+    # Отступы от концевиков до первой/последней ячейки (шаги)
+    MARGIN_X = 500   # отступ от левого концевика до колонки 0
+    MARGIN_Y = 300   # отступ от нижнего концевика до ряда 0
+
+    def __init__(self, calibration: 'Calibration'):
+        self.calibration = calibration
+
+    async def run(self, motors, sensors, progress_callback=None) -> dict:
+        """Запустить полную авто-калибровку"""
+        results = {}
+
+        def progress(msg):
+            print(f"[calibration] {msg}")
+            if progress_callback:
+                progress_callback(msg)
+
+        # Шаг 1: Хоминг
+        progress("Хоминг XY...")
+        await motors.home_with_sensors(sensors)
+
+        # Шаг 2: Найти max_x
+        progress("Поиск правой границы (max_x)...")
+        max_x = await self._find_axis_limit(motors, sensors, "x", progress)
+        results["max_x"] = max_x
+        progress(f"max_x = {max_x} шагов")
+
+        # Возврат в 0
+        await motors.move_xy(0, motors.position["y"])
+
+        # Шаг 3: Найти max_y
+        progress("Поиск верхней границы (max_y)...")
+        max_y = await self._find_axis_limit(motors, sensors, "y", progress)
+        results["max_y"] = max_y
+        progress(f"max_y = {max_y} шагов")
+
+        # Возврат в 0,0
+        await motors.move_xy(0, 0)
+
+        # Шаг 4: Рассчитать позиции ячеек
+        num_cols = 3
+        num_rows = 21
+
+        usable_x = max_x - 2 * self.MARGIN_X
+        usable_y = max_y - 2 * self.MARGIN_Y
+
+        step_x = usable_x // (num_cols - 1) if num_cols > 1 else 0
+        step_y = usable_y // (num_rows - 1) if num_rows > 1 else 0
+
+        positions_x = [self.MARGIN_X + i * step_x for i in range(num_cols)]
+        positions_y = [self.MARGIN_Y + i * step_y for i in range(num_rows)]
+
+        results["positions_x"] = positions_x
+        results["positions_y"] = positions_y
+
+        # Шаг 5: Сохранить
+        self.calibration.data["positions"]["x"] = positions_x
+        self.calibration.data["positions"]["y"] = positions_y
+        self.calibration.save()
+
+        progress(f"Калибровка завершена. X: {positions_x}, Y шаг: {step_y}")
+        return results
+
+    async def _find_axis_limit(self, motors, sensors, axis: str, progress) -> int:
+        """Двигаться по оси до концевика, вернуть количество шагов"""
+        HOMING_SPEED = 1500
+        HOMING_CHUNK = 300
+        MAX_STEPS = 70000
+
+        sensor_name = "x_end" if axis == "x" else "y_end"
+        total_steps = 0
+
+        if motors.mock_mode:
+            await asyncio.sleep(2.0)
+            return 20000 if axis == "x" else 45000
+
+        # +X: dir_a=1 dir_b=0 in CoreXY; +Y: dir_a=1 dir_b=1
+        if axis == "x":
+            motors.pi.write(GPIO_PINS["MOTOR_A_DIR"], 1)
+            motors.pi.write(GPIO_PINS["MOTOR_B_DIR"], 0)
+        else:
+            motors.pi.write(GPIO_PINS["MOTOR_A_DIR"], 1)
+            motors.pi.write(GPIO_PINS["MOTOR_B_DIR"], 1)
+        time.sleep(0.01)
+
+        while not sensors.is_triggered(sensor_name) and total_steps < MAX_STEPS:
+            motors._wave_steps(
+                [GPIO_PINS["MOTOR_A_STEP"], GPIO_PINS["MOTOR_B_STEP"]],
+                HOMING_CHUNK,
+                HOMING_SPEED
+            )
+            total_steps += HOMING_CHUNK
+            await asyncio.sleep(0)
+
+        return total_steps
