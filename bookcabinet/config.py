@@ -30,6 +30,14 @@ GPIO_PINS = {
     # Шторки (реле)
     'SHUTTER_OUTER': 2,      # LOW=закрыта, HIGH=открыта (SDA1)
     'SHUTTER_INNER': 3,      # LOW=закрыта, HIGH=открыта (SCL1)
+
+    # Алиасы для обратной совместимости
+    'SERVO_LOCK_1': 12,   # = LOCK_FRONT
+    'SERVO_LOCK_2': 13,   # = LOCK_REAR (НЕ путать с шторкой pin 13 в старых записях — замок подтверждён 11.03.2026)
+    'SENSOR_X_BEGIN': 9,  # = SENSOR_LEFT
+    'SENSOR_X_END': 10,   # = SENSOR_RIGHT
+    'SENSOR_Y_BEGIN': 8,  # = SENSOR_BOTTOM
+    'SENSOR_Y_END': 11,   # = SENSOR_TOP
 }
 
 # Границы XY
