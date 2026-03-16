@@ -25,6 +25,8 @@ from ..rfid.book_reader import book_reader
 from ..rfid.unified_card_reader import unified_reader
 from ..config import TIMEOUTS, IRBIS, TELEGRAM, RFID, MOCK_MODE
 from .websocket_handler import ws_handler
+from ..mechanics.teach import teach_mode
+from ..mechanics.calibration import AutoCalibrator
 
 
 # Глобальная задача для card reader polling
@@ -1165,6 +1167,119 @@ async def post_backup_restore(request):
     return json_response({'success': success})
 
 
+# ============ HOMING ============
+
+async def post_homing_xy(request):
+    """Хоминг XY по концевикам"""
+    error = role_check('admin')
+    if error:
+        return error
+    await ws_handler.broadcast({'type': 'progress', 'data': {'message': 'Хоминг XY...', 'step': 1}})
+    success = await motors.home_with_sensors(sensors)
+    await ws_handler.broadcast({'type': 'progress', 'data': {'message': 'Хоминг завершён', 'step': 2}})
+    return json_response({'success': success, 'position': motors.get_position()})
+
+
+async def post_homing_tray(request):
+    """Хоминг лотка (только из x=0,y=0)"""
+    error = role_check('admin')
+    if error:
+        return error
+    success = await motors.home_tray_with_sensor(sensors)
+    if not success:
+        return json_response({'success': False, 'error': 'Каретка должна быть в позиции x=0, y=0'})
+    return json_response({'success': True, 'position': motors.get_position()})
+
+
+async def post_auto_calibration(request):
+    """Авто-калибровка по концевикам"""
+    error = role_check('admin')
+    if error:
+        return error
+
+    def on_progress(msg):
+        import asyncio
+        asyncio.create_task(ws_handler.broadcast({'type': 'progress', 'data': {'message': msg}}))
+
+    auto_cal = AutoCalibrator(calibration)
+    results = await auto_cal.run(motors, sensors, progress_callback=on_progress)
+    db.add_system_log('INFO', f'Авто-калибровка: max_x={results["max_x"]}, max_y={results["max_y"]}', 'calibration')
+    return json_response({'success': True, 'results': results})
+
+
+# ============ TEACH MODE ============
+
+async def post_teach_start(request):
+    data = await request.json()
+    name = data.get('name', 'sequence')
+    result = teach_mode.start(name)
+    teach_mode.set_hardware(motors, sensors)
+    return json_response({'success': True, 'message': result})
+
+
+async def post_teach_execute(request):
+    data = await request.json()
+    action = data.get('action')
+    params = data.get('params', {})
+    result = await teach_mode.execute(action, params)
+    return json_response({'success': True, 'message': result, 'position': motors.get_position()})
+
+
+async def post_teach_jog(request):
+    data = await request.json()
+    axis = data.get('axis', 'x')
+    steps = int(data.get('steps', 100))
+    result = await teach_mode.jog(axis, steps)
+    return json_response({'success': True, 'message': result, 'position': motors.get_position()})
+
+
+async def post_teach_confirm(request):
+    result = teach_mode.confirm()
+    return json_response({'success': True, 'message': result})
+
+
+async def post_teach_skip(request):
+    result = teach_mode.skip()
+    return json_response({'success': True, 'message': result})
+
+
+async def post_teach_undo(request):
+    result = teach_mode.undo()
+    return json_response({'success': True, 'message': result})
+
+
+async def post_teach_save(request):
+    result = teach_mode.save()
+    return json_response({'success': True, 'message': result})
+
+
+async def post_teach_discard(request):
+    result = teach_mode.discard()
+    return json_response({'success': True, 'message': result})
+
+
+async def get_teach_status(request):
+    return json_response({'status': teach_mode.status(), 'active': teach_mode.is_active()})
+
+
+async def get_teach_sequences(request):
+    return json_response({'sequences': teach_mode.list_sequences()})
+
+
+async def post_teach_play(request):
+    data = await request.json()
+    name = data.get('name')
+    if not name:
+        return json_response({'success': False, 'error': 'name required'}, 400)
+
+    def on_progress(msg):
+        import asyncio
+        asyncio.create_task(ws_handler.broadcast({'type': 'progress', 'data': {'message': msg}}))
+
+    result = await teach_mode.play(name, progress_callback=on_progress)
+    return json_response({'success': True, 'message': result})
+
+
 # ============ SETUP ROUTES ============
 
 def setup_routes(app: web.Application):
@@ -1245,6 +1360,26 @@ def setup_routes(app: web.Application):
     app.router.add_get('/api/backup/list', get_backup_list)
     app.router.add_post('/api/backup/restore', post_backup_restore)
     
+    # Homing
+    app.router.add_post('/api/homing/xy', post_homing_xy)
+    app.router.add_post('/api/homing/tray', post_homing_tray)
+
+    # Auto Calibration
+    app.router.add_post('/api/calibration/auto', post_auto_calibration)
+
+    # Teach Mode
+    app.router.add_post('/api/teach/start', post_teach_start)
+    app.router.add_post('/api/teach/execute', post_teach_execute)
+    app.router.add_post('/api/teach/jog', post_teach_jog)
+    app.router.add_post('/api/teach/confirm', post_teach_confirm)
+    app.router.add_post('/api/teach/skip', post_teach_skip)
+    app.router.add_post('/api/teach/undo', post_teach_undo)
+    app.router.add_post('/api/teach/save', post_teach_save)
+    app.router.add_post('/api/teach/discard', post_teach_discard)
+    app.router.add_get('/api/teach/status', get_teach_status)
+    app.router.add_get('/api/teach/sequences', get_teach_sequences)
+    app.router.add_post('/api/teach/play', post_teach_play)
+
     # WebSocket
     app.router.add_get('/ws', ws_handler.handle)
     
