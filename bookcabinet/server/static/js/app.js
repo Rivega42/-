@@ -822,3 +822,154 @@ function showError(message) {
 document.addEventListener('DOMContentLoaded', () => {
     connectWebSocket();
 });
+
+// ============ HOMING ============
+async function runHomingXY() {
+    showScreen('progress-screen');
+    setProgress(30, 'Хоминг XY по концевикам...');
+    const result = await api('POST', '/api/homing/xy', {});
+    if (result.success) {
+        setProgress(100, 'Хоминг завершён');
+        setTimeout(() => { showSuccessScreen('XY захомирован. Позиция: X=0, Y=0'); }, 500);
+    } else {
+        showErrorScreen(result.error || 'Ошибка хоминга');
+    }
+}
+
+async function runHomingTray() {
+    const result = await api('POST', '/api/homing/tray', {});
+    if (result.success) {
+        alert('✅ Хоминг лотка завершён');
+    } else {
+        alert('❌ ' + (result.error || 'Ошибка. Убедитесь что каретка в позиции X=0, Y=0'));
+    }
+}
+
+async function runAutoCalibration() {
+    if (!confirm('Авто-калибровка: каретка объедет все концевики. Убедитесь что шкаф свободен. Продолжить?')) return;
+    showScreen('progress-screen');
+    setProgress(10, 'Запуск авто-калибровки...');
+    const result = await api('POST', '/api/calibration/auto', {});
+    if (result.success) {
+        const r = result.results;
+        showSuccessScreen(`Калибровка завершена!\nmax_x=${r.max_x}, max_y=${r.max_y}\nX: [${r.positions_x.join(', ')}]`);
+    } else {
+        showErrorScreen(result.error || 'Ошибка авто-калибровки');
+    }
+}
+
+// ============ TEACH MODE ============
+let teachActive = false;
+let teachPending = false;
+
+async function teachStart() {
+    const name = document.getElementById('teach-name').value.trim();
+    if (!name) { alert('Введите название'); return; }
+    const result = await api('POST', '/api/teach/start', { name });
+    if (result.success) {
+        teachActive = true;
+        teachPending = false;
+        teachLog(result.message);
+        updateTeachUI();
+    }
+}
+
+async function teachExecute(action, params) {
+    if (!teachActive) { alert('Сначала начни запись'); return; }
+    const result = await api('POST', '/api/teach/execute', { action, params });
+    teachLog(result.message);
+    teachPending = true;
+    updateTeachUI();
+}
+
+async function teachExecuteXY() {
+    const x = parseInt(prompt('X (шаги):', '0'));
+    const y = parseInt(prompt('Y (шаги):', '0'));
+    if (isNaN(x) || isNaN(y)) return;
+    await teachExecute('move_xy', { x, y });
+}
+
+async function teachJog(axis, direction) {
+    const steps = parseInt(document.getElementById('jog-steps').value || 100) * direction;
+    const result = await api('POST', '/api/teach/jog', { axis, steps });
+    teachLog(result.message);
+}
+
+async function teachConfirm() {
+    const result = await api('POST', '/api/teach/confirm', {});
+    teachLog(result.message);
+    teachPending = false;
+    updateTeachUI();
+}
+
+async function teachSkip() {
+    const result = await api('POST', '/api/teach/skip', {});
+    teachLog(result.message);
+    teachPending = false;
+    updateTeachUI();
+}
+
+async function teachUndo() {
+    const result = await api('POST', '/api/teach/undo', {});
+    teachLog(result.message);
+}
+
+async function teachSave() {
+    const result = await api('POST', '/api/teach/save', {});
+    teachLog(result.message);
+    teachActive = false;
+    teachPending = false;
+    updateTeachUI();
+    loadTeachSequences();
+}
+
+async function teachDiscard() {
+    if (!confirm('Отменить запись?')) return;
+    const result = await api('POST', '/api/teach/discard', {});
+    teachLog(result.message);
+    teachActive = false;
+    teachPending = false;
+    updateTeachUI();
+}
+
+async function loadTeachSequences() {
+    const result = await api('GET', '/api/teach/sequences');
+    const el = document.getElementById('teach-sequences-list');
+    if (el) el.textContent = result.sequences || 'Нет последовательностей';
+}
+
+async function teachPlay(name) {
+    if (!confirm(`Воспроизвести "${name}"?`)) return;
+    showScreen('progress-screen');
+    const result = await api('POST', '/api/teach/play', { name });
+    if (result.success) showSuccessScreen(result.message);
+    else showErrorScreen(result.message);
+}
+
+function teachLog(msg) {
+    const el = document.getElementById('teach-log');
+    if (!el) return;
+    const line = document.createElement('div');
+    line.textContent = new Date().toLocaleTimeString() + ' ' + msg;
+    el.appendChild(line);
+    el.scrollTop = el.scrollHeight;
+}
+
+function updateTeachUI() {
+    const badge = document.getElementById('teach-status-badge');
+    if (badge) badge.textContent = teachActive ? '🔴 Запись' : '⏹ Не активен';
+
+    const cmds = document.getElementById('teach-commands');
+    const jog = document.getElementById('teach-jog');
+    if (cmds) cmds.style.opacity = teachActive ? '1' : '0.4';
+    if (jog) jog.style.opacity = teachActive ? '1' : '0.4';
+
+    const btnSave = document.getElementById('btn-teach-save');
+    const btnDiscard = document.getElementById('btn-teach-discard');
+    const btnConfirm = document.getElementById('btn-teach-confirm');
+    const btnSkip = document.getElementById('btn-teach-skip');
+    if (btnSave) btnSave.disabled = !teachActive;
+    if (btnDiscard) btnDiscard.disabled = !teachActive;
+    if (btnConfirm) btnConfirm.disabled = !teachPending;
+    if (btnSkip) btnSkip.disabled = !teachPending;
+}
