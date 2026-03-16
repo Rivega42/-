@@ -239,7 +239,7 @@ class IrbisClient:
         if not card_uid:
             return None
         
-        patterns = ['"RI={0}"', '"EKP={0}"']
+        patterns = ['"RI={0}"', '"RFID={0}"', '"CCUID={0}"', '"EKP={0}"']
         
         for uid_variant in make_uid_variants(card_uid):
             for pattern in patterns:
@@ -277,19 +277,18 @@ class IrbisClient:
     
     async def find_reader_with_book(self, book_rfid: str) -> Optional[Dict]:
         """
-        Найти читателя, которому выдана книга
-        
-        Индекс: HIN= (по полю 40^H)
+        Найти читателя, которому выдана книга.
+        ExprReaderByItemRfid = "H={0}" (из рабочего C# App.config), fallback HIN=
         """
         if not book_rfid:
             return None
         
         for rfid_variant in make_uid_variants(book_rfid):
-            expr = f'"HIN={rfid_variant}"'
-            records = await self.search_read(self.config.readers_database, expr)
-            
-            if records:
-                return records[0]
+            for pat in ['"H={0}"', '"HIN={0}"']:
+                expr = pat.format(rfid_variant)
+                records = await self.search_read(self.config.readers_database, expr)
+                if records:
+                    return records[0]
         
         return None
     
@@ -360,14 +359,38 @@ class IrbisClient:
             return IrbisResponse(-3, str(e))
     
     def _parse_response(self, text: str) -> IrbisResponse:
-        """Парсинг ответа сервера"""
+        """Парсинг ответа сервера.
+        
+        Формат ответа ИРБИС64:
+          line 0: команда (echo)
+          line 1: client_id (echo)
+          line 2: sequence (echo)
+          line 3: ???
+          line 4: версия сервера
+          lines 5-9: пустые
+          line 10: код возврата (>= 0 = успех)
+          line 11+: данные
+        """
         lines = text.split("\r\n")
         
-        return_code = -1
-        if lines and lines[0].lstrip("-").isdigit():
-            return_code = int(lines[0])
+        return_code = -3
+        data_start = 1
         
-        data = "\r\n".join(lines[1:]) if len(lines) > 1 else ""
+        # Пропускаем заголовок ответа (10 строк) и ищем return code
+        if len(lines) > 10:
+            rc_str = lines[10].strip()
+            if rc_str.lstrip("-").isdigit():
+                return_code = int(rc_str)
+                data_start = 11
+        else:
+            # Fallback: первая числовая строка
+            for i, line in enumerate(lines):
+                if line.strip().lstrip("-").isdigit():
+                    return_code = int(line.strip())
+                    data_start = i + 1
+                    break
+        
+        data = "\r\n".join(lines[data_start:]) if len(lines) > data_start else ""
         
         return IrbisResponse(return_code, data)
     

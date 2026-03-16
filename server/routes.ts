@@ -46,6 +46,58 @@ let currentSession: { user: User | null; expiresAt: Date | null } = {
 export async function registerRoutes(app: Express): Promise<Server> {
   const httpServer = createServer(app);
   const wss = new WebSocketServer({ server: httpServer, path: '/ws' });
+
+  // ─── Auth Shutter Daemon ───────────────────────────────
+  {
+    const { spawn } = await import('child_process');
+    const daemonPath = '/home/admin42/bookcabinet/bookcabinet/services/auth_shutter_daemon.py';
+    
+    const startDaemon = () => {
+      const daemon = spawn('sudo', ['python3', daemonPath], { stdio: ['ignore', 'pipe', 'pipe'] });
+      
+      daemon.stdout.on('data', (data: Buffer) => {
+        data.toString().split('\n').filter(Boolean).forEach(line => {
+          try {
+            const event = JSON.parse(line);
+            broadcast({ type: 'reader_status', data: event } as any);
+            console.log('[auth-daemon]', line.trim());
+          } catch {}
+        });
+      });
+
+      daemon.stderr.on('data', (d: Buffer) => {
+        const msg = d.toString().trim();
+        if (msg) console.error('[auth-daemon]', msg);
+      });
+
+      daemon.on('close', (code: number) => {
+        console.log(`[auth-daemon] exited (${code}), restarting in 5s...`);
+        setTimeout(startDaemon, 5000);
+      });
+    };
+
+    setTimeout(startDaemon, 3000);
+  }
+
+  // Ручное управление шторками
+  app.post("/api/shutter/:action", async (req, res) => {
+    const { spawn } = await import('child_process');
+    const { action } = req.params;
+    const scripts: Record<string, string> = {
+      'open-outer':  'import RPi.GPIO as G; G.setmode(G.BCM); G.setwarnings(False); G.setup(2,G.OUT); G.output(2,G.HIGH)',
+      'close-outer': 'import RPi.GPIO as G; G.setmode(G.BCM); G.setwarnings(False); G.setup(2,G.OUT); G.output(2,G.LOW)',
+      'open-inner':  'import RPi.GPIO as G; G.setmode(G.BCM); G.setwarnings(False); G.setup(3,G.OUT); G.output(3,G.HIGH)',
+      'close-inner': 'import RPi.GPIO as G; G.setmode(G.BCM); G.setwarnings(False); G.setup(3,G.OUT); G.output(3,G.LOW)',
+      'close-all':   'import RPi.GPIO as G; G.setmode(G.BCM); G.setwarnings(False); G.setup(2,G.OUT); G.setup(3,G.OUT); G.output(2,G.LOW); G.output(3,G.LOW)',
+      'open-all':    'import RPi.GPIO as G; G.setmode(G.BCM); G.setwarnings(False); G.setup(2,G.OUT); G.setup(3,G.OUT); G.output(2,G.HIGH); G.output(3,G.HIGH)',
+    };
+    const script = scripts[action];
+    if (!script) return res.status(400).json({ error: 'Unknown action' });
+    const p = spawn('sudo', ['python3', '-c', script]);
+    p.on('close', () => res.json({ success: true, action }));
+  });
+
+
   const clients = new Set<WebSocket>();
 
   const broadcast = (message: WebSocketMessage) => {

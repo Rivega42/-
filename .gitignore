@@ -3,4 +3,11 @@ dist
 .DS_Store
 server/public
 vite.config.ts.*
-*.tar.gz
+*.tar.gz__pycache__/
+*.pyc
+*.db
+*.log
+data/
+logs/
+*.backup
+sensor_calibration.json

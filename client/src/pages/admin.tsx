@@ -555,7 +555,7 @@ export default function AdminPage() {
 
       {/* RFID Test Console */}
       <Dialog open={!!testReader} onOpenChange={(open) => { if (!open) { setTestReader(null); setTestRunning(false); } }}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <MonitorDot className="w-4 h-4" />
@@ -563,7 +563,7 @@ export default function AdminPage() {
               {testRunning && <RefreshCw className="w-4 h-4 animate-spin text-blue-500" />}
             </DialogTitle>
           </DialogHeader>
-          <div ref={testLogRef} className="bg-slate-900 rounded-md p-3 h-72 overflow-y-auto font-mono text-xs">
+          <div ref={testLogRef} className="bg-slate-900 rounded-md p-3 h-40 overflow-y-auto font-mono text-xs">
             {testLog.length === 0 && <span className="text-slate-500">Ожидание событий...</span>}
             {testLog.map((entry, i) => (
               <div key={i} className={

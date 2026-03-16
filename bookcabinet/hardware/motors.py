@@ -181,50 +181,85 @@ class Motors:
             await self.retract_tray()
         return result
 
+    def _read_pin_direct(self, pin: int) -> bool:
+        """Прямое чтение пина без debounce — для хоминга"""
+        if self.mock_mode:
+            return False
+        readings = [self.pi.read(pin) for _ in range(5)]
+        return sum(readings) >= 3
+
     async def home_with_sensors(self, sensors) -> bool:
         """
-        Настоящий хоминг XY по концевикам.
-        Последовательность:
-        1. Медленно едем -X (dir_a=0, dir_b=1) пока SENSOR_X_BEGIN не сработает
-        2. Обнуляем position["x"] = 0
-        3. Медленно едем -Y (dir_a=0, dir_b=0) пока SENSOR_Y_BEGIN не сработает
-        4. Обнуляем position["y"] = 0
+        Хоминг XY по концевикам. Читает пины НАПРЯМУЮ без debounce.
+        Один шаг за раз — мгновенная остановка при нажатии концевика.
         """
-        HOMING_SPEED = 1000  # медленно для точности
-        HOMING_CHUNK = 200   # шагов за раз
-        MAX_STEPS = 60000    # защита от бесконечного цикла
+        HOMING_DELAY = 0.0005
+        STEP_PULSE = 0.0001
+        MAX_STEPS = 80000
+
+        PIN_A_STEP = GPIO_PINS["MOTOR_A_STEP"]
+        PIN_A_DIR  = GPIO_PINS["MOTOR_A_DIR"]
+        PIN_B_STEP = GPIO_PINS["MOTOR_B_STEP"]
+        PIN_B_DIR  = GPIO_PINS["MOTOR_B_DIR"]
+        PIN_X_BEGIN = GPIO_PINS["SENSOR_X_BEGIN"]
+        PIN_Y_BEGIN = GPIO_PINS["SENSOR_Y_BEGIN"]
 
         if self.mock_mode:
-            await asyncio.sleep(2.0)
+            import asyncio as _aio
+            await _aio.sleep(2.0)
             self.position["x"] = 0
             self.position["y"] = 0
             return True
 
-        # Хоминг X (двигаемся в -X пока не концевик)
-        # в CoreXY -X: dir_a=0 dir_b=1
-        self.pi.write(GPIO_PINS["MOTOR_A_DIR"], 0)
-        self.pi.write(GPIO_PINS["MOTOR_B_DIR"], 1)
+        print("[homing] Начало хоминга XY")
+
+        # Хоминг X: CoreXY -X = A_DIR=0, B_DIR=1
+        self.pi.write(PIN_A_DIR, 0)
+        self.pi.write(PIN_B_DIR, 1)
         time.sleep(0.01)
-        total = 0
-        while not sensors.is_triggered("x_begin") and total < MAX_STEPS:
-            self._wave_steps([GPIO_PINS["MOTOR_A_STEP"], GPIO_PINS["MOTOR_B_STEP"]], HOMING_CHUNK, HOMING_SPEED)
-            total += HOMING_CHUNK
-            await asyncio.sleep(0)
+
+        for i in range(MAX_STEPS):
+            if self._read_pin_direct(PIN_X_BEGIN):
+                print(f"[homing] X концевик сработал на шаге {i}")
+                break
+            self.pi.write(PIN_A_STEP, 1)
+            self.pi.write(PIN_B_STEP, 1)
+            time.sleep(STEP_PULSE)
+            self.pi.write(PIN_A_STEP, 0)
+            self.pi.write(PIN_B_STEP, 0)
+            time.sleep(HOMING_DELAY)
+            if i % 500 == 0:
+                await asyncio.sleep(0)
+        else:
+            print("[homing] WARN: X MAX_STEPS достигнут без концевика!")
+
         self.position["x"] = 0
+        time.sleep(0.2)
 
-        # Хоминг Y (двигаемся в -Y пока не концевик)
-        # в CoreXY -Y: dir_a=0 dir_b=0
-        self.pi.write(GPIO_PINS["MOTOR_A_DIR"], 0)
-        self.pi.write(GPIO_PINS["MOTOR_B_DIR"], 0)
+        # Хоминг Y: CoreXY -Y = A_DIR=0, B_DIR=0
+        self.pi.write(PIN_A_DIR, 0)
+        self.pi.write(PIN_B_DIR, 0)
         time.sleep(0.01)
-        total = 0
-        while not sensors.is_triggered("y_begin") and total < MAX_STEPS:
-            self._wave_steps([GPIO_PINS["MOTOR_A_STEP"], GPIO_PINS["MOTOR_B_STEP"]], HOMING_CHUNK, HOMING_SPEED)
-            total += HOMING_CHUNK
-            await asyncio.sleep(0)
-        self.position["y"] = 0
 
+        for i in range(MAX_STEPS):
+            if self._read_pin_direct(PIN_Y_BEGIN):
+                print(f"[homing] Y концевик сработал на шаге {i}")
+                break
+            self.pi.write(PIN_A_STEP, 1)
+            self.pi.write(PIN_B_STEP, 1)
+            time.sleep(STEP_PULSE)
+            self.pi.write(PIN_A_STEP, 0)
+            self.pi.write(PIN_B_STEP, 0)
+            time.sleep(HOMING_DELAY)
+            if i % 500 == 0:
+                await asyncio.sleep(0)
+        else:
+            print("[homing] WARN: Y MAX_STEPS достигнут без концевика!")
+
+        self.position["y"] = 0
+        print(f"[homing] Готово. Позиция: {self.position}")
         return True
+
 
     async def home_tray_with_sensor(self, sensors) -> bool:
         """
