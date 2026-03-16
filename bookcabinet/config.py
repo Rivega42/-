@@ -30,6 +30,12 @@ GPIO_PINS = {
     # Шторки (реле)
     'SHUTTER_OUTER': 2,      # LOW=закрыта, HIGH=открыта (SDA1)
     'SHUTTER_INNER': 3,      # LOW=закрыта, HIGH=открыта (SCL1)
+    'SENSOR_X_BEGIN': 9,   # = SENSOR_LEFT
+    'SENSOR_X_END': 10,    # = SENSOR_RIGHT
+    'SENSOR_Y_BEGIN': 8,   # = SENSOR_BOTTOM
+    'SENSOR_Y_END': 11,    # = SENSOR_TOP
+    'SERVO_LOCK_1': 12,    # = LOCK_FRONT
+    'SERVO_LOCK_2': 13,    # = LOCK_REAR
 }
 
 # Границы XY
@@ -73,4 +79,24 @@ RFID = {
     'card_poll_interval': 0.3,
     'card_debounce_ms': 800,
     'uhf_card_uid_length': 24,
+}
+
+HOST = os.environ.get('HOST', '0.0.0.0')
+PORT = int(os.environ.get('PORT', '5000'))
+LOG_LEVEL = os.environ.get('LOG_LEVEL', 'INFO')
+
+DATABASE_PATH = os.environ.get('DATABASE_PATH', '/home/admin42/bookcabinet/bookcabinet/data/shelf_data.db')
+LOG_FILE = os.environ.get('LOG_FILE', '/home/admin42/bookcabinet/logs/bookcabinet.log')
+
+TELEGRAM = {
+    'enabled': os.environ.get('TELEGRAM_ENABLED', 'false').lower() == 'true',
+    'bot_token': os.environ.get('TELEGRAM_BOT_TOKEN', ''  ),
+    'chat_id': os.environ.get('TELEGRAM_CHAT_ID', '-1001' ),
+}
+
+IRBIS = {
+    'mock': os.environ.get('IRBIS_MOCK', 'true').lower() == 'true',
+    'host': os.environ.get('IRBIS_HOST', 'localhost'),
+    'port': int(os.environ.get('IRBIS_PORT', '6666' )),
+    'db': os.environ.get('IRBIS_DB', 'IBIS'),
 }
