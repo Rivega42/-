@@ -180,6 +180,88 @@ class Motors:
         if result:
             await self.retract_tray()
         return result
+
+    async def home_with_sensors(self, sensors) -> bool:
+        """
+        Настоящий хоминг XY по концевикам.
+        Последовательность:
+        1. Медленно едем -X (dir_a=0, dir_b=1) пока SENSOR_X_BEGIN не сработает
+        2. Обнуляем position["x"] = 0
+        3. Медленно едем -Y (dir_a=0, dir_b=0) пока SENSOR_Y_BEGIN не сработает
+        4. Обнуляем position["y"] = 0
+        """
+        HOMING_SPEED = 1000  # медленно для точности
+        HOMING_CHUNK = 200   # шагов за раз
+        MAX_STEPS = 60000    # защита от бесконечного цикла
+
+        if self.mock_mode:
+            await asyncio.sleep(2.0)
+            self.position["x"] = 0
+            self.position["y"] = 0
+            return True
+
+        # Хоминг X (двигаемся в -X пока не концевик)
+        # в CoreXY -X: dir_a=0 dir_b=1
+        self.pi.write(GPIO_PINS["MOTOR_A_DIR"], 0)
+        self.pi.write(GPIO_PINS["MOTOR_B_DIR"], 1)
+        time.sleep(0.01)
+        total = 0
+        while not sensors.is_triggered("x_begin") and total < MAX_STEPS:
+            self._wave_steps([GPIO_PINS["MOTOR_A_STEP"], GPIO_PINS["MOTOR_B_STEP"]], HOMING_CHUNK, HOMING_SPEED)
+            total += HOMING_CHUNK
+            await asyncio.sleep(0)
+        self.position["x"] = 0
+
+        # Хоминг Y (двигаемся в -Y пока не концевик)
+        # в CoreXY -Y: dir_a=0 dir_b=0
+        self.pi.write(GPIO_PINS["MOTOR_A_DIR"], 0)
+        self.pi.write(GPIO_PINS["MOTOR_B_DIR"], 0)
+        time.sleep(0.01)
+        total = 0
+        while not sensors.is_triggered("y_begin") and total < MAX_STEPS:
+            self._wave_steps([GPIO_PINS["MOTOR_A_STEP"], GPIO_PINS["MOTOR_B_STEP"]], HOMING_CHUNK, HOMING_SPEED)
+            total += HOMING_CHUNK
+            await asyncio.sleep(0)
+        self.position["y"] = 0
+
+        return True
+
+    async def home_tray_with_sensor(self, sensors) -> bool:
+        """
+        Хоминг лотка по концевику SENSOR_TRAY_BEGIN.
+        ВАЖНО: вызывать ТОЛЬКО когда каретка в position x=0, y=0!
+        Если каретка не в 0,0 — возвращает False с ошибкой.
+        """
+        if self.position["x"] != 0 or self.position["y"] != 0:
+            print("[homing] ERROR: tray homing only allowed at x=0, y=0")
+            return False
+
+        HOMING_SPEED = 800
+        HOMING_CHUNK = 100
+        MAX_STEPS = 30000
+
+        if self.mock_mode:
+            await asyncio.sleep(1.0)
+            self.position["tray"] = 0
+            return True
+
+        # Лоток назад (DIR=HIGH = назад по config)
+        self.pi.write(GPIO_PINS["TRAY_DIR"], 1)
+        time.sleep(0.01)
+        total = 0
+        # Debounce для SENSOR_TRAY_BEGIN (pin 20 - дребезг!)
+        stable_count = 0
+        while stable_count < 3 and total < MAX_STEPS:
+            self._wave_steps([GPIO_PINS["TRAY_STEP"]], HOMING_CHUNK, HOMING_SPEED)
+            total += HOMING_CHUNK
+            if sensors.is_triggered("tray_begin"):
+                stable_count += 1
+            else:
+                stable_count = 0
+            await asyncio.sleep(0)
+
+        self.position["tray"] = 0
+        return True
     
     async def test_motor(self, motor: str, direction: int, steps: int = 500) -> bool:
         """Test individual motor"""
