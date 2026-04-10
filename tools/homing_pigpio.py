@@ -23,8 +23,8 @@ SENSOR_BOTTOM = 8
 SENSOR_TOP    = 11
 
 # === Параметры ===
-FAST     = 1500
-SLOW     = 400
+FAST     = 800
+SLOW     = 300
 BACKOFF  = 300
 WAVE_SEG = 200
 
