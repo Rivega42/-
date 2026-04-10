@@ -48,6 +48,8 @@ for p in [SENSOR_LEFT, SENSOR_RIGHT, SENSOR_BOTTOM, SENSOR_TOP]:
 # Glitch filter на X концевики (шум при движении)
 pi.set_glitch_filter(SENSOR_LEFT, 300)
 pi.set_glitch_filter(SENSOR_RIGHT, 300)
+pi.set_glitch_filter(SENSOR_BOTTOM, 300)
+pi.set_glitch_filter(SENSOR_TOP, 300)
 
 STEP_MASK = (1 << MOTOR_A_STEP) | (1 << MOTOR_B_STEP)
 
@@ -89,7 +91,8 @@ def step_pigpio(a_dir, b_dir, n, speed, stop_sensor=None):
     # Создаём сегмент волны
     half_us = int(1_000_000 / (2 * speed))
     pulses = []
-    for _ in range(WAVE_SEG):
+    seg_actual = min(n, WAVE_SEG)
+    for _ in range(seg_actual):
         pulses.append(pigpio.pulse(STEP_MASK, 0, half_us))
         pulses.append(pigpio.pulse(0, STEP_MASK, half_us))
     pi.wave_clear()
@@ -100,19 +103,38 @@ def step_pigpio(a_dir, b_dir, n, speed, stop_sensor=None):
             cb.cancel()
         raise RuntimeError(f"wave_create error: {wid}")
 
-    # wave_chain: повторяем сегмент
-    reps = max(1, n // WAVE_SEG)
-    chain = bytes([255, 0, wid, 255, 1, reps & 0xFF, (reps >> 8) & 0xFF])
+    # wave_chain: полные сегменты
+    seg_actual = min(n, WAVE_SEG)
+    full_reps = max(1, n // seg_actual)
+    remainder = n % seg_actual if n > seg_actual else 0
+    chain = bytes([255, 0, wid, 255, 1, full_reps & 0xFF, (full_reps >> 8) & 0xFF])
     pi.wave_chain(chain)
 
-    # Ждём завершения
+    # Ждём основные шаги
     t0 = time.time()
     while pi.wave_tx_busy():
         time.sleep(0.002)
-        if time.time() - t0 > 60:
+        if _hit or time.time() - t0 > 60:
             pi.wave_tx_stop()
-            print("  TIMEOUT!")
             break
+
+    # Остаточные шаги (n % WAVE_SEG)
+    if remainder > 0 and not _hit:
+        rem_pulses = []
+        for _ in range(remainder):
+            rem_pulses.append(pigpio.pulse(STEP_MASK, 0, half_us))
+            rem_pulses.append(pigpio.pulse(0, STEP_MASK, half_us))
+        pi.wave_clear()
+        pi.wave_add_generic(rem_pulses)
+        wid2 = pi.wave_create()
+        if wid2 >= 0:
+            pi.wave_chain(bytes([255, 0, wid2, 255, 1, 1, 0]))
+            while pi.wave_tx_busy():
+                time.sleep(0.002)
+                if _hit: break
+            pi.wave_delete(wid2)
+
+    # (ожидание выполнено выше)
 
     if cb:
         cb.cancel()
