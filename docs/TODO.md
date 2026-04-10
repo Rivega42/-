@@ -33,6 +33,14 @@
 ---
 
 ## 📋 Запланировано
+### [ ] Свести app-level `bookcabinet/hardware/motors.py` с canonical v2 motion layer
+- Сейчас safe truth живёт в `tools/corexy_motion_v2.py`
+- `home_with_sensors()` в `bookcabinet/hardware/motors.py` всё ещё исторически расходится по деталям
+- Следующий шаг: либо thin adapter, либо прямой reuse v2-примитивов без дублирования логики
+
+---
+
+## 📋 Запланировано
 
 ### [ ] Интеграция с ИРБИС
 - Референс: github.com/valinerosgordov/RFIDShkafWithIRBIS
@@ -72,6 +80,12 @@
   - RRU9816: подключен
 - [x] Попытка увеличить мощность (не эффективно для IQRFID-5102)
 
+### 10.04.2026 — v2 motion layer подтверждён live
+- [x] `tools/corexy_motion_v2.py` переведён в import-safe reusable layer
+- [x] safe baseline зафиксирован: HOME=LEFT+BOTTOM, FAST=800, SLOW=300, X backoff=300, Y backoff=500
+- [x] `tools/homing_pigpio.py` переведён на thin wrapper поверх v2
+- [x] live-тест пройден: новый homing wrapper работает, `y-sweep` на v2 проходит успешно
+
 ### Ранее выполнено
 - [x] Реализован UnifiedCardReader для параллельного опроса NFC + UHF карт
 - [x] Интеграция в main.py с отправкой событий через WebSocket
@@ -100,4 +114,4 @@
 
 ---
 
-*Последнее обновление: 2026-01-14*
+*Последнее обновление: 2026-04-10*

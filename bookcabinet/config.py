@@ -44,7 +44,16 @@ XY_BOUNDS = {
     'max_y': 44853,
     'steps_per_mm': 100,
     'speed': 8000,
-    'home': 'RIGHT_BOTTOM',
+    'home': 'LEFT_BOTTOM',
+}
+
+
+# Параметры хоминга XY (подтверждено живым тестом 10.04.2026)
+HOMING_SPEEDS = {
+    'fast': 800,
+    'slow': 300,
+    'backoff': 300,
+    'home': 'LEFT_BOTTOM',
 }
 
 # Границы платформы
