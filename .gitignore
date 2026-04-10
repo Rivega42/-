@@ -11,5 +11,9 @@ __pycache__/
 data/
 logs/
 *.backup
+*.bak
+*.bak2
 sensor_calibration.json
 backups/
+patch_*.py
+x_*_debug*.py
