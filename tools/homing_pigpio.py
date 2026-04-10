@@ -95,6 +95,10 @@ def move(a_dir, b_dir, n, speed, stop_sensor=None):
     t0 = time.time()
     while pi.wave_tx_busy():
         time.sleep(0.002)
+        if stop_sensor is not None and pi.read(stop_sensor) == 1:
+            _hit = True
+            pi.wave_tx_stop()
+            break
         if time.time() - t0 > 60:
             pi.wave_tx_stop()
             print("  TIMEOUT")
