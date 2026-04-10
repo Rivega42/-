@@ -211,16 +211,24 @@ It uses:
 - glitch filters on endstops,
 - direction-to-endstop blocking via `DIR_TO_SENSOR`.
 
-Key parameters in this script:
+Key parameters in this historical diagnostic script:
 - `FAST = 1500`
 - `SLOW = 400`
 - `BACK = 200`
 - `WAVE_SEG = 200`
 
-Known safe lessons from earlier cabinet work:
+Current live-confirmed homing baseline is now in `tools/homing_pigpio.py`:
+- `FAST = 800`
+- `SLOW = 300`
+- X backoff = 300
+- Y backoff = 500
+- stop condition = callback plus direct polling fallback of `pi.read(stop_sensor)`
+
+Known safe lessons from cabinet work:
 - speed above roughly 3000 could stall,
-- callback + `wave_tx_stop()` was the breakthrough for reliable stopping,
-- endstop glitch filtering is essential.
+- callback alone was not reliable enough in long `wave_chain`,
+- endstop glitch filtering is essential,
+- 1500/400 caused belt slip in a live session on 2026-04-10, so 800/300 is the safer baseline.
 
 ### 7.4 Direction safety pattern
 `tools/corexy_pigpio.py` includes a protective map:
@@ -233,40 +241,27 @@ This is exactly the kind of guard that must not be removed lightly.
 
 ---
 
-## 8. Critical contradiction: HOME corner is not fully unified in repo
+## 8. Resolved home truth: HOME corner confirmed in live cabinet session
 
-This is one of the most important facts Claude must understand.
+On 2026-04-10, a live cabinet session confirmed the actual physical home corner.
+The confirmation path was:
+- reading live endstop states without movement,
+- making micro-movements and verifying sensor transitions,
+- fixing the long `wave_chain` stop bug in `tools/homing_pigpio.py`,
+- successfully completing full homing on the real cabinet.
 
-### Current contradiction
-Different project artifacts disagree on which corner is home:
-
-#### A. `bookcabinet/config.py`
-- `XY_BOUNDS[home] = RIGHT_BOTTOM`
-
-#### B. `docs/HARDWARE.md`
-- says `Home: RIGHT + BOTTOM (0,0)`
-
-#### C. `tools/corexy_pigpio.py`
-- walkthrough / homing flow ends in `HOME (RIGHT+BOTTOM)`
-
-#### D. `tools/homing_pigpio.py`
-- header says `HOME = LEFT + BOTTOM`
-- main homing routine homes X to LEFT and Y to BOTTOM
-
-### What Claude must do with this contradiction
-Do NOT resolve it by guesswork.
-
-Treat the repo as containing:
-- an older / approved reference path pointing to `RIGHT + BOTTOM`,
-- a later experimental / alternate homing script using `LEFT + BOTTOM`.
+### Canonical truth now
+- physical HOME = `LEFT + BOTTOM`
+- `bookcabinet/config.py` must use `LEFT_BOTTOM`
+- `tools/homing_pigpio.py` is the current canonical homing reference
+- older `RIGHT+BOTTOM` mentions are historical and stale
 
 ### Working rule
-Unless Roman explicitly confirms otherwise during a real cabinet session:
-- treat `RIGHT_BOTTOM` as the last stable / approved project-level home convention,
-- treat `tools/homing_pigpio.py` as an experimental or alternative homing script,
-- never silently propagate `LEFT_BOTTOM` into config or docs as final truth.
+Do not reintroduce `RIGHT_BOTTOM` into config or docs unless Roman confirms a different physical truth in a new live cabinet session.
 
-If working on homing, first surface this contradiction clearly.
+### Historical note
+`tools/corexy_pigpio.py` and some older docs still preserve the earlier `RIGHT+BOTTOM` assumption.
+Treat those as investigation history, not as the current final truth.
 
 ---
 
@@ -333,11 +328,11 @@ Pins 25 and 26 are not optional trivia.
 They must be initialized LOW before tray movement.
 
 ### 11.3 Motion safety relies on conservative speeds
-Known safe values from the recent successful homing work:
-- FAST = 1500
-- SLOW = 400
+Current confirmed safe homing baseline after live cabinet testing on 2026-04-10:
+- FAST = 800
+- SLOW = 300
 
-Very high speed attempts can stall.
+Historical 1500/400 settings can still appear in older scripts, but they are no longer the recommended homing baseline after belt slip was observed.
 Do not increase speeds casually.
 
 ### 11.4 Endstop filtering matters
