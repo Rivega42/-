@@ -105,7 +105,8 @@
 
 Порядок: X (→LEFT), потом Y (→BOTTOM)
 
-Основной скрипт: `~/bookcabinet/tools/homing_pigpio.py`
+Операторский entrypoint: `~/bookcabinet/tools/homing_pigpio.py`
+Канонический motion layer: `~/bookcabinet/tools/corexy_motion_v2.py`
 
 ---
 
@@ -114,4 +115,4 @@
 1. **Pin 20 дребезг** — задний концевик платформы, нужен программный антидребезг
 2. **Старые заметки про PCM conflict устарели** — текущий подтверждённый хоминг использует pigpio wave_chain успешно
 3. **Undervoltage** — RPi 3, проверить БП
-4. **Старые docs про RIGHT+BOTTOM и неизвестные шторки устарели** — ориентироваться на `CLAUDE.md`, `config.py` и `tools/homing_pigpio.py`
+4. **Старые docs про RIGHT+BOTTOM и неизвестные шторки устарели** — ориентироваться на `CLAUDE.md`, `config.py`, `tools/corexy_motion_v2.py` и `tools/homing_pigpio.py`

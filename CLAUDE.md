@@ -217,7 +217,8 @@ Key parameters in this historical diagnostic script:
 - `BACK = 200`
 - `WAVE_SEG = 200`
 
-Current live-confirmed homing baseline is now in `tools/homing_pigpio.py`:
+Current live-confirmed motion baseline is now in `tools/corexy_motion_v2.py`.
+`tools/homing_pigpio.py` is now the stable CLI wrapper around that layer:
 - `FAST = 800`
 - `SLOW = 300`
 - X backoff = 300
@@ -253,7 +254,8 @@ The confirmation path was:
 ### Canonical truth now
 - physical HOME = `LEFT + BOTTOM`
 - `bookcabinet/config.py` must use `LEFT_BOTTOM`
-- `tools/homing_pigpio.py` is the current canonical homing reference
+- `tools/corexy_motion_v2.py` is the canonical motion / homing layer
+- `tools/homing_pigpio.py` is the stable operator entrypoint / wrapper
 - older `RIGHT+BOTTOM` mentions are historical and stale
 
 ### Working rule
@@ -271,7 +273,7 @@ This project contains historical contradictions about endstop polarity and pull 
 
 Examples:
 - `docs/HARDWARE.md` says endstops are `INPUT, PUD_UP, HIGH = triggered`
-- `tools/homing_pigpio.py` says endstops were manually checked and uses `pressed = 1`, `free = 0`, `PUD_OFF`
+- `tools/corexy_motion_v2.py` keeps the current XY endstop assumptions: `pressed = 1`, `free = 0`, `PUD_OFF`
 - older docs elsewhere discuss LOW-triggered sensor logic for some sensor classes
 
 ### Working rule for Claude
@@ -427,6 +429,7 @@ Always check together:
 - `bookcabinet/config.py`
 - `bookcabinet/hardware/motors.py`
 - `tools/corexy_pigpio.py`
+- `tools/corexy_motion_v2.py`
 - `tools/homing_pigpio.py`
 - `docs/HARDWARE.md`
 

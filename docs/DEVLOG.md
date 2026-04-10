@@ -407,3 +407,21 @@ python shelf_server.py COM8
 - ИРБИС API: TCP порт 6666, кодировка cp1251
 - Терминология: docs/GLOSSARY.md
 - Оборудование: docs/HARDWARE.md
+
+## 📅 Апрель 2026
+
+### [2026-04-10] CoreXY v2 стал каноническим слоем движения `[motion]` `[homing]` `[pigpio]`
+
+**Что сделали:**
+- перевели `tools/corexy_motion_v2.py` в import-safe reusable layer
+- зафиксировали safe baseline: `HOME=LEFT+BOTTOM`, `FAST=800`, `SLOW=300`, `BACKOFF_X=300`, `BACKOFF_Y=500`
+- перевели `tools/homing_pigpio.py` на thin wrapper поверх v2
+
+**Live-проверка:**
+- read-only state показал `LEFT=1`, `BOTTOM=1`
+- новый `python3 tools/homing_pigpio.py` успешно прошёл полный homing
+- `python3 tools/corexy_motion_v2.py y-sweep` успешно дошёл до `TOP` и вернулся в `BOTTOM`
+
+**Вывод:**
+- v2-примитивы теперь подтверждены на реальном шкафе не только для `x-sweep`, но и для `homing` и `y-sweep`
+- следующий логичный шаг: убрать дублирование / расхождения в `bookcabinet/hardware/motors.py` и посадить app-level слой на ту же каноническую truth
