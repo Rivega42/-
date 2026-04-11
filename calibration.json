@@ -12,63 +12,57 @@
     "back_y_offset": 30
   },
   "shelves": {
-    "method": "piecewise_linear",
+    "method": "piecewise_linear_per_depth",
     "anchors": [
       {
         "shelf": 0,
-        "y": 60
+        "front_y": 60,
+        "back_y": 60
+      },
+      {
+        "shelf": 3,
+        "front_y": 6510,
+        "back_y": 6510
+      },
+      {
+        "shelf": 5,
+        "front_y": 10320,
+        "back_y": 10320
       },
       {
         "shelf": 7,
-        "y": 14942
+        "front_y": 15002,
+        "back_y": 15002
+      },
+      {
+        "shelf": 10,
+        "front_y": 21410,
+        "back_y": 21420
       },
       {
         "shelf": 14,
-        "y": 29830
+        "front_y": 29830,
+        "back_y": 29930
       },
       {
-        "shelf": 20,
-        "y": 42630
+        "shelf": 18,
+        "front_y": 38363,
+        "back_y": 38463
       },
       {
         "shelf": 21,
-        "y": 45180
+        "front_y": 45280,
+        "back_y": 45280
       }
     ],
-    "measured": {
-      "0": 60,
-      "1": 2250,
-      "2": 4340,
-      "3": 6510,
-      "4": 8660,
-      "5": 10320,
-      "6": 12860,
-      "7": 14942,
-      "8": 17060,
-      "9": 19260,
-      "10": 21410,
-      "11": 23560,
-      "12": 25710,
-      "13": 27860,
-      "14": 29830,
-      "20": 42630,
-      "21": 45180
-    },
-    "rack_y_offsets": {
-      "description": "Y correction per rack at shelf_20 (measured - base)",
-      "shelf_20": {
-        "1": 42680,
-        "2": 43030,
-        "3": 42630
-      }
-    },
-    "back_y_offset_note": "offset varies by shelf, measured per-shelf"
+    "note": "Interpolate front_y and back_y separately between anchors"
   },
   "disabled_cells": [
+    "1.1.0",
     "1.2.0",
     "1.3.0",
     "1.1.21",
-    "2.1.0",
+    "1.2.21",
     "2.1.21",
     "2.3.21",
     "1.2.7",
@@ -81,6 +75,8 @@
     "1.2.15",
     "1.2.16",
     "1.2.17",
+    "1.2.18",
+    "2.1.0",
     "2.2.19",
     "2.2.20",
     "2.2.21"
