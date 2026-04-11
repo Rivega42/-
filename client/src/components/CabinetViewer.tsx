@@ -86,9 +86,9 @@ export function CabinetViewer({ cells, onCellClick }: CabinetViewerProps) {
   }, [cells]);
 
   return (
-    <div className="flex gap-4 h-full" data-testid="cabinet-viewer">
+    <div className="flex flex-col lg:flex-row gap-4 h-full" data-testid="cabinet-viewer">
       <div className="flex-1 bg-slate-900 rounded-xl p-4 overflow-auto">
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
           <h3 className="text-white text-lg font-bold">Схема шкафа (126 ячеек)</h3>
           <div className="flex gap-3 text-xs">
             <div className="flex items-center gap-1">
@@ -114,31 +114,33 @@ export function CabinetViewer({ cells, onCellClick }: CabinetViewerProps) {
           {Array.from({ length: COLUMNS }).map((_, colIndex) => (
             <div key={colIndex} className="bg-slate-800 rounded-lg p-4">
               <h4 className="text-slate-300 text-sm font-medium mb-3">Колонка {colIndex + 1}</h4>
-              
+
               <div className="space-y-3">
                 {ROWS.map(row => (
                   <div key={`${colIndex}-${row}`} className="flex items-center gap-2">
                     <span className="text-slate-400 text-xs w-8 shrink-0">Ряд {row}</span>
-                    <div className="flex flex-wrap gap-1">
+                    <div className="flex flex-wrap gap-1.5">
                       {Array.from({ length: POSITIONS }).map((_, posIndex) => {
                         const cell = getCell(row, colIndex, posIndex);
-                        const isSelected = selectedCell && 
-                          selectedCell.row === row && 
-                          selectedCell.x === colIndex && 
+                        const isSelected = selectedCell &&
+                          selectedCell.row === row &&
+                          selectedCell.x === colIndex &&
                           selectedCell.y === posIndex;
 
                         return (
                           <button
                             key={`${row}-${colIndex}-${posIndex}`}
                             onClick={() => handleCellClick(cell, row, colIndex, posIndex)}
+                            aria-label={`Ячейка ${row}${colIndex + 1}-${posIndex + 1}: ${cell ? getCellStatusText(cell.status) : 'Пустая'}`}
                             className={`
-                              w-7 h-7 rounded text-xs font-medium transition-all
+                              w-10 h-10 sm:w-9 sm:h-9 rounded-md text-xs font-bold transition-all
                               ${cell ? getCellColor(cell.status) : 'bg-slate-600'}
-                              ${isSelected ? 'ring-2 ring-white ring-offset-2 ring-offset-slate-800' : ''}
-                              ${cell?.status === 'occupied' || cell?.status === 'reserved' || cell?.status === 'needs_extraction' 
-                                ? 'text-white' 
-                                : 'text-slate-500'}
+                              ${isSelected ? 'ring-2 ring-white ring-offset-2 ring-offset-slate-800 scale-110' : ''}
+                              ${cell?.status === 'occupied' || cell?.status === 'reserved' || cell?.status === 'needs_extraction'
+                                ? 'text-white'
+                                : 'text-slate-400'}
                               hover:opacity-80 active:scale-95
+                              touch-manipulation
                             `}
                             data-testid={`cell-${row}-${colIndex}-${posIndex}`}
                           >
@@ -155,7 +157,7 @@ export function CabinetViewer({ cells, onCellClick }: CabinetViewerProps) {
         </div>
       </div>
 
-      <Card className="w-80 flex-shrink-0">
+      <Card className="w-full lg:w-80 flex-shrink-0">
         <CardHeader className="pb-3">
           <CardTitle className="text-lg flex items-center gap-2">
             <Package className="w-5 h-5" />
