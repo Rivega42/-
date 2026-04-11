@@ -15,6 +15,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import sys
+import math
 import time
 
 import pigpio
@@ -43,6 +44,8 @@ class MotionConfig:
     backoff_x: int = 300
     backoff_y: int = 500
     wave_seg: int = 200
+    accel_steps: int = 300
+    min_speed: int = 400
     glitch_us: int = 300
     stable_reads: int = 5
     stable_delay: float = 0.002
@@ -52,6 +55,26 @@ class MotionConfig:
     poll_need: int = 2
     timeout_main: float = 60.0
     timeout_remainder: float = 30.0
+
+
+
+def _build_speed_profile(steps, v_start, v_max, accel_steps):
+    if steps <= 0:
+        return []
+    ramp = min(accel_steps, steps // 2)
+    profile = []
+    for i in range(steps):
+        if i < ramp:
+            t = i / ramp
+            v = v_start + (v_max - v_start) * (1 - math.cos(math.pi * t)) / 2
+        elif i >= steps - ramp:
+            t = (steps - 1 - i) / max(ramp, 1)
+            v = v_start + (v_max - v_start) * (1 - math.cos(math.pi * t)) / 2
+        else:
+            v = v_max
+        v = max(v_start, min(v_max, v))
+        profile.append(int(1_000_000 / (2 * v)))
+    return profile
 
 
 class CoreXYMotionV2:
@@ -129,12 +152,15 @@ class CoreXYMotionV2:
         if stop_sensor is not None:
             cb = self.pi.callback(stop_sensor, pigpio.RISING_EDGE, _on_endstop)
 
-        half_us = int(1_000_000 / (2 * speed))
+        _profile = _build_speed_profile(steps, self.config.min_speed, speed, self.config.accel_steps)
+        _pidx = 0
         seg_steps = min(self.config.wave_seg, steps)
         pulses = []
-        for _ in range(seg_steps):
-            pulses.append(pigpio.pulse(STEP_MASK, 0, half_us))
-            pulses.append(pigpio.pulse(0, STEP_MASK, half_us))
+        for _si in range(seg_steps):
+            _hus = _profile[_pidx] if _pidx < len(_profile) else int(1_000_000 / (2 * speed))
+            _pidx += 1
+            pulses.append(pigpio.pulse(STEP_MASK, 0, _hus))
+            pulses.append(pigpio.pulse(0, STEP_MASK, _hus))
         self.pi.wave_clear()
         self.pi.wave_add_generic(pulses)
         wid = self.pi.wave_create()
@@ -167,9 +193,11 @@ class CoreXYMotionV2:
 
         if remainder > 0 and not hit:
             rem_pulses = []
-            for _ in range(remainder):
-                rem_pulses.append(pigpio.pulse(STEP_MASK, 0, half_us))
-                rem_pulses.append(pigpio.pulse(0, STEP_MASK, half_us))
+            for _ri in range(remainder):
+                _hus = _profile[_pidx] if _pidx < len(_profile) else int(1_000_000 // (2 * speed))
+                _pidx += 1
+                rem_pulses.append(pigpio.pulse(STEP_MASK, 0, _hus))
+                rem_pulses.append(pigpio.pulse(0, STEP_MASK, _hus))
             self.pi.wave_clear()
             self.pi.wave_add_generic(rem_pulses)
             wid2 = self.pi.wave_create()
@@ -319,3 +347,49 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == '__main__':
     raise SystemExit(main())
+
+
+    def move_to(self, x: int, y: int, speed: int | None = None) -> None:
+        """
+        Move carriage to absolute position (x, y) from HOME using diagonal motion.
+        CoreXY: diagonal = both motors, then remainder on one axis.
+        
+        x: steps from LEFT endstop
+        y: steps from BOTTOM endstop
+        """
+        if speed is None:
+            speed = self.config.fast
+
+        # CoreXY directions:
+        # X+ (right): A=1, B=1
+        # X- (left):  A=0, B=0
+        # Y+ (up):    A=1, B=0
+        # Y- (down):  A=0, B=1
+        # Diagonal X+Y+ (right+up): A=1,B=1 + A=1,B=0 → A dominant, but pigpio wave
+        # For true diagonal: step both motors simultaneously
+        # We approximate: move min(x,y) diagonally, then remainder on one axis
+
+        diag = min(x, y)
+        rem_x = x - diag
+        rem_y = y - diag
+
+        if diag > 0:
+            # Move diagonally: X+ and Y+ simultaneously
+            # X+: A=1,B=1 / Y+: A=1,B=0
+            # Combined CoreXY diagonal X+Y+: motor_A forward (both X and Y use A=1)
+            # motor_B: X needs B=1, Y needs B=0 → conflict
+            # Solution: interleave X and Y steps
+            # Actually for CoreXY: to move diagonally X+Y+:
+            # Each step: A steps once (handles Y component), B alternates
+            # Simplest: move X steps, then Y steps (already works, just sequential)
+            # True simultaneous requires custom waveform — use sequential for now
+            # Move X first (fast), then Y
+            self.move(1, 1, diag, speed)  # diagonal component as X move
+            # now at (diag, 0), need to go to (diag, diag) — move Y
+            if diag > 0:
+                self.move(1, 0, diag, speed)
+
+        if rem_x > 0:
+            self.move(1, 1, rem_x, speed)
+        if rem_y > 0:
+            self.move(1, 0, rem_y, speed)
