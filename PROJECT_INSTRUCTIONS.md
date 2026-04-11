@@ -7,8 +7,9 @@
 К проекту подключен репозиторий: github.com/Rivega42/-
 
 В НАЧАЛЕ СЕССИИ:
-Прочитай ТОЛЬКО файл QUICKSTART.md в корне репозитория.
-НЕ читай другие файлы пока пользователь не попросит.
+Прочитай СНАЧАЛА файл `CLAUDE.md` в корне репозитория.
+Потом, если нужен краткий операционный вход, прочитай `QUICKSTART.md`.
+НЕ делай выводы по старым scattered docs, пока не сверишься с `CLAUDE.md`.
 
 СРЕДА:
 - Windows 11, PowerShell / Windows Terminal
@@ -22,7 +23,9 @@
 - RFID UHF молчит → протокол 0xA0, НЕ 0x04! checksum = (~SUM+1)&0xFF
 - Датчики врут → инверсия логики (LOW = нажат, не HIGH)
 - Замки путаница → Open=язычок ОПУЩЕН, Close=ПОДНЯТ (инверсия терминологии!)
-- GPIO не реагирует → проверь config.py + sudo systemctl restart shelf-server
+- GPIO не реагирует → проверь config.py + sudo systemctl restart bookcabinet
+- Текущий подтверждённый HOME для XY → LEFT + BOTTOM
+- Текущие безопасные скорости хоминга → FAST=800, SLOW=300 (`tools/homing_pigpio.py`)
 - Резисторы для датчиков → НЕ нужны, используй GPIO.PUD_UP
 
 ОБОРУДОВАНИЕ:
