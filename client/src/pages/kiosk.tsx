@@ -248,7 +248,7 @@ export default function KioskPage() {
 
   const testMotorMutation = useMutation({
     mutationFn: async (params: { command: string; axis?: string; steps?: number; speed?: number }) => {
-      const response = await apiRequest('POST', '/api/test/motors', params);
+      const response = await apiRequest('POST', '/api/test/motor', params);
       return response.json();
     },
     onSuccess: () => {
@@ -275,7 +275,7 @@ export default function KioskPage() {
 
   const testServoMutation = useMutation({
     mutationFn: async (params: { servo: string; command: string }) => {
-      const response = await apiRequest('POST', '/api/test/servos', params);
+      const response = await apiRequest('POST', '/api/test/servo', params);
       return response.json();
     },
     onSuccess: () => {
@@ -289,7 +289,7 @@ export default function KioskPage() {
 
   const testShutterMutation = useMutation({
     mutationFn: async (params: { shutter: string; command: string }) => {
-      const response = await apiRequest('POST', '/api/test/shutters', params);
+      const response = await apiRequest('POST', '/api/test/shutter', params);
       return response.json();
     },
     onSuccess: () => {
@@ -326,6 +326,18 @@ export default function KioskPage() {
     },
     onError: (error: any) => {
       toast({ title: 'Ошибка', description: error.message, variant: 'destructive' });
+    },
+  });
+
+  const emergencyStopMutation = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest('POST', '/api/emergency-stop', {});
+      return response.json();
+    },
+    onSuccess: () => {
+      toast({ title: 'СТОП', description: 'Экстренная остановка выполнена', variant: 'destructive' });
+      queryClient.invalidateQueries({ queryKey: ['/api/status'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/diagnostics'] });
     },
   });
 
@@ -1159,8 +1171,19 @@ export default function KioskPage() {
   const renderMechanicsTest = () => (
     <div className="min-h-screen bg-slate-100 pt-28 p-6" data-testid="screen-mechanics-test">
       <div className="max-w-5xl mx-auto">
-        <h2 className="text-3xl font-bold text-slate-800 mb-6">Тестирование механики</h2>
-        
+        <div className="flex items-center justify-between mb-6">
+          <h2 className="text-3xl font-bold text-slate-800">Тестирование механики</h2>
+          <Button
+            variant="destructive"
+            size="lg"
+            className="h-14 px-8 text-lg font-bold bg-red-600 hover:bg-red-700 animate-none"
+            onClick={() => emergencyStopMutation.mutate()}
+            aria-label="Экстренная остановка"
+          >
+            СТОП
+          </Button>
+        </div>
+
         <div className="grid grid-cols-2 gap-5">
           <Card className="p-6">
             <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
@@ -1384,15 +1407,26 @@ export default function KioskPage() {
       <div className="max-w-5xl mx-auto">
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-3xl font-bold text-slate-800">Калибровка</h2>
-          <Button 
-            variant="destructive"
-            onClick={() => resetCalibrationMutation.mutate()}
-            disabled={resetCalibrationMutation.isPending}
-            data-testid="button-reset-calibration"
-          >
-            <RotateCcw className="w-4 h-4 mr-2" />
-            Сброс к заводским
-          </Button>
+          <div className="flex gap-3">
+            <Button
+              variant="destructive"
+              size="lg"
+              className="h-14 px-8 text-lg font-bold bg-red-600 hover:bg-red-700"
+              onClick={() => emergencyStopMutation.mutate()}
+              aria-label="Экстренная остановка"
+            >
+              СТОП
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => resetCalibrationMutation.mutate()}
+              disabled={resetCalibrationMutation.isPending}
+              data-testid="button-reset-calibration"
+            >
+              <RotateCcw className="w-4 h-4 mr-2" />
+              Сброс к заводским
+            </Button>
+          </div>
         </div>
         
         <div className="grid grid-cols-2 gap-5">
@@ -1407,22 +1441,32 @@ export default function KioskPage() {
                 <div className="flex gap-2 mt-1">
                   <Input 
                     type="number"
+                    min={100}
+                    max={3000}
                     value={calibration?.speeds?.xy || 3000}
                     className="h-12"
                     data-testid="input-speed-xy"
-                    onChange={(e) => saveCalibrationMutation.mutate({ speeds: { ...calibration?.speeds, xy: parseInt(e.target.value) || 3000 } } as any)}
+                    onChange={(e) => {
+                      const val = Math.min(3000, Math.max(100, parseInt(e.target.value) || 800));
+                      saveCalibrationMutation.mutate({ speeds: { ...calibration?.speeds, xy: val } } as any);
+                    }}
                   />
                 </div>
               </div>
               <div>
                 <Label>Скорость лотка (шаг/сек)</Label>
                 <div className="flex gap-2 mt-1">
-                  <Input 
+                  <Input
                     type="number"
+                    min={100}
+                    max={3000}
                     value={calibration?.speeds?.tray || 2000}
                     className="h-12"
                     data-testid="input-speed-tray"
-                    onChange={(e) => saveCalibrationMutation.mutate({ speeds: { ...calibration?.speeds, tray: parseInt(e.target.value) || 2000 } } as any)}
+                    onChange={(e) => {
+                      const val = Math.min(3000, Math.max(100, parseInt(e.target.value) || 800));
+                      saveCalibrationMutation.mutate({ speeds: { ...calibration?.speeds, tray: val } } as any);
+                    }}
                   />
                 </div>
               </div>
