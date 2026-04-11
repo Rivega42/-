@@ -1,5 +1,11 @@
 """
-REST API Routes - полная версия
+REST API Routes - полная версия (Python aiohttp server).
+
+NOTE: These routes serve the Python aiohttp backend. The primary entry
+point for the React frontend is the TypeScript Express server defined in
+server/routes.ts. Both servers expose similar endpoints; the TS server is
+authoritative for the web UI, while this Python server is used when
+running the cabinet directly on the Raspberry Pi without Node.
 """
 from aiohttp import web
 import json

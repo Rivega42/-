@@ -1,5 +1,15 @@
 """
-Логирование
+Логирование — структурированный логгер на базе Python logging.
+
+Использование:
+    from bookcabinet.utils.logger import setup_logger, get_logger
+    logger = get_logger('bookcabinet.mymodule')
+    logger.info('Operation completed', extra={'book_rfid': rfid})
+
+Формат: ISO timestamp - module - level - message
+Вывод: консоль (DEBUG+) и файл (INFO+, путь из config.LOG_FILE).
+
+Новые модули должны использовать get_logger() вместо print().
 """
 import logging
 import os

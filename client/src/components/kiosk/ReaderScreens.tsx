@@ -1,7 +1,9 @@
+import { useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { BookOpen, Undo2, CreditCard, Loader2 } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { BookOpen, Undo2, CreditCard, Loader2, Radio } from "lucide-react";
 import type { User, Book } from "@shared/schema";
 import type { SessionData } from "./types";
 
@@ -106,21 +108,62 @@ export function BookList({ books, onIssue, userRfid, issuing }: BookListProps) {
 
 interface ReturnBookProps {
   isPending: boolean;
+  onManualReturn?: (rfid: string) => void;
 }
 
-export function ReturnBook({ isPending }: ReturnBookProps) {
+export function ReturnBook({ isPending, onManualReturn }: ReturnBookProps) {
+  const [manualRfid, setManualRfid] = useState('');
+
   return (
     <div className="min-h-screen bg-slate-100 pt-28 p-6" data-testid="screen-return-book">
       <div className="max-w-3xl mx-auto text-center">
-        <CreditCard className="w-24 h-24 text-green-500 mx-auto mb-6 animate-pulse" />
-        <h2 className="text-3xl font-bold text-slate-800 mb-4">Возврат книги</h2>
-        <p className="text-xl text-slate-500 mb-8">Поднесите книгу к считывателю внутри шкафа</p>
-        {isPending && (
-          <div className="flex items-center justify-center gap-3 text-slate-600">
-            <Loader2 className="w-6 h-6 animate-spin" />
-            <span>Обработка...</span>
+        <h2 className="text-3xl font-bold text-slate-800 mb-6">Возврат книги</h2>
+
+        <Card className="p-10 mb-6">
+          <Radio className="w-20 h-20 text-green-500 mx-auto mb-4 animate-pulse" />
+          <p className="text-xl mb-3">Положите книгу в окно приёма</p>
+          <p className="text-base text-slate-500 mb-6">
+            Книга будет автоматически распознана по RFID-метке
+          </p>
+
+          <div className="flex items-center justify-center gap-3 text-green-600 mb-4">
+            <span className="relative flex h-4 w-4">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-4 w-4 bg-green-500"></span>
+            </span>
+            <span className="text-lg font-medium">Ожидаю скан...</span>
           </div>
-        )}
+
+          {isPending && (
+            <div className="flex items-center justify-center gap-3 text-slate-600">
+              <Loader2 className="w-6 h-6 animate-spin" />
+              <span>Обработка...</span>
+            </div>
+          )}
+        </Card>
+
+        <Card className="p-6">
+          <p className="text-sm text-slate-500 mb-3">Ручной ввод RFID (если автоскан не сработал)</p>
+          <div className="flex gap-3 justify-center">
+            <Input
+              placeholder="RFID метка книги"
+              value={manualRfid}
+              onChange={(e) => setManualRfid(e.target.value)}
+              className="max-w-xs"
+            />
+            <Button
+              onClick={() => {
+                if (manualRfid.trim() && onManualReturn) {
+                  onManualReturn(manualRfid.trim());
+                  setManualRfid('');
+                }
+              }}
+              disabled={!manualRfid.trim() || isPending}
+            >
+              Вернуть
+            </Button>
+          </div>
+        </Card>
       </div>
     </div>
   );

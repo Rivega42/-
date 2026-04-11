@@ -1,3 +1,6 @@
+// TODO: This file (~600 lines) should be split into smaller components:
+// - AdminDashboard, AdminCells, AdminUsers, AdminLogs, AdminSettings tabs
+// - Each tab as a separate component in client/src/components/admin/
 import { useState, useRef, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";

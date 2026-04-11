@@ -11,11 +11,11 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { User, Book, Cell, SystemStatus, Operation, Statistics, CalibrationData, WebSocketMessage } from "@shared/schema";
-import { 
-  BookOpen, 
-  Undo2, 
-  User as UserIcon, 
-  Shield, 
+import {
+  BookOpen,
+  Undo2,
+  User as UserIcon,
+  Shield,
   Settings,
   CreditCard,
   CheckCircle2,
@@ -44,7 +44,9 @@ import {
   Box,
   GraduationCap,
   Sliders,
+  Radio,
 } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { CabinetViewer } from "@/components/CabinetViewer";
 import SettingsPanel from "@/components/SettingsPanel";
 import TeachMode from "@/components/TeachMode";
@@ -90,6 +92,9 @@ export default function KioskPage() {
   const [newBookRfid, setNewBookRfid] = useState('');
   const [newBookTitle, setNewBookTitle] = useState('');
   const [newBookAuthor, setNewBookAuthor] = useState('');
+  const [adminPin, setAdminPin] = useState('');
+  const [showPinDialog, setShowPinDialog] = useState(false);
+  const [manualReturnRfid, setManualReturnRfid] = useState('');
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const wsRef = useRef<WebSocket | null>(null);
@@ -583,11 +588,11 @@ export default function KioskPage() {
             <BookOpen className="w-6 h-6 mr-2" />
             Библиотекарь
           </Button>
-          <Button 
-            size="lg" 
+          <Button
+            size="lg"
             variant="outline"
             className="h-20 px-8 text-xl min-w-[200px] border-white text-white hover:bg-white hover:text-slate-900"
-            onClick={() => handleCardScan('ADMIN99')}
+            onClick={() => { setAdminPin(''); setShowPinDialog(true); }}
             data-testid="button-test-admin"
           >
             <Shield className="w-6 h-6 mr-2" />
@@ -595,13 +600,53 @@ export default function KioskPage() {
           </Button>
         </div>
       </div>
-      
+
       {authMutation.isPending && (
         <div className="mt-6 flex items-center gap-3">
           <Loader2 className="w-6 h-6 animate-spin" />
           <span>Авторизация...</span>
         </div>
       )}
+
+      <Dialog open={showPinDialog} onOpenChange={setShowPinDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Введите PIN администратора</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <Input
+              type="password"
+              placeholder="PIN-код"
+              value={adminPin}
+              onChange={(e) => setAdminPin(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  if (adminPin === '1234') {
+                    setShowPinDialog(false);
+                    handleCardScan('ADMIN99');
+                  } else {
+                    toast({ title: 'Ошибка', description: 'Неверный PIN-код', variant: 'destructive' });
+                    setAdminPin('');
+                  }
+                }
+              }}
+              autoFocus
+            />
+            <div className="flex gap-3 justify-end">
+              <Button variant="outline" onClick={() => setShowPinDialog(false)}>Отмена</Button>
+              <Button onClick={() => {
+                if (adminPin === '1234') {
+                  setShowPinDialog(false);
+                  handleCardScan('ADMIN99');
+                } else {
+                  toast({ title: 'Ошибка', description: 'Неверный PIN-код', variant: 'destructive' });
+                  setAdminPin('');
+                }
+              }}>Войти</Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 
@@ -1019,19 +1064,54 @@ export default function KioskPage() {
     <div className="min-h-screen bg-slate-100 pt-28 p-6" data-testid="screen-return-book">
       <div className="max-w-3xl mx-auto text-center">
         <h2 className="text-3xl font-bold text-slate-800 mb-6">Возврат книги</h2>
-        
-        <Card className="p-10">
-          <Package className="w-20 h-20 text-green-500 mx-auto mb-4" />
+
+        <Card className="p-10 mb-6">
+          <Radio className="w-20 h-20 text-green-500 mx-auto mb-4 animate-pulse" />
           <p className="text-xl mb-3">Положите книгу в окно приёма</p>
           <p className="text-base text-slate-500 mb-6">
             Книга будет автоматически распознана по RFID-метке
           </p>
-          
-          <div className="h-2 bg-slate-200 rounded-full overflow-hidden mb-6">
-            <div className="h-full bg-green-500 animate-pulse" style={{ width: '30%' }} />
+
+          <div className="flex items-center justify-center gap-3 text-green-600 mb-4">
+            <span className="relative flex h-4 w-4">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-4 w-4 bg-green-500"></span>
+            </span>
+            <span className="text-lg font-medium">Ожидаю скан...</span>
           </div>
-          
-          <p className="text-slate-500">Ожидание книги...</p>
+        </Card>
+
+        <Card className="p-6">
+          <p className="text-sm text-slate-500 mb-3">Ручной ввод RFID (если автоскан не сработал)</p>
+          <div className="flex gap-3 justify-center">
+            <Input
+              placeholder="RFID метка книги"
+              value={manualReturnRfid}
+              onChange={(e) => setManualReturnRfid(e.target.value)}
+              className="max-w-xs"
+            />
+            <Button
+              onClick={() => {
+                if (manualReturnRfid.trim()) {
+                  apiRequest('POST', '/api/return', { bookRfid: manualReturnRfid.trim() })
+                    .then(r => r.json())
+                    .then(data => {
+                      if (data.success) {
+                        setSuccessMessage(`Книга "${data.book?.title || manualReturnRfid}" возвращена`);
+                        setScreen('success');
+                      } else {
+                        toast({ title: 'Ошибка', description: data.error || 'Не удалось вернуть книгу', variant: 'destructive' });
+                      }
+                      setManualReturnRfid('');
+                    })
+                    .catch(err => toast({ title: 'Ошибка', description: err.message, variant: 'destructive' }));
+                }
+              }}
+              disabled={!manualReturnRfid.trim()}
+            >
+              Вернуть
+            </Button>
+          </div>
         </Card>
       </div>
     </div>
@@ -1532,7 +1612,8 @@ export default function KioskPage() {
                     data-testid="input-speed-xy"
                     onChange={(e) => {
                       const val = Math.min(3000, Math.max(100, parseInt(e.target.value) || 800));
-                      saveCalibrationMutation.mutate({ speeds: { ...calibration?.speeds, xy: val } } as any);
+                      const update: Partial<CalibrationData> = { speeds: { ...calibration?.speeds, xy: val, tray: calibration?.speeds?.tray || 2000, acceleration: calibration?.speeds?.acceleration || 5000 } };
+                      saveCalibrationMutation.mutate(update);
                     }}
                   />
                 </div>
@@ -1549,7 +1630,8 @@ export default function KioskPage() {
                     data-testid="input-speed-tray"
                     onChange={(e) => {
                       const val = Math.min(3000, Math.max(100, parseInt(e.target.value) || 800));
-                      saveCalibrationMutation.mutate({ speeds: { ...calibration?.speeds, tray: val } } as any);
+                      const update: Partial<CalibrationData> = { speeds: { ...calibration?.speeds, xy: calibration?.speeds?.xy || 3000, tray: val, acceleration: calibration?.speeds?.acceleration || 5000 } };
+                      saveCalibrationMutation.mutate(update);
                     }}
                   />
                 </div>
@@ -1562,10 +1644,55 @@ export default function KioskPage() {
                     value={calibration?.speeds?.acceleration || 5000}
                     className="h-12"
                     data-testid="input-acceleration"
-                    onChange={(e) => saveCalibrationMutation.mutate({ speeds: { ...calibration?.speeds, acceleration: parseInt(e.target.value) || 5000 } } as any)}
+                    onChange={(e) => {
+                      const update: Partial<CalibrationData> = { speeds: { ...calibration?.speeds, xy: calibration?.speeds?.xy || 3000, tray: calibration?.speeds?.tray || 2000, acceleration: parseInt(e.target.value) || 5000 } };
+                      saveCalibrationMutation.mutate(update);
+                    }}
                   />
                 </div>
               </div>
+            </div>
+          </Card>
+
+          <Card className="p-6">
+            <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
+              <Sliders className="w-5 h-5" />
+              Позиции стоек X (шаги)
+            </h3>
+            <div className="space-y-4">
+              {[0, 1, 2].map((idx) => {
+                const defaults = [100, 10220, 20370];
+                const val = calibration?.positions?.x?.[idx] ?? defaults[idx];
+                return (
+                  <div key={idx} className="flex items-center gap-3">
+                    <Label className="w-24 shrink-0">Стойка {idx + 1}</Label>
+                    <Input
+                      type="number"
+                      value={val}
+                      className="h-12"
+                      data-testid={`input-rack-x-${idx}`}
+                      onChange={(e) => {
+                        const newX = [...(calibration?.positions?.x || defaults)];
+                        newX[idx] = parseInt(e.target.value) || 0;
+                        const update: Partial<CalibrationData> = {
+                          positions: { ...calibration?.positions, x: newX, y: calibration?.positions?.y || [] }
+                        };
+                        saveCalibrationMutation.mutate(update);
+                      }}
+                    />
+                    <Button
+                      variant="outline"
+                      className="h-12 shrink-0"
+                      data-testid={`button-test-rack-x-${idx}`}
+                      onClick={() => testMotorMutation.mutate({ command: 'move', axis: 'x', steps: val })}
+                      disabled={testMotorMutation.isPending}
+                    >
+                      <Play className="w-4 h-4 mr-1" />
+                      Тест
+                    </Button>
+                  </div>
+                );
+              })}
             </div>
           </Card>
 
@@ -1583,7 +1710,10 @@ export default function KioskPage() {
                     value={calibration?.servos?.lock1_open || 90}
                     className="h-12 mt-1"
                     data-testid="input-servo-lock1-open"
-                    onChange={(e) => saveCalibrationMutation.mutate({ servos: { ...calibration?.servos, lock1_open: parseInt(e.target.value) || 90 } } as any)}
+                    onChange={(e) => {
+                      const update: Partial<CalibrationData> = { servos: { lock1_open: parseInt(e.target.value) || 90, lock1_close: calibration?.servos?.lock1_close || 0, lock2_open: calibration?.servos?.lock2_open || 90, lock2_close: calibration?.servos?.lock2_close || 0 } };
+                      saveCalibrationMutation.mutate(update);
+                    }}
                   />
                 </div>
                 <div>
@@ -1593,7 +1723,10 @@ export default function KioskPage() {
                     value={calibration?.servos?.lock1_close || 0}
                     className="h-12 mt-1"
                     data-testid="input-servo-lock1-close"
-                    onChange={(e) => saveCalibrationMutation.mutate({ servos: { ...calibration?.servos, lock1_close: parseInt(e.target.value) || 0 } } as any)}
+                    onChange={(e) => {
+                      const update: Partial<CalibrationData> = { servos: { lock1_open: calibration?.servos?.lock1_open || 90, lock1_close: parseInt(e.target.value) || 0, lock2_open: calibration?.servos?.lock2_open || 90, lock2_close: calibration?.servos?.lock2_close || 0 } };
+                      saveCalibrationMutation.mutate(update);
+                    }}
                   />
                 </div>
                 <div>
@@ -1603,7 +1736,10 @@ export default function KioskPage() {
                     value={calibration?.servos?.lock2_open || 90}
                     className="h-12 mt-1"
                     data-testid="input-servo-lock2-open"
-                    onChange={(e) => saveCalibrationMutation.mutate({ servos: { ...calibration?.servos, lock2_open: parseInt(e.target.value) || 90 } } as any)}
+                    onChange={(e) => {
+                      const update: Partial<CalibrationData> = { servos: { lock1_open: calibration?.servos?.lock1_open || 90, lock1_close: calibration?.servos?.lock1_close || 0, lock2_open: parseInt(e.target.value) || 90, lock2_close: calibration?.servos?.lock2_close || 0 } };
+                      saveCalibrationMutation.mutate(update);
+                    }}
                   />
                 </div>
                 <div>
@@ -1613,7 +1749,10 @@ export default function KioskPage() {
                     value={calibration?.servos?.lock2_close || 0}
                     className="h-12 mt-1"
                     data-testid="input-servo-lock2-close"
-                    onChange={(e) => saveCalibrationMutation.mutate({ servos: { ...calibration?.servos, lock2_close: parseInt(e.target.value) || 0 } } as any)}
+                    onChange={(e) => {
+                      const update: Partial<CalibrationData> = { servos: { lock1_open: calibration?.servos?.lock1_open || 90, lock1_close: calibration?.servos?.lock1_close || 0, lock2_open: calibration?.servos?.lock2_open || 90, lock2_close: parseInt(e.target.value) || 0 } };
+                      saveCalibrationMutation.mutate(update);
+                    }}
                   />
                 </div>
               </div>
@@ -1633,7 +1772,10 @@ export default function KioskPage() {
                   value={calibration?.window?.x || 5000}
                   className="h-12 mt-1"
                   data-testid="input-window-x"
-                  onChange={(e) => saveCalibrationMutation.mutate({ window: { ...calibration?.window, x: parseInt(e.target.value) || 5000 } } as any)}
+                  onChange={(e) => {
+                    const update: Partial<CalibrationData> = { window: { x: parseInt(e.target.value) || 5000, y: calibration?.window?.y || 5000 } };
+                    saveCalibrationMutation.mutate(update);
+                  }}
                 />
               </div>
               <div>
@@ -1643,7 +1785,10 @@ export default function KioskPage() {
                   value={calibration?.window?.y || 5000}
                   className="h-12 mt-1"
                   data-testid="input-window-y"
-                  onChange={(e) => saveCalibrationMutation.mutate({ window: { ...calibration?.window, y: parseInt(e.target.value) || 5000 } } as any)}
+                  onChange={(e) => {
+                    const update: Partial<CalibrationData> = { window: { x: calibration?.window?.x || 5000, y: parseInt(e.target.value) || 5000 } };
+                    saveCalibrationMutation.mutate(update);
+                  }}
                 />
               </div>
             </div>
@@ -1662,7 +1807,10 @@ export default function KioskPage() {
                   value={calibration?.kinematics?.x_plus_dir_a || 1}
                   className="h-12 mt-1"
                   data-testid="input-kinematics-x-plus-dir-a"
-                  onChange={(e) => saveCalibrationMutation.mutate({ kinematics: { ...calibration?.kinematics, x_plus_dir_a: parseInt(e.target.value) || 1 } } as any)}
+                  onChange={(e) => {
+                    const update: Partial<CalibrationData> = { kinematics: { x_plus_dir_a: parseInt(e.target.value) || 1, x_plus_dir_b: calibration?.kinematics?.x_plus_dir_b || -1, y_plus_dir_a: calibration?.kinematics?.y_plus_dir_a || 1, y_plus_dir_b: calibration?.kinematics?.y_plus_dir_b || 1 } };
+                    saveCalibrationMutation.mutate(update);
+                  }}
                 />
               </div>
               <div>
@@ -1672,7 +1820,10 @@ export default function KioskPage() {
                   value={calibration?.kinematics?.x_plus_dir_b || -1}
                   className="h-12 mt-1"
                   data-testid="input-kinematics-x-plus-dir-b"
-                  onChange={(e) => saveCalibrationMutation.mutate({ kinematics: { ...calibration?.kinematics, x_plus_dir_b: parseInt(e.target.value) || -1 } } as any)}
+                  onChange={(e) => {
+                    const update: Partial<CalibrationData> = { kinematics: { x_plus_dir_a: calibration?.kinematics?.x_plus_dir_a || 1, x_plus_dir_b: parseInt(e.target.value) || -1, y_plus_dir_a: calibration?.kinematics?.y_plus_dir_a || 1, y_plus_dir_b: calibration?.kinematics?.y_plus_dir_b || 1 } };
+                    saveCalibrationMutation.mutate(update);
+                  }}
                 />
               </div>
               <div>
@@ -1682,7 +1833,10 @@ export default function KioskPage() {
                   value={calibration?.kinematics?.y_plus_dir_a || 1}
                   className="h-12 mt-1"
                   data-testid="input-kinematics-y-plus-dir-a"
-                  onChange={(e) => saveCalibrationMutation.mutate({ kinematics: { ...calibration?.kinematics, y_plus_dir_a: parseInt(e.target.value) || 1 } } as any)}
+                  onChange={(e) => {
+                    const update: Partial<CalibrationData> = { kinematics: { x_plus_dir_a: calibration?.kinematics?.x_plus_dir_a || 1, x_plus_dir_b: calibration?.kinematics?.x_plus_dir_b || -1, y_plus_dir_a: parseInt(e.target.value) || 1, y_plus_dir_b: calibration?.kinematics?.y_plus_dir_b || 1 } };
+                    saveCalibrationMutation.mutate(update);
+                  }}
                 />
               </div>
               <div>
@@ -1692,7 +1846,10 @@ export default function KioskPage() {
                   value={calibration?.kinematics?.y_plus_dir_b || 1}
                   className="h-12 mt-1"
                   data-testid="input-kinematics-y-plus-dir-b"
-                  onChange={(e) => saveCalibrationMutation.mutate({ kinematics: { ...calibration?.kinematics, y_plus_dir_b: parseInt(e.target.value) || 1 } } as any)}
+                  onChange={(e) => {
+                    const update: Partial<CalibrationData> = { kinematics: { x_plus_dir_a: calibration?.kinematics?.x_plus_dir_a || 1, x_plus_dir_b: calibration?.kinematics?.x_plus_dir_b || -1, y_plus_dir_a: calibration?.kinematics?.y_plus_dir_a || 1, y_plus_dir_b: parseInt(e.target.value) || 1 } };
+                    saveCalibrationMutation.mutate(update);
+                  }}
                 />
               </div>
             </div>
