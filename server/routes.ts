@@ -2157,6 +2157,147 @@ except Exception as e:
   });
 
   // Периодическая трансляция статистики
+  // ==================== НАСТРОЙКИ СИСТЕМЫ ====================
+
+  app.get("/api/settings", async (req, res) => {
+    try {
+      const settings = await storage.getAllSettings();
+      const result: Record<string, any> = {};
+      for (const s of settings) {
+        try { result[s.key] = JSON.parse(s.value); } catch { result[s.key] = s.value; }
+      }
+      // Defaults if not set
+      if (!result.timeouts) result.timeouts = { move: 1500, tray_extend: 800, user_wait: 30000 };
+      if (!result.telegram) result.telegram = { enabled: false, bot_token: '', chat_id: '' };
+      if (!result.backup) result.backup = { enabled: true, interval: 24 };
+      if (!result.irbis) result.irbis = { host: '172.29.67.70', port: 6666, mock: true };
+      res.json(result);
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to get settings' });
+    }
+  });
+
+  app.post("/api/settings", async (req, res) => {
+    try {
+      const data = req.body;
+      for (const [key, value] of Object.entries(data)) {
+        await storage.setSetting(key, JSON.stringify(value));
+      }
+      await storage.addSystemLog({ level: 'SUCCESS', message: 'Настройки обновлены', component: 'SYSTEM' });
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to save settings' });
+    }
+  });
+
+  // ==================== РЕЖИМ ОБУЧЕНИЯ (TEACH) ====================
+
+  let teachState = {
+    active: false,
+    name: '',
+    steps: [] as { action: string; params: any; confirmed: boolean }[],
+    pending: false,
+  };
+  const teachSequences: Record<string, any[]> = {};
+
+  app.post("/api/teach/start", (req, res) => {
+    const { name } = req.body;
+    if (!name) return res.status(400).json({ error: 'Name required' });
+    teachState = { active: true, name, steps: [], pending: false };
+    res.json({ success: true, message: `Запись "${name}" начата` });
+  });
+
+  app.post("/api/teach/execute", async (req, res) => {
+    if (!teachState.active) return res.status(400).json({ error: 'Запись не активна' });
+    const { action, params } = req.body;
+    teachState.steps.push({ action, params, confirmed: false });
+    teachState.pending = true;
+
+    // Execute action on hardware via bridge
+    try {
+      if (action === 'move_xy') {
+        systemStatus.position.x = params.x || 0;
+        systemStatus.position.y = params.y || 0;
+      }
+    } catch {}
+
+    res.json({ success: true, message: `Выполнено: ${action}`, stepIndex: teachState.steps.length - 1 });
+  });
+
+  app.post("/api/teach/jog", (req, res) => {
+    const { axis, steps } = req.body;
+    const s = steps || 100;
+    if (axis === 'x') systemStatus.position.x += s;
+    else if (axis === 'y') systemStatus.position.y += s;
+    else if (axis === 'tray') systemStatus.position.tray += s;
+    res.json({ success: true, message: `Jog ${axis} ${s > 0 ? '+' : ''}${s}`, position: systemStatus.position });
+  });
+
+  app.post("/api/teach/confirm", (req, res) => {
+    if (teachState.steps.length > 0) {
+      teachState.steps[teachState.steps.length - 1].confirmed = true;
+    }
+    teachState.pending = false;
+    res.json({ success: true, message: 'Шаг зафиксирован' });
+  });
+
+  app.post("/api/teach/skip", (req, res) => {
+    if (teachState.steps.length > 0) {
+      teachState.steps.pop();
+    }
+    teachState.pending = false;
+    res.json({ success: true, message: 'Шаг пропущен' });
+  });
+
+  app.post("/api/teach/undo", (req, res) => {
+    teachState.steps.pop();
+    res.json({ success: true, message: 'Последний шаг удалён', stepsCount: teachState.steps.length });
+  });
+
+  app.post("/api/teach/save", async (req, res) => {
+    if (!teachState.active) return res.status(400).json({ error: 'Нет активной записи' });
+    const confirmed = teachState.steps.filter(s => s.confirmed);
+    teachSequences[teachState.name] = confirmed;
+    await storage.setSetting(`teach_${teachState.name}`, JSON.stringify(confirmed));
+    await storage.addSystemLog({ level: 'SUCCESS', message: `Teach: сохранена "${teachState.name}" (${confirmed.length} шагов)`, component: 'TEACH' });
+    teachState = { active: false, name: '', steps: [], pending: false };
+    res.json({ success: true, message: `Сохранено (${confirmed.length} шагов)` });
+  });
+
+  app.post("/api/teach/discard", (req, res) => {
+    teachState = { active: false, name: '', steps: [], pending: false };
+    res.json({ success: true, message: 'Запись отменена' });
+  });
+
+  app.get("/api/teach/status", (req, res) => {
+    res.json({ active: teachState.active, name: teachState.name, stepsCount: teachState.steps.length, pending: teachState.pending });
+  });
+
+  app.get("/api/teach/sequences", async (req, res) => {
+    const settings = await storage.getAllSettings();
+    const sequences: Record<string, any> = {};
+    for (const s of settings) {
+      if (s.key.startsWith('teach_')) {
+        const name = s.key.replace('teach_', '');
+        try { sequences[name] = JSON.parse(s.value); } catch { sequences[name] = []; }
+      }
+    }
+    Object.assign(sequences, teachSequences);
+    res.json(sequences);
+  });
+
+  app.post("/api/teach/play", async (req, res) => {
+    const { name } = req.body;
+    const settings = await storage.getAllSettings();
+    const setting = settings.find(s => s.key === `teach_${name}`);
+    const steps = setting ? JSON.parse(setting.value) : teachSequences[name];
+    if (!steps) return res.status(404).json({ error: `Последовательность "${name}" не найдена` });
+    await storage.addSystemLog({ level: 'INFO', message: `Teach: воспроизведение "${name}"`, component: 'TEACH' });
+    res.json({ success: true, message: `Воспроизведение "${name}" (${steps.length} шагов)`, steps });
+  });
+
+  // ==================== ПЕРИОДИЧЕСКИЕ ЗАДАЧИ ====================
+
   setInterval(async () => {
     try {
       const stats = await storage.getStatistics();

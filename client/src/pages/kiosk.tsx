@@ -41,9 +41,13 @@ import {
   ArrowUp,
   ArrowDown,
   ArrowRight,
-  Box
+  Box,
+  GraduationCap,
+  Sliders,
 } from "lucide-react";
 import { CabinetViewer } from "@/components/CabinetViewer";
+import SettingsPanel from "@/components/SettingsPanel";
+import TeachMode from "@/components/TeachMode";
 
 type Screen = 
   | 'welcome' 
@@ -61,6 +65,8 @@ type Screen =
   | 'mechanics_test'
   | 'calibration'
   | 'cabinet_view'
+  | 'settings'
+  | 'teach_mode'
   | 'progress' 
   | 'success' 
   | 'error'
@@ -810,7 +816,7 @@ export default function KioskPage() {
             </CardContent>
           </Card>
 
-          <Card 
+          <Card
             className="cursor-pointer hover:shadow-xl transition-all active:scale-[0.98]"
             onClick={() => setScreen('calibration')}
             data-testid="card-calibration"
@@ -819,6 +825,30 @@ export default function KioskPage() {
               <Target className="w-14 h-14 text-green-500 mb-3" />
               <h3 className="text-xl font-bold mb-1">Калибровка</h3>
               <p className="text-slate-500">Настройка позиций и скоростей</p>
+            </CardContent>
+          </Card>
+
+          <Card
+            className="cursor-pointer hover:shadow-xl transition-all active:scale-[0.98]"
+            onClick={() => setScreen('teach_mode')}
+            data-testid="card-teach-mode"
+          >
+            <CardContent className="p-7 flex flex-col items-center text-center">
+              <GraduationCap className="w-14 h-14 text-red-500 mb-3" />
+              <h3 className="text-xl font-bold mb-1">Режим обучения</h3>
+              <p className="text-slate-500">Запись последовательностей</p>
+            </CardContent>
+          </Card>
+
+          <Card
+            className="cursor-pointer hover:shadow-xl transition-all active:scale-[0.98]"
+            onClick={() => setScreen('settings')}
+            data-testid="card-settings"
+          >
+            <CardContent className="p-7 flex flex-col items-center text-center">
+              <Sliders className="w-14 h-14 text-cyan-500 mb-3" />
+              <h3 className="text-xl font-bold mb-1">Настройки</h3>
+              <p className="text-slate-500">Таймауты, Telegram, ИРБИС</p>
             </CardContent>
           </Card>
         </div>
@@ -1821,6 +1851,22 @@ export default function KioskPage() {
       {screen === 'mechanics_test' && renderMechanicsTest()}
       {screen === 'calibration' && renderCalibration()}
       {screen === 'cabinet_view' && renderCabinetView()}
+      {screen === 'settings' && (
+        <div className="min-h-screen bg-slate-100 pt-28 p-6">
+          <div className="max-w-4xl mx-auto">
+            <h2 className="text-3xl font-bold text-slate-800 mb-6">Настройки системы</h2>
+            <SettingsPanel />
+          </div>
+        </div>
+      )}
+      {screen === 'teach_mode' && (
+        <div className="min-h-screen bg-slate-100 pt-28 p-6">
+          <div className="max-w-5xl mx-auto">
+            <h2 className="text-3xl font-bold text-slate-800 mb-6">Режим обучения</h2>
+            <TeachMode />
+          </div>
+        </div>
+      )}
       {screen === 'progress' && renderProgress()}
       {screen === 'success' && renderSuccess()}
       {screen === 'error' && renderError()}
