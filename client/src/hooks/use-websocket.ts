@@ -18,10 +18,11 @@ export function useWebSocket(url: string) {
       ws.current.onopen = () => {
         console.log('WebSocket connected');
         setIsConnected(true);
-        
+
         // Clear any reconnection timeout
         if (reconnectTimeoutRef.current) {
           clearTimeout(reconnectTimeoutRef.current);
+          reconnectTimeoutRef.current = undefined;
         }
       };
 
@@ -37,7 +38,7 @@ export function useWebSocket(url: string) {
       ws.current.onclose = () => {
         console.log('WebSocket disconnected');
         setIsConnected(false);
-        
+
         // Attempt to reconnect after 3 seconds
         reconnectTimeoutRef.current = setTimeout(() => {
           connect();
@@ -57,8 +58,9 @@ export function useWebSocket(url: string) {
   const disconnect = useCallback(() => {
     if (reconnectTimeoutRef.current) {
       clearTimeout(reconnectTimeoutRef.current);
+      reconnectTimeoutRef.current = undefined;
     }
-    
+
     if (ws.current) {
       ws.current.close();
       ws.current = null;
@@ -76,9 +78,14 @@ export function useWebSocket(url: string) {
     connect();
 
     return () => {
+      // Clear reconnect timeout on unmount to prevent memory leak
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
+        reconnectTimeoutRef.current = undefined;
+      }
       disconnect();
     };
-  }, [connect, disconnect]);
+  }, [url]);
 
   return {
     isConnected,

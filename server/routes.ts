@@ -12,11 +12,18 @@ import { cabinetService } from "./services/cabinetService";
 import { irbisService } from "./services/irbisService";
 import { execSync } from 'child_process';
 import * as fs from 'fs';
-import type { 
+import type {
   WebSocketMessage, TagReadEvent, RfidReaderStatus, SystemLog,
   SystemStatus, User, Cell, Book, CalibrationData
 } from "@shared/schema";
 import { ReaderType } from "@shared/schema";
+import { z } from "zod";
+
+// Zod schemas for request body validation
+const authCardSchema = z.object({ rfid: z.string().min(1) });
+const issueSchema = z.object({ bookRfid: z.string().min(1), userRfid: z.string().min(1) });
+const returnSchema = z.object({ bookRfid: z.string().min(1) });
+const loadBookSchema = z.object({ bookRfid: z.string().min(1), title: z.string().min(1), author: z.string().optional() });
 
 // Состояние системы (будет управляться механикой)
 let systemStatus: SystemStatus = {
@@ -560,8 +567,9 @@ except Exception as e:
 
   app.post("/api/auth/card", async (req, res) => {
     try {
-      const { rfid } = req.body;
-      if (!rfid) return res.status(400).json({ error: 'RFID is required' });
+      const parsed = authCardSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: 'RFID is required', details: parsed.error.issues });
+      const { rfid } = parsed.data;
 
       if (systemStatus.maintenanceMode) {
         return res.status(503).json({ error: 'Шкаф временно недоступен' });
@@ -678,10 +686,9 @@ except Exception as e:
 
   app.post("/api/issue", async (req, res) => {
     try {
-      const { bookRfid, userRfid } = req.body;
-      if (!bookRfid || !userRfid) {
-        return res.status(400).json({ error: 'bookRfid and userRfid are required' });
-      }
+      const parsed = issueSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: 'bookRfid and userRfid are required', details: parsed.error.issues });
+      const { bookRfid, userRfid } = parsed.data;
 
       // Делегируем в Python бизнес-слой (механическая верификация)
       const result = await runPythonBridge('issue', [bookRfid, userRfid]);
@@ -721,8 +728,9 @@ except Exception as e:
 
   app.post("/api/return", async (req, res) => {
     try {
-      const { bookRfid } = req.body;
-      if (!bookRfid) return res.status(400).json({ error: 'bookRfid is required' });
+      const parsed = returnSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: 'bookRfid is required', details: parsed.error.issues });
+      const { bookRfid } = parsed.data;
 
       // Делегируем в Python бизнес-слой (механическая верификация)
       const result = await runPythonBridge('return', [bookRfid]);
@@ -797,10 +805,9 @@ except Exception as e:
 
   app.post("/api/load-book", async (req, res) => {
     try {
-      const { bookRfid, title, author } = req.body;
-      if (!bookRfid || !title) {
-        return res.status(400).json({ error: 'bookRfid and title are required' });
-      }
+      const parsed = loadBookSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: 'bookRfid and title are required', details: parsed.error.issues });
+      const { bookRfid, title, author } = parsed.data;
 
       const result = await cabinetService.loadBook(bookRfid, title, author);
       if (!result.success) {

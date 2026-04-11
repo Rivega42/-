@@ -69,17 +69,17 @@ export default function SettingsPanel() {
         </h3>
         <div className="grid grid-cols-3 gap-4">
           <div>
-            <Label>Перемещение XY</Label>
+            <Label>Перемещение XY (мс)</Label>
             <Input type="number" value={settings.timeouts.move}
               onChange={e => update('timeouts', 'move', parseInt(e.target.value) || 0)} />
           </div>
           <div>
-            <Label>Выдвижение лотка</Label>
+            <Label>Выдвижение лотка (мс)</Label>
             <Input type="number" value={settings.timeouts.tray_extend}
               onChange={e => update('timeouts', 'tray_extend', parseInt(e.target.value) || 0)} />
           </div>
           <div>
-            <Label>Ожидание пользователя</Label>
+            <Label>Ожидание пользователя (мс)</Label>
             <Input type="number" value={settings.timeouts.user_wait}
               onChange={e => update('timeouts', 'user_wait', parseInt(e.target.value) || 0)} />
           </div>
@@ -98,7 +98,7 @@ export default function SettingsPanel() {
           </div>
           <div>
             <Label>Bot Token</Label>
-            <Input placeholder="123456:ABC..."
+            <Input type="password" placeholder="Вставьте токен из @BotFather"
               value={settings.telegram.bot_token}
               onChange={e => update('telegram', 'bot_token', e.target.value)} />
           </div>
