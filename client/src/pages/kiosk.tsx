@@ -553,7 +553,7 @@ export default function KioskPage() {
     if (screen === 'welcome' || screen === 'maintenance') return null;
     
     return (
-      <div className="fixed top-0 left-0 right-0 h-20 bg-slate-900 text-white flex items-center justify-between px-6 z-50" data-testid="header">
+      <div className="fixed top-0 left-0 right-0 h-20 bg-black text-white flex items-center justify-between px-6 z-50 border-b-4 border-black" data-testid="header">
         <div className="flex items-center gap-4">
           {!['reader_menu', 'librarian_menu', 'admin_menu'].includes(screen) && (
             <Button 
@@ -614,15 +614,15 @@ export default function KioskPage() {
   };
 
   const renderWelcome = () => (
-    <div className="min-h-screen bg-gradient-to-br from-slate-800 to-slate-900 flex flex-col items-center justify-center text-white p-8" data-testid="screen-welcome">
-      <Library className="w-28 h-28 mb-6 text-blue-400" />
-      <h1 className="text-5xl font-bold mb-3">Добро пожаловать!</h1>
-      <p className="text-2xl text-slate-300 mb-12">Автоматический шкаф книговыдачи</p>
-      
-      <div className="bg-slate-700/50 rounded-2xl p-10 flex flex-col items-center max-w-2xl w-full">
-        <CreditCard className="w-20 h-20 mb-4 text-blue-400 animate-pulse" />
-        <p className="text-xl mb-2">Приложите карту читателя</p>
-        <p className="text-base text-slate-400 mb-6">или выберите тестового пользователя</p>
+    <div className="min-h-screen bg-white flex flex-col items-center justify-center text-black p-8" data-testid="screen-welcome">
+      <Library className="w-28 h-28 mb-6 text-black" />
+      <h1 className="text-5xl font-black mb-3">Добро пожаловать!</h1>
+      <p className="text-2xl text-black mb-12">Автоматический шкаф книговыдачи</p>
+
+      <div className="border-4 border-black rounded-2xl p-10 flex flex-col items-center max-w-2xl w-full bg-white">
+        <CreditCard className="w-20 h-20 mb-4 text-black animate-pulse" />
+        <p className="text-xl font-bold mb-2">Приложите карту читателя</p>
+        <p className="text-base text-black mb-6">или выберите тестового пользователя</p>
         
         <div className="flex flex-wrap gap-3 justify-center">
           <Button 
@@ -647,7 +647,7 @@ export default function KioskPage() {
           <Button
             size="lg"
             variant="outline"
-            className="h-20 px-8 text-xl min-w-[200px] border-white text-white hover:bg-white hover:text-slate-900"
+            className="h-20 px-8 text-xl min-w-[200px] border-2 border-black text-black hover:bg-black hover:text-white"
             onClick={() => { setAdminPin(''); setShowPinDialog(true); }}
             data-testid="button-test-admin"
           >
