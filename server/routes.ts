@@ -10,6 +10,8 @@ import { storage } from "./storage";
 import { rfidService } from "./services/rfidService";
 import { cabinetService } from "./services/cabinetService";
 import { irbisService } from "./services/irbisService";
+import { pythonBridge } from "./services/pythonBridge";
+import { operationQueue } from "./services/operationQueue";
 import { execSync } from 'child_process';
 import * as fs from 'fs';
 import type {
@@ -631,58 +633,9 @@ except Exception as e:
 
   // ==================== БИЗНЕС-ОПЕРАЦИИ ====================
 
-  // Вспомогательная: запуск Python bridge и сбор результата
-  function runPythonBridge(command: string, args: string[]): Promise<{ success: boolean; [key: string]: any }> {
-    return new Promise((resolve, reject) => {
-      const { spawn } = require('child_process');
-      const bridgePath = '/home/admin42/bookcabinet/bookcabinet/bridge.py';
-      const proc = spawn('python3', [bridgePath, command, ...args], {
-        cwd: '/home/admin42/bookcabinet',
-        timeout: 120000,
-      });
-
-      let stdout = '';
-      let stderr = '';
-      const progressLines: any[] = [];
-
-      proc.stdout.on('data', (data: Buffer) => {
-        stdout += data.toString();
-        // Parse progress events as they arrive
-        const lines = stdout.split('\n');
-        stdout = lines.pop() || ''; // keep incomplete line
-        for (const line of lines) {
-          if (!line.trim()) continue;
-          try {
-            const msg = JSON.parse(line);
-            if (msg.type === 'progress') {
-              progressLines.push(msg);
-              broadcast({ type: 'progress', data: msg });
-            }
-          } catch {}
-        }
-      });
-
-      proc.stderr.on('data', (data: Buffer) => { stderr += data.toString(); });
-
-      proc.on('close', (code: number) => {
-        // Parse remaining stdout
-        if (stdout.trim()) {
-          try {
-            const msg = JSON.parse(stdout.trim());
-            if (msg.type === 'result') {
-              resolve(msg);
-              return;
-            }
-          } catch {}
-        }
-        if (code !== 0) {
-          reject(new Error(stderr || `Python bridge exited with code ${code}`));
-        } else {
-          resolve({ success: false, message: 'No result from Python bridge' });
-        }
-      });
-    });
-  }
+  // Python bridge — delegated to PythonBridgeService (server/services/pythonBridge.ts)
+  const runPythonBridge = (command: string, args: string[]) =>
+    pythonBridge.execute(command, args, (msg) => broadcast({ type: 'progress', data: msg }));
 
   app.post("/api/issue", async (req, res) => {
     try {
@@ -2301,6 +2254,46 @@ except Exception as e:
     if (!steps) return res.status(404).json({ error: `Последовательность "${name}" не найдена` });
     await storage.addSystemLog({ level: 'INFO', message: `Teach: воспроизведение "${name}"`, component: 'TEACH' });
     res.json({ success: true, message: `Воспроизведение "${name}" (${steps.length} шагов)`, steps });
+  });
+
+  // ==================== OPERATION QUEUE ====================
+
+  app.get("/api/queue", (req, res) => {
+    res.json(operationQueue.getAll());
+  });
+
+  app.post("/api/queue", (req, res) => {
+    try {
+      const { type, params, userId } = req.body;
+      if (!type || !userId) {
+        return res.status(400).json({ error: 'type and userId are required' });
+      }
+      const id = operationQueue.add({ type, params: params || {}, userId });
+      res.json({ success: true, id, position: operationQueue.getPosition(id) });
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : 'Queue add failed' });
+    }
+  });
+
+  // ==================== IRBIS SYNC QUEUE ====================
+
+  app.get("/api/irbis/queue", async (req, res) => {
+    try {
+      const result = await runPythonBridge('irbis_queue', ['list']);
+      res.json(result);
+    } catch {
+      // Fallback: return empty
+      res.json({ pending: [], total: 0 });
+    }
+  });
+
+  app.post("/api/irbis/sync", async (req, res) => {
+    try {
+      const result = await runPythonBridge('irbis_queue', ['sync']);
+      res.json(result);
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : 'Sync failed' });
+    }
   });
 
   // ==================== ПЕРИОДИЧЕСКИЕ ЗАДАЧИ ====================

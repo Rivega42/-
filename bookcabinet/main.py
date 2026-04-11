@@ -158,14 +158,30 @@ async def init_gpio():
 async def on_startup(app):
     """Действия при запуске сервера"""
     logger.info('Запуск BookCabinet...')
-    
+
     await startup_checks()
-    
+
+    # Startup recovery — close shutters, retract tray, auto-home
+    try:
+        from bookcabinet.monitoring.watchdog import startup_recovery
+        recovery_result = await startup_recovery.check_and_recover()
+        logger.info(f'Startup recovery: {recovery_result}')
+    except Exception as e:
+        logger.error(f'Startup recovery failed: {e}')
+
     # Запуск опроса карт (NFC + UHF)
     await start_card_polling()
-    
+
+    # Start IRBIS offline sync periodic task
+    try:
+        from bookcabinet.irbis.sync_queue import sync_queue
+        sync_queue.start_periodic_sync(interval_seconds=300)
+        logger.info('IRBIS periodic sync started')
+    except Exception as e:
+        logger.warning(f'IRBIS sync queue startup failed: {e}')
+
     db.add_system_log('INFO', 'Система запущена', 'main')
-    
+
     logger.info(f'Сервер запущен на http://{HOST}:{PORT}')
     logger.info(f'Mock режим: {MOCK_MODE}')
 
@@ -173,11 +189,18 @@ async def on_startup(app):
 async def on_shutdown(app):
     """Действия при остановке сервера"""
     logger.info('Остановка BookCabinet...')
-    
+
     algorithms.stop()
     stop_card_polling()
     book_reader.stop_polling()
-    
+
+    # Stop IRBIS sync task
+    try:
+        from bookcabinet.irbis.sync_queue import sync_queue
+        sync_queue.stop_periodic_sync()
+    except Exception:
+        pass
+
     db.add_system_log('INFO', 'Система остановлена', 'main')
 
 

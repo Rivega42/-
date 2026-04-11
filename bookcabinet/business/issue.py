@@ -143,8 +143,12 @@ class IssueService:
                 irbis_success, irbis_msg = await self.irbis.issue_book(book_rfid, user_rfid)
                 if not irbis_success:
                     db.add_system_log('WARNING', f"ИРБИС: {irbis_msg}", 'issue')
+                    from ..irbis.sync_queue import sync_queue
+                    sync_queue.add('issue', {'book_rfid': book_rfid, 'user_rfid': user_rfid})
             except Exception as e:
                 db.add_system_log('WARNING', f"ИРБИС недоступен: {e}. Книга выдана локально.", 'issue')
+                from ..irbis.sync_queue import sync_queue
+                sync_queue.add('issue', {'book_rfid': book_rfid, 'user_rfid': user_rfid})
 
             # === DONE ===
             self.state = IssueState.DONE

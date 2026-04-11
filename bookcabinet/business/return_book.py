@@ -122,8 +122,12 @@ class ReturnService:
                 irbis_success, irbis_msg = await self.irbis.return_book(book_rfid)
                 if not irbis_success:
                     db.add_system_log('WARNING', f"ИРБИС: {irbis_msg}", 'return')
+                    from ..irbis.sync_queue import sync_queue
+                    sync_queue.add('return', {'book_rfid': book_rfid})
             except Exception as e:
                 db.add_system_log('WARNING', f"ИРБИС недоступен: {e}. Книга возвращена локально.", 'return')
+                from ..irbis.sync_queue import sync_queue
+                sync_queue.add('return', {'book_rfid': book_rfid})
 
             # === DONE ===
             self.state = ReturnState.DONE
