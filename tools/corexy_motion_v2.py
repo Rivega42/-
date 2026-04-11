@@ -257,10 +257,10 @@ class CoreXYMotionV2:
         self.backoff_if_pressed('BOTTOM', SENSOR_BOTTOM, 1, 0, self.config.backoff_y)
         self.backoff_if_pressed('TOP', SENSOR_TOP, 0, 1, self.config.backoff_y)
 
-        ok_x = self.seek_axis('X->LEFT', 0, 0, SENSOR_LEFT, 1, 1, self.config.backoff_x, opposite_sensor=SENSOR_RIGHT)
-        if not ok_x:
+        ok_y = self.seek_axis("Y->BOTTOM", 0, 1, SENSOR_BOTTOM, 1, 0, self.config.backoff_y, opposite_sensor=SENSOR_TOP)
+        if not ok_y:
             return False
-        return self.seek_axis('Y->BOTTOM', 0, 1, SENSOR_BOTTOM, 1, 0, self.config.backoff_y, opposite_sensor=SENSOR_TOP)
+        return self.seek_axis("X->LEFT", 0, 0, SENSOR_LEFT, 1, 1, self.config.backoff_x, opposite_sensor=SENSOR_RIGHT)
 
     def x_sweep(self) -> bool:
         print('X sweep start', self.state())
