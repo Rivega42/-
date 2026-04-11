@@ -55,7 +55,19 @@
         "back_y": 45280
       }
     ],
-    "note": "Interpolate front_y and back_y separately between anchors"
+    "note": "Interpolate front_y and back_y separately between anchors",
+    "rack_anchors": {
+      "3": {
+        "shelf_7": {
+          "front_y": 14902,
+          "back_y": 14902
+        },
+        "shelf_10": {
+          "front_y": 21310,
+          "back_y": 21310
+        }
+      }
+    }
   },
   "disabled_cells": [
     "1.1.0",
@@ -79,14 +91,16 @@
     "2.1.0",
     "2.2.19",
     "2.2.20",
-    "2.2.21"
+    "2.2.21",
+    "1.3.10",
+    "1.3.11"
   ],
   "special_cells": {
     "window": "1.2.9"
   },
   "motion": {
-    "fast_steps_per_sec": 2500,
-    "homing_fast_steps_per_sec": 1500,
+    "fast_steps_per_sec": 3000,
+    "homing_fast_steps_per_sec": 1800,
     "slow_steps_per_sec": 300
   }
 }
