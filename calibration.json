@@ -1,5 +1,5 @@
 {
-  "version": "2026-04-11",
+  "version": "2026-04-11-final",
   "description": "BookCabinet XY calibration. Address format: depth.rack.shelf (e.g. 1.2.9)",
   "racks": {
     "1": 100,
@@ -17,17 +17,17 @@
       {
         "shelf": 0,
         "front_y": 60,
-        "back_y": 60
+        "back_y": 160
       },
       {
         "shelf": 3,
         "front_y": 6510,
-        "back_y": 6510
+        "back_y": 6610
       },
       {
         "shelf": 5,
         "front_y": 10320,
-        "back_y": 10320
+        "back_y": 10420
       },
       {
         "shelf": 6,
@@ -37,12 +37,12 @@
       {
         "shelf": 7,
         "front_y": 15002,
-        "back_y": 15002
+        "back_y": 15102
       },
       {
         "shelf": 10,
         "front_y": 21410,
-        "back_y": 21420
+        "back_y": 21510
       },
       {
         "shelf": 14,
@@ -114,6 +114,39 @@
   "motion": {
     "fast_steps_per_sec": 3000,
     "homing_fast_steps_per_sec": 1800,
-    "slow_steps_per_sec": 300
-  }
+    "slow_steps_per_sec": 300,
+    "wave_seg": 200,
+    "note": "Smooth acceleration TBD - requires pigpio wave_chain research"
+  },
+  "shutters": {
+    "front": {
+      "pin": 2,
+      "open": 1,
+      "close": 0,
+      "note": "pigpio digital, HIGH=open"
+    },
+    "back": {
+      "pin": 3,
+      "open": 1,
+      "close": 0,
+      "note": "pigpio digital, HIGH=open"
+    }
+  },
+  "locks": {
+    "front": {
+      "pin": 18,
+      "status": "BROKEN - stripped gears, replace before use"
+    },
+    "back": {
+      "pin": 13,
+      "status": "pin unconfirmed - verify on Monday"
+    }
+  },
+  "notes": [
+    "All 3 racks verified to use same Y coordinates",
+    "back_y = front_y + 100 (consistent across all shelves)",
+    "Tray calibration pending (Monday)",
+    "Lock pin 18 broken - needs replacement",
+    "Lock pin 13 - pin unconfirmed, needs Monday verification"
+  ]
 }
