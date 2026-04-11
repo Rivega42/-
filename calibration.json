@@ -53,6 +53,14 @@
       "14": 29830,
       "20": 42630,
       "21": 45180
+    },
+    "rack_y_offsets": {
+      "description": "Y correction per rack at shelf_20 (measured - base)",
+      "shelf_20": {
+        "1": 42680,
+        "2": 43030,
+        "3": 42630
+      }
     }
   },
   "disabled_cells": [
