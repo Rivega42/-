@@ -15,6 +15,10 @@ import {
   BLOCKED_CELLS
 } from "@shared/schema";
 import { randomUUID } from "crypto";
+import * as fs from "fs";
+import * as path from "path";
+
+const DATA_FILE = path.join(process.cwd(), "data", "storage.json");
 
 export interface IStorage {
   // Cells
@@ -82,6 +86,8 @@ export class MemStorage implements IStorage {
   private systemLogs: Map<string, SystemLog>;
   private readHistory: Date[];
 
+  private saveTimer: ReturnType<typeof setTimeout> | null = null;
+
   constructor() {
     this.cells = new Map();
     this.users = new Map();
@@ -91,9 +97,61 @@ export class MemStorage implements IStorage {
     this.rfidTags = new Map();
     this.systemLogs = new Map();
     this.readHistory = [];
-    
-    this.initializeCells();
-    this.initializeMockData();
+
+    if (!this.loadFromDisk()) {
+      this.initializeCells();
+      this.initializeMockData();
+      this.scheduleSave();
+    }
+  }
+
+  private loadFromDisk(): boolean {
+    try {
+      if (!fs.existsSync(DATA_FILE)) return false;
+      const raw = fs.readFileSync(DATA_FILE, "utf-8");
+      const data = JSON.parse(raw);
+
+      if (data.cells) for (const [k, v] of Object.entries(data.cells)) this.cells.set(Number(k), v as Cell);
+      if (data.users) for (const [k, v] of Object.entries(data.users)) this.users.set(k, v as User);
+      if (data.books) for (const [k, v] of Object.entries(data.books)) this.books.set(k, v as Book);
+      if (data.operations) for (const [k, v] of Object.entries(data.operations)) this.operations.set(k, v as Operation);
+      if (data.settings) for (const [k, v] of Object.entries(data.settings)) this.settings.set(k, v as Setting);
+
+      console.log(`[storage] Loaded from ${DATA_FILE}: ${this.cells.size} cells, ${this.users.size} users, ${this.books.size} books, ${this.operations.size} operations`);
+      return this.cells.size > 0;
+    } catch (e) {
+      console.error(`[storage] Failed to load ${DATA_FILE}:`, e);
+      return false;
+    }
+  }
+
+  private scheduleSave(): void {
+    // Debounce: save at most once per second
+    if (this.saveTimer) return;
+    this.saveTimer = setTimeout(() => {
+      this.saveTimer = null;
+      this.saveToDisk();
+    }, 1000);
+  }
+
+  private saveToDisk(): void {
+    try {
+      const dir = path.dirname(DATA_FILE);
+      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+
+      const data = {
+        cells: Object.fromEntries(this.cells),
+        users: Object.fromEntries(this.users),
+        books: Object.fromEntries(this.books),
+        operations: Object.fromEntries(this.operations),
+        settings: Object.fromEntries(this.settings),
+        savedAt: new Date().toISOString(),
+      };
+
+      fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2), "utf-8");
+    } catch (e) {
+      console.error(`[storage] Failed to save ${DATA_FILE}:`, e);
+    }
   }
 
   private initializeCells(): void {
@@ -234,6 +292,7 @@ export class MemStorage implements IStorage {
     
     const updated = { ...cell, ...data, updatedAt: new Date() };
     this.cells.set(id, updated);
+    this.scheduleSave();
     return updated;
   }
 
@@ -269,15 +328,18 @@ export class MemStorage implements IStorage {
   }
 
   async createUser(user: InsertUser): Promise<User> {
-    return this.createUserSync(user);
+    const u = this.createUserSync(user);
+    this.scheduleSave();
+    return u;
   }
 
   async updateUser(id: string, data: Partial<User>): Promise<User | undefined> {
     const user = this.users.get(id);
     if (!user) return undefined;
-    
+
     const updated = { ...user, ...data };
     this.users.set(id, updated);
+    this.scheduleSave();
     return updated;
   }
 
@@ -295,19 +357,24 @@ export class MemStorage implements IStorage {
   }
 
   async createBook(book: InsertBook): Promise<Book> {
-    return this.createBookSync(book);
+    const b = this.createBookSync(book);
+    this.scheduleSave();
+    return b;
   }
 
   async addBook(book: InsertBook): Promise<Book> {
-    return this.createBookSync(book);
+    const b = this.createBookSync(book);
+    this.scheduleSave();
+    return b;
   }
 
   async updateBook(id: string, data: Partial<Book>): Promise<Book | undefined> {
     const book = this.books.get(id);
     if (!book) return undefined;
-    
+
     const updated = { ...book, ...data, updatedAt: new Date() };
     this.books.set(id, updated);
+    this.scheduleSave();
     return updated;
   }
 
@@ -350,6 +417,7 @@ export class MemStorage implements IStorage {
       durationMs: op.durationMs ?? null,
     };
     this.operations.set(newOp.id, newOp);
+    this.scheduleSave();
     return newOp;
   }
 
@@ -383,6 +451,7 @@ export class MemStorage implements IStorage {
       updatedAt: new Date(),
     };
     this.settings.set(key, setting);
+    this.scheduleSave();
     return setting;
   }
 
