@@ -37,7 +37,8 @@ STEP_MASK = (1 << MOTOR_A_STEP) | (1 << MOTOR_B_STEP)
 
 @dataclass(frozen=True)
 class MotionConfig:
-    fast: int = 800
+    fast: int = 2500
+    homing_fast: int = 1500
     slow: int = 300
     backoff_x: int = 300
     backoff_y: int = 500
@@ -190,7 +191,10 @@ class CoreXYMotionV2:
                         self.pi.wave_tx_stop()
                         print('  TIMEOUT remainder')
                         break
-                self.pi.wave_delete(wid2)
+                try:
+                    self.pi.wave_delete(wid2)
+                except pigpio.error:
+                    pass
 
         if cb:
             cb.cancel()
@@ -225,7 +229,7 @@ class CoreXYMotionV2:
         slow_extra: int = 100,
     ) -> bool:
         print(f'[{name}] FAST...', end=' ', flush=True)
-        hit_fast = self.move(go_ad, go_bd, fast_steps, self.config.fast, sensor)
+        hit_fast = self.move(go_ad, go_bd, fast_steps, self.config.homing_fast, sensor)
         print('OK' if hit_fast else 'FAIL', self.state())
         if not hit_fast:
             return False

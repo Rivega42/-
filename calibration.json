@@ -1,13 +1,95 @@
 {
-  "x_total": 20489,
-  "y_total": 44845,
-  "x_mid": 10244,
-  "home": "RIGHT+BOTTOM",
-  "note": "x=0 at RIGHT, y=0 at BOTTOM. steps_per_mm measured 500steps=14mm",
-  "steps_per_mm_x": 36.0,
+  "version": "2026-04-11",
+  "description": "BookCabinet XY calibration. Address format: depth.rack.shelf (e.g. 1.2.9)",
   "racks": {
-    "rack_1": 100,
-    "rack_2": 10220,
-    "rack_3": 20370
+    "1": 100,
+    "2": 10220,
+    "3": 20370
+  },
+  "depth": {
+    "front": 1,
+    "back": 2,
+    "back_y_offset": 30
+  },
+  "shelves": {
+    "method": "piecewise_linear",
+    "anchors": [
+      {
+        "shelf": 0,
+        "y": 60
+      },
+      {
+        "shelf": 7,
+        "y": 14942
+      },
+      {
+        "shelf": 14,
+        "y": 29830
+      },
+      {
+        "shelf": 20,
+        "y": 42630
+      },
+      {
+        "shelf": 21,
+        "y": 45180
+      }
+    ],
+    "measured": {
+      "0": 60,
+      "1": 2250,
+      "2": 4340,
+      "3": 6510,
+      "4": 8660,
+      "5": 10760,
+      "6": 12860,
+      "7": 14942,
+      "8": 17060,
+      "9": 19260,
+      "10": 21410,
+      "11": 23560,
+      "12": 25710,
+      "13": 27860,
+      "14": 29830,
+      "20": 42630,
+      "21": 45180
+    },
+    "rack_y_offsets": {
+      "description": "Y correction per rack at shelf_20 (measured - base)",
+      "shelf_20": {
+        "1": 42680,
+        "2": 43030,
+        "3": 42630
+      }
+    }
+  },
+  "disabled_cells": [
+    "1.2.0",
+    "1.3.0",
+    "1.1.21",
+    "2.1.0",
+    "2.1.21",
+    "2.3.21",
+    "1.2.7",
+    "1.2.8",
+    "1.2.10",
+    "1.2.11",
+    "1.2.12",
+    "1.2.13",
+    "1.2.14",
+    "1.2.15",
+    "1.2.16",
+    "1.2.17",
+    "2.2.19",
+    "2.2.20",
+    "2.2.21"
+  ],
+  "special_cells": {
+    "window": "1.2.9"
+  },
+  "motion": {
+    "fast_steps_per_sec": 2500,
+    "homing_fast_steps_per_sec": 1500,
+    "slow_steps_per_sec": 300
   }
 }
