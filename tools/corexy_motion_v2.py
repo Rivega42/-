@@ -42,7 +42,7 @@ class MotionConfig:
     slow: int = 300
     backoff_x: int = 300
     backoff_y: int = 500
-    wave_seg: int = 200
+    wave_seg: int = 3000
     glitch_us: int = 300
     stable_reads: int = 5
     stable_delay: float = 0.002
