@@ -50,6 +50,11 @@
         "back_y": 29930
       },
       {
+        "shelf": 16,
+        "front_y": 34026,
+        "back_y": 34126
+      },
+      {
         "shelf": 18,
         "front_y": 38363,
         "back_y": 38463
