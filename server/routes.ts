@@ -1024,34 +1024,102 @@ except Exception as e:
     }
   });
 
+  // ==================== ЭКСТРЕННАЯ ОСТАНОВКА ====================
+
+  let movementInProgress = false;
+
+  app.post("/api/emergency-stop", async (req, res) => {
+    try {
+      movementInProgress = false;
+      systemStatus.state = 'idle';
+      systemStatus.currentOperation = undefined;
+
+      await storage.addSystemLog({
+        level: 'WARNING',
+        message: 'ЭКСТРЕННАЯ ОСТАНОВКА активирована',
+        component: 'SAFETY',
+      });
+
+      broadcast({ type: 'status', data: systemStatus });
+      res.json({ success: true, message: 'Emergency stop activated' });
+    } catch (error) {
+      res.status(500).json({ error: 'Emergency stop failed' });
+    }
+  });
+
   // ==================== ТЕСТИРОВАНИЕ МЕХАНИКИ ====================
+
+  const MAX_SPEED = 3000; // Выше — stall мотора
+
+  // DIR_TO_SENSOR: нельзя двигаться в направлении нажатого концевика
+  function checkEndstopSafety(axis: string, steps: number): string | null {
+    const sensors = systemStatus.sensors;
+    if (axis === 'x' && steps < 0 && sensors.x_begin) return 'Концевик LEFT нажат — движение влево заблокировано';
+    if (axis === 'x' && steps > 0 && sensors.x_end) return 'Концевик RIGHT нажат — движение вправо заблокировано';
+    if (axis === 'y' && steps < 0 && sensors.y_begin) return 'Концевик BOTTOM нажат — движение вниз заблокировано';
+    if (axis === 'y' && steps > 0 && sensors.y_end) return 'Концевик TOP нажат — движение вверх заблокировано';
+    return null;
+  }
 
   app.post("/api/test/motor", async (req, res) => {
     try {
       const { command, axis, steps, speed } = req.body;
-      
+
+      // Блокировка параллельных движений
+      if (movementInProgress && command === 'move') {
+        return res.status(409).json({ error: 'Движение уже выполняется' });
+      }
+
+      // Валидация скорости
+      if (speed && speed > MAX_SPEED) {
+        return res.status(400).json({ error: `Скорость ${speed} превышает максимум ${MAX_SPEED} шаг/сек` });
+      }
+
+      // DIR_TO_SENSOR защита
+      if (command === 'move' && axis && steps) {
+        const blocked = checkEndstopSafety(axis, steps);
+        if (blocked) {
+          return res.status(400).json({ error: blocked });
+        }
+      }
+
       await storage.addSystemLog({
         level: 'INFO',
         message: `Тест мотора: ${command} ${axis || ''} steps=${steps || 0} speed=${speed || 1000}`,
         component: 'MOTOR',
       });
 
-      // Симуляция движения мотора
       if (command === 'move') {
-        const currentPos = systemStatus.position;
-        if (axis === 'x') {
-          systemStatus.position = { ...currentPos, x: currentPos.x + (steps || 0) };
-        } else if (axis === 'y') {
-          systemStatus.position = { ...currentPos, y: currentPos.y + (steps || 0) };
+        movementInProgress = true;
+        systemStatus.state = 'busy';
+        try {
+          const currentPos = systemStatus.position;
+          if (axis === 'x') {
+            systemStatus.position = { ...currentPos, x: currentPos.x + (steps || 0) };
+          } else if (axis === 'y') {
+            systemStatus.position = { ...currentPos, y: currentPos.y + (steps || 0) };
+          }
+          broadcast({ type: 'position', data: { ...systemStatus.position, timestamp: new Date().toISOString() } });
+        } finally {
+          movementInProgress = false;
+          systemStatus.state = 'idle';
         }
-        broadcast({ type: 'position', data: { ...systemStatus.position, timestamp: new Date().toISOString() } });
       } else if (command === 'home') {
-        systemStatus.position = { x: 0, y: 0, tray: 0 };
-        broadcast({ type: 'position', data: { ...systemStatus.position, timestamp: new Date().toISOString() } });
+        movementInProgress = true;
+        systemStatus.state = 'busy';
+        try {
+          systemStatus.position = { x: 0, y: 0, tray: 0 };
+          broadcast({ type: 'position', data: { ...systemStatus.position, timestamp: new Date().toISOString() } });
+        } finally {
+          movementInProgress = false;
+          systemStatus.state = 'idle';
+        }
       }
 
       res.json({ success: true, position: systemStatus.position });
     } catch (error) {
+      movementInProgress = false;
+      systemStatus.state = 'idle';
       res.status(500).json({ error: error instanceof Error ? error.message : 'Motor test failed' });
     }
   });
@@ -1059,23 +1127,43 @@ except Exception as e:
   app.post("/api/test/tray", async (req, res) => {
     try {
       const { command } = req.body;
-      
+
+      if (movementInProgress) {
+        return res.status(409).json({ error: 'Движение уже выполняется' });
+      }
+
+      // DIR_TO_SENSOR: проверка концевиков лотка
+      if (command === 'extend' && systemStatus.sensors.tray_end) {
+        return res.status(400).json({ error: 'Концевик лотка (передний) нажат — выдвижение заблокировано' });
+      }
+      if (command === 'retract' && systemStatus.sensors.tray_begin) {
+        return res.status(400).json({ error: 'Концевик лотка (задний) нажат — задвижение заблокировано' });
+      }
+
       await storage.addSystemLog({
         level: 'INFO',
         message: `Тест лотка: ${command}`,
         component: 'MOTOR',
       });
 
-      // Симуляция движения лотка
-      if (command === 'extend') {
-        systemStatus.position = { ...systemStatus.position, tray: 1000 };
-      } else if (command === 'retract') {
-        systemStatus.position = { ...systemStatus.position, tray: 0 };
+      movementInProgress = true;
+      systemStatus.state = 'busy';
+      try {
+        if (command === 'extend') {
+          systemStatus.position = { ...systemStatus.position, tray: 1000 };
+        } else if (command === 'retract') {
+          systemStatus.position = { ...systemStatus.position, tray: 0 };
+        }
+        broadcast({ type: 'position', data: { ...systemStatus.position, timestamp: new Date().toISOString() } });
+      } finally {
+        movementInProgress = false;
+        systemStatus.state = 'idle';
       }
-      broadcast({ type: 'position', data: { ...systemStatus.position, timestamp: new Date().toISOString() } });
 
       res.json({ success: true, position: systemStatus.position });
     } catch (error) {
+      movementInProgress = false;
+      systemStatus.state = 'idle';
       res.status(500).json({ error: error instanceof Error ? error.message : 'Tray test failed' });
     }
   });
@@ -1191,7 +1279,17 @@ except Exception as e:
   app.post("/api/calibration", async (req, res) => {
     try {
       const newData = req.body;
-      
+
+      // Валидация скоростей — не больше 3000 шаг/сек (stall мотора)
+      if (newData.speeds) {
+        if (newData.speeds.xy && newData.speeds.xy > MAX_SPEED) {
+          return res.status(400).json({ error: `Скорость XY ${newData.speeds.xy} превышает максимум ${MAX_SPEED}` });
+        }
+        if (newData.speeds.tray && newData.speeds.tray > MAX_SPEED) {
+          return res.status(400).json({ error: `Скорость лотка ${newData.speeds.tray} превышает максимум ${MAX_SPEED}` });
+        }
+      }
+
       // Мержим новые данные с существующими
       calibrationData = {
         ...calibrationData,
@@ -1678,14 +1776,18 @@ except Exception as e:
   app.post("/api/calibration/wizard/move", async (req, res) => {
     try {
       const { direction, stepIndex } = req.body; // direction: 'W', 'A', 'S', 'D'
-      
+
+      if (movementInProgress) {
+        return res.status(409).json({ error: 'Движение уже выполняется' });
+      }
+
       if (stepIndex !== undefined) {
         calibrationWizard.stepSize = Math.max(0, Math.min(8, stepIndex));
       }
-      
+
       const stepMm = calibrationWizard.stepSizes[calibrationWizard.stepSize];
       const stepSteps = stepMm * 10; // примерно 10 шагов на мм
-      
+
       let dx = 0, dy = 0;
       switch (direction) {
         case 'W': dy = stepSteps * calibrationData.kinematics.y_plus_dir_a; break;
@@ -1693,19 +1795,34 @@ except Exception as e:
         case 'A': dx = -stepSteps * calibrationData.kinematics.x_plus_dir_a; break;
         case 'D': dx = stepSteps * calibrationData.kinematics.x_plus_dir_a; break;
       }
-      
-      systemStatus.position.x += dx;
-      systemStatus.position.y += dy;
-      calibrationWizard.currentPosition = { 
-        x: systemStatus.position.x, 
-        y: systemStatus.position.y 
-      };
-      
-      // Симуляция движения
-      await new Promise(resolve => setTimeout(resolve, 50));
-      
-      broadcast({ type: 'position', data: { ...systemStatus.position, timestamp: new Date().toISOString() } });
-      
+
+      // DIR_TO_SENSOR: проверка концевиков перед движением
+      const axis = (dx !== 0) ? 'x' : 'y';
+      const steps = (dx !== 0) ? dx : dy;
+      const blocked = checkEndstopSafety(axis, steps);
+      if (blocked) {
+        return res.status(400).json({ error: blocked });
+      }
+
+      movementInProgress = true;
+      systemStatus.state = 'busy';
+      try {
+        systemStatus.position.x += dx;
+        systemStatus.position.y += dy;
+        calibrationWizard.currentPosition = {
+          x: systemStatus.position.x,
+          y: systemStatus.position.y
+        };
+
+        // Симуляция движения
+        await new Promise(resolve => setTimeout(resolve, 50));
+
+        broadcast({ type: 'position', data: { ...systemStatus.position, timestamp: new Date().toISOString() } });
+      } finally {
+        movementInProgress = false;
+        systemStatus.state = 'idle';
+      }
+
       res.json({
         success: true,
         position: systemStatus.position,
@@ -1713,6 +1830,8 @@ except Exception as e:
         stepIndex: calibrationWizard.stepSize
       });
     } catch (error) {
+      movementInProgress = false;
+      systemStatus.state = 'idle';
       res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to move' });
     }
   });
