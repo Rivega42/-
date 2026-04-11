@@ -138,7 +138,10 @@ def step_pigpio(a_dir, b_dir, n, speed, stop_sensor=None):
 
     if cb:
         cb.cancel()
-    pi.wave_delete(wid)
+    try:
+        pi.wave_delete(wid)
+    except Exception:
+        pass
     pi.wave_clear()
     return _hit
 
