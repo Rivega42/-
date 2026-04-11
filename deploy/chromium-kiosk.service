@@ -1,0 +1,34 @@
+[Unit]
+Description=BookCabinet Chromium Kiosk
+After=bookcabinet-ui.service graphical.target
+Wants=bookcabinet-ui.service
+
+[Service]
+Type=simple
+User=admin42
+Group=admin42
+Environment=DISPLAY=:0
+Environment=XAUTHORITY=/home/admin42/.Xauthority
+
+# Wait for UI server to be ready
+ExecStartPre=/bin/bash -c 'for i in $(seq 1 30); do curl -s http://localhost:5000 > /dev/null && break; sleep 1; done'
+
+ExecStart=/usr/bin/chromium \
+    --kiosk \
+    --noerrdialogs \
+    --disable-translate \
+    --no-first-run \
+    --fast \
+    --fast-start \
+    --disable-features=TranslateUI \
+    --disable-infobars \
+    --disable-session-crashed-bubble \
+    --disable-component-update \
+    --autoplay-policy=no-user-gesture-required \
+    http://localhost:5000
+
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=graphical.target
