@@ -6,7 +6,8 @@
   "note": "x=0 at RIGHT, y=0 at BOTTOM. steps_per_mm measured 500steps=14mm",
   "steps_per_mm_x": 36.0,
   "racks": {
-    "rack_1": 144,
-    "rack_2": 10432
+    "rack_1": 100,
+    "rack_2": 10220,
+    "rack_3": 20370
   }
 }
