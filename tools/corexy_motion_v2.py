@@ -43,8 +43,6 @@ class MotionConfig:
     backoff_x: int = 300
     backoff_y: int = 500
     wave_seg: int = 200
-    accel_steps: int = 400
-    min_speed: int = 400
     glitch_us: int = 300
     stable_reads: int = 5
     stable_delay: float = 0.002
@@ -98,8 +96,8 @@ class CoreXYMotionV2:
             time.sleep(delay)
         return acc >= need
 
-    def _move_at_speed(self, a_dir: int, b_dir: int, steps: int, speed: int, stop_sensor: int | None = None) -> bool:
-        """Internal: move at fixed speed. Returns True if endstop hit."""
+    def move(self, a_dir: int, b_dir: int, steps: int, speed: int, stop_sensor: int | None = None) -> bool:
+        """Smooth repeated wave_chain motion with stable endstop stop."""
         if steps <= 0:
             return False
 
@@ -207,190 +205,6 @@ class CoreXYMotionV2:
         self.pi.wave_clear()
         return hit
 
-
-    def _build_accel_wave(self, steps: int, speed: int) -> int:
-        """Build a SINGLE wave with variable pulse widths for smooth S-curve.
-
-        Creates one continuous waveform where each step has its own timing.
-        No gaps between segments = no jerks.
-
-        Profile: S-curve (cosine ramp)
-          - Accelerate from min_speed to speed over accel_steps
-          - Cruise at speed
-          - Decelerate from speed to min_speed over accel_steps
-
-        Returns wave_id (caller must delete after use).
-        Pigpio limit: ~12000 pulses per wave, so for long moves
-        we chunk into wave_chain segments but each chunk is smooth.
-        """
-        import math
-
-        v_min = self.config.min_speed
-        v_max = max(speed, v_min)
-        ramp = min(self.config.accel_steps, steps // 3)
-
-        if ramp < 5 or v_min >= v_max:
-            # Short move — single speed
-            half_us = int(1_000_000 / (2 * v_max))
-            pulses = []
-            for _ in range(steps):
-                pulses.append(pigpio.pulse(STEP_MASK, 0, half_us))
-                pulses.append(pigpio.pulse(0, STEP_MASK, half_us))
-            self.pi.wave_clear()
-            self.pi.wave_add_generic(pulses)
-            return self.pi.wave_create()
-
-        cruise = steps - ramp * 2
-
-        def speed_at(i: int) -> float:
-            if i < ramp:
-                # S-curve accel: cosine 0..pi mapped to v_min..v_max
-                t = i / ramp
-                return v_min + (v_max - v_min) * (1 - math.cos(math.pi * t)) / 2
-            elif i < ramp + cruise:
-                return v_max
-            else:
-                # S-curve decel
-                j = i - ramp - cruise
-                t = j / ramp
-                return v_max - (v_max - v_min) * (1 - math.cos(math.pi * t)) / 2
-
-        # Build pulses with variable timing
-        # Pigpio max ~5500 pulses per wave_add_generic, so we chunk
-        MAX_PULSES_PER_WAVE = 2500  # 2500 steps = 5000 pulses
-
-        all_pulses = []
-        for i in range(steps):
-            v = speed_at(i)
-            half_us = max(10, int(1_000_000 / (2 * v)))
-            all_pulses.append(pigpio.pulse(STEP_MASK, 0, half_us))
-            all_pulses.append(pigpio.pulse(0, STEP_MASK, half_us))
-
-        # If fits in one wave — perfect, no chunking
-        if steps <= MAX_PULSES_PER_WAVE:
-            self.pi.wave_clear()
-            self.pi.wave_add_generic(all_pulses)
-            wid = self.pi.wave_create()
-            return wid
-
-        # For longer moves: create multiple waves and chain them
-        # Returns -1 to signal caller should use _move_accel_chained
-        return -2  # special code: use chained approach
-
-    def _move_accel_chained(self, a_dir: int, b_dir: int, steps: int, speed: int, stop_sensor: int | None = None) -> bool:
-        """Move with smooth S-curve acceleration using chained waves.
-
-        For moves longer than ~2500 steps, creates multiple waves
-        and chains them. Each wave has variable pulse widths within it,
-        so transitions between waves are nearly seamless (same speed
-        at boundary).
-        """
-        import math
-
-        hit = False
-        self.pi.write(MOTOR_A_DIR, a_dir)
-        self.pi.write(MOTOR_B_DIR, b_dir)
-        time.sleep(0.001)
-
-        if stop_sensor is not None and self.sensor_stable(
-            stop_sensor, reads=self.config.poll_reads,
-            delay=self.config.poll_delay, need=self.config.poll_need,
-        ):
-            return True
-
-        def _on_endstop(gpio, level, tick):
-            nonlocal hit
-            if self.sensor_stable(stop_sensor, reads=self.config.poll_reads,
-                                   delay=self.config.poll_delay, need=self.config.poll_need):
-                hit = True
-                self.pi.wave_tx_stop()
-
-        cb = None
-        if stop_sensor is not None:
-            cb = self.pi.callback(stop_sensor, pigpio.RISING_EDGE, _on_endstop)
-
-        v_min = self.config.min_speed
-        v_max = max(speed, v_min)
-        ramp = min(self.config.accel_steps, steps // 3)
-        cruise = steps - ramp * 2 if ramp >= 5 else 0
-
-        def speed_at(i):
-            if ramp < 5 or v_min >= v_max:
-                return v_max
-            if i < ramp:
-                t = i / ramp
-                return v_min + (v_max - v_min) * (1 - math.cos(math.pi * t)) / 2
-            elif i < ramp + cruise:
-                return v_max
-            else:
-                j = i - ramp - cruise
-                t = j / ramp
-                return v_max - (v_max - v_min) * (1 - math.cos(math.pi * t)) / 2
-
-        # Build and send in chunks of 2000 steps
-        CHUNK = 2000
-        sent = 0
-
-        while sent < steps and not hit:
-            chunk_size = min(CHUNK, steps - sent)
-            pulses = []
-            for i in range(chunk_size):
-                v = speed_at(sent + i)
-                half_us = max(10, int(1_000_000 / (2 * v)))
-                pulses.append(pigpio.pulse(STEP_MASK, 0, half_us))
-                pulses.append(pigpio.pulse(0, STEP_MASK, half_us))
-
-            self.pi.wave_clear()
-            self.pi.wave_add_generic(pulses)
-            wid = self.pi.wave_create()
-            if wid < 0:
-                print(f'  wave_create error at step {sent}')
-                break
-
-            self.pi.wave_send_once(wid)
-
-            t0 = time.time()
-            while self.pi.wave_tx_busy():
-                time.sleep(0.001)
-                if stop_sensor is not None and not hit:
-                    if self.sensor_stable(stop_sensor, reads=self.config.poll_reads,
-                                           delay=self.config.poll_delay, need=self.config.poll_need):
-                        hit = True
-                        self.pi.wave_tx_stop()
-                        break
-                if time.time() - t0 > self.config.timeout_main:
-                    self.pi.wave_tx_stop()
-                    print('  TIMEOUT')
-                    break
-
-            try:
-                self.pi.wave_delete(wid)
-            except pigpio.error:
-                pass
-
-            sent += chunk_size
-
-        if cb:
-            cb.cancel()
-        self.pi.wave_clear()
-        return hit
-
-    def move(self, a_dir: int, b_dir: int, steps: int, speed: int, stop_sensor: int | None = None) -> bool:
-        """
-        Move with smooth S-curve acceleration.
-
-        Uses variable pulse widths within each wave — no discrete speed steps,
-        no gaps between segments. The result is buttery smooth acceleration
-        and deceleration.
-
-        For short moves (<2500 steps): single wave with all pulses.
-        For long moves: chained waves, each with variable timing.
-        """
-        if steps <= 0:
-            return False
-
-        return self._move_accel_chained(a_dir, b_dir, steps, speed, stop_sensor)
-
     def backoff_if_pressed(self, name: str, sensor: int, a_dir: int, b_dir: int, steps: int) -> None:
         if self.sensor_stable(
             sensor,
@@ -491,16 +305,8 @@ def run_command(cmd: str, config: MotionConfig | None = None) -> int:
             ok = motion.x_sweep()
         elif cmd == 'y-sweep':
             ok = motion.y_sweep()
-        elif cmd == 'test-smooth':
-            # Test smooth movement: 10000 steps right then back
-            print('Smooth test: 10000 steps X+ at speed 3000...')
-            motion.move(1, 1, 10000, 3000)
-            time.sleep(0.5)
-            print('Smooth test: 10000 steps X- back...')
-            motion.move(0, 0, 10000, 3000)
-            ok = True
         else:
-            raise SystemExit(f'unknown command: {cmd}\nAvailable: home, x-sweep, y-sweep, test-smooth')
+            raise SystemExit(f'unknown command: {cmd}')
         print('FINAL', motion.state(), 'ok=', ok)
         return 0 if ok else 1
 
