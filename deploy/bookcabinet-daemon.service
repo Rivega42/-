@@ -1,0 +1,21 @@
+[Unit]
+Description=BookCabinet Python Daemon (RFID + Shutters + Watchdog)
+After=pigpiod.service
+Wants=pigpiod.service
+
+[Service]
+Type=simple
+User=admin42
+Group=admin42
+WorkingDirectory=/home/admin42/bookcabinet
+ExecStart=/usr/bin/python3 bookcabinet/services/auth_shutter_daemon.py
+Restart=always
+RestartSec=3
+StandardOutput=journal
+StandardError=journal
+
+# Permissions
+SupplementaryGroups=dialout gpio i2c spi plugdev
+
+[Install]
+WantedBy=multi-user.target

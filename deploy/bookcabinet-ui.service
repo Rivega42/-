@@ -1,0 +1,29 @@
+[Unit]
+Description=BookCabinet Node.js UI (Express + React)
+After=network.target pigpiod.service bookcabinet-daemon.service
+Wants=pigpiod.service bookcabinet-daemon.service
+
+[Service]
+Type=simple
+User=admin42
+Group=admin42
+WorkingDirectory=/home/admin42/bookcabinet
+ExecStart=/usr/bin/node dist/index.js
+Restart=always
+RestartSec=3
+StandardOutput=journal
+StandardError=journal
+
+# Environment
+Environment=NODE_ENV=production
+Environment=PORT=5000
+Environment=HOST=0.0.0.0
+Environment=PYTHON_BRIDGE_PATH=/home/admin42/bookcabinet/bookcabinet/bridge.py
+Environment=MOCK_MODE=false
+
+# Watchdog
+WatchdogSec=60
+NotifyAccess=all
+
+[Install]
+WantedBy=multi-user.target
