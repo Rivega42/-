@@ -623,6 +623,59 @@ except Exception as e:
 
   // ==================== БИЗНЕС-ОПЕРАЦИИ ====================
 
+  // Вспомогательная: запуск Python bridge и сбор результата
+  function runPythonBridge(command: string, args: string[]): Promise<{ success: boolean; [key: string]: any }> {
+    return new Promise((resolve, reject) => {
+      const { spawn } = require('child_process');
+      const bridgePath = '/home/admin42/bookcabinet/bookcabinet/bridge.py';
+      const proc = spawn('python3', [bridgePath, command, ...args], {
+        cwd: '/home/admin42/bookcabinet',
+        timeout: 120000,
+      });
+
+      let stdout = '';
+      let stderr = '';
+      const progressLines: any[] = [];
+
+      proc.stdout.on('data', (data: Buffer) => {
+        stdout += data.toString();
+        // Parse progress events as they arrive
+        const lines = stdout.split('\n');
+        stdout = lines.pop() || ''; // keep incomplete line
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          try {
+            const msg = JSON.parse(line);
+            if (msg.type === 'progress') {
+              progressLines.push(msg);
+              broadcast({ type: 'progress', data: msg });
+            }
+          } catch {}
+        }
+      });
+
+      proc.stderr.on('data', (data: Buffer) => { stderr += data.toString(); });
+
+      proc.on('close', (code: number) => {
+        // Parse remaining stdout
+        if (stdout.trim()) {
+          try {
+            const msg = JSON.parse(stdout.trim());
+            if (msg.type === 'result') {
+              resolve(msg);
+              return;
+            }
+          } catch {}
+        }
+        if (code !== 0) {
+          reject(new Error(stderr || `Python bridge exited with code ${code}`));
+        } else {
+          resolve({ success: false, message: 'No result from Python bridge' });
+        }
+      });
+    });
+  }
+
   app.post("/api/issue", async (req, res) => {
     try {
       const { bookRfid, userRfid } = req.body;
@@ -630,53 +683,37 @@ except Exception as e:
         return res.status(400).json({ error: 'bookRfid and userRfid are required' });
       }
 
-      const book = await storage.getBookByRfid(bookRfid);
-      if (!book) return res.status(404).json({ error: 'Book not found' });
-      
-      if (book.reservedForRfid && book.reservedForRfid !== userRfid) {
-        return res.status(403).json({ error: 'Книга забронирована другим читателем' });
-      }
+      // Делегируем в Python бизнес-слой (механическая верификация)
+      const result = await runPythonBridge('issue', [bookRfid, userRfid]);
 
-      const startTime = Date.now();
+      if (result.success) {
+        // Синхронизируем TS-хранилище с результатом Python
+        const book = await storage.getBookByRfid(bookRfid);
+        if (book) {
+          await storage.updateBook(book.id, {
+            status: 'issued',
+            issuedToRfid: userRfid,
+            reservedForRfid: null,
+            cellId: null,
+          });
+          if (book.cellId !== null) {
+            await storage.updateCell(book.cellId, {
+              status: 'empty',
+              bookRfid: null,
+              bookTitle: null,
+              reservedFor: null,
+            });
+          }
+        }
 
-      // Обновляем книгу
-      await storage.updateBook(book.id, {
-        status: 'issued',
-        issuedToRfid: userRfid,
-        reservedForRfid: null,
-        cellId: null,
-      });
-
-      // Очищаем ячейку
-      if (book.cellId !== null) {
-        await storage.updateCell(book.cellId, {
-          status: 'empty',
-          bookRfid: null,
-          bookTitle: null,
-          reservedFor: null,
+        await storage.addSystemLog({
+          level: 'SUCCESS',
+          message: `Выдана книга: ${result.book?.title || bookRfid}`,
+          component: 'SYSTEM',
         });
       }
 
-      // Записываем операцию
-      const cell = book.cellId !== null ? await storage.getCell(book.cellId) : null;
-      await storage.createOperation({
-        operation: 'ISSUE',
-        cellRow: cell?.row,
-        cellX: cell?.x,
-        cellY: cell?.y,
-        bookRfid,
-        userRfid,
-        result: 'OK',
-        durationMs: Date.now() - startTime,
-      });
-
-      await storage.addSystemLog({
-        level: 'SUCCESS',
-        message: `Выдана книга: ${book.title}`,
-        component: 'SYSTEM',
-      });
-
-      res.json({ success: true, book });
+      res.json(result);
     } catch (error) {
       res.status(500).json({ error: error instanceof Error ? error.message : 'Issue failed' });
     }
@@ -684,55 +721,37 @@ except Exception as e:
 
   app.post("/api/return", async (req, res) => {
     try {
-      const { bookRfid, userRfid } = req.body;
+      const { bookRfid } = req.body;
       if (!bookRfid) return res.status(400).json({ error: 'bookRfid is required' });
 
-      const book = await storage.getBookByRfid(bookRfid);
-      if (!book) return res.status(404).json({ error: 'Book not found' });
+      // Делегируем в Python бизнес-слой (механическая верификация)
+      const result = await runPythonBridge('return', [bookRfid]);
 
-      const startTime = Date.now();
+      if (result.success) {
+        // Синхронизируем TS-хранилище
+        const book = await storage.getBookByRfid(bookRfid);
+        if (book && result.cell) {
+          await storage.updateBook(book.id, {
+            status: 'in_cabinet',
+            issuedToRfid: null,
+            cellId: result.cell.id,
+          });
+          await storage.updateCell(result.cell.id, {
+            status: 'occupied',
+            bookRfid,
+            bookTitle: book.title,
+            needsExtraction: true,
+          });
+        }
 
-      // Находим свободную ячейку
-      const availableCells = await storage.getAvailableCells();
-      if (availableCells.length === 0) {
-        return res.status(503).json({ error: 'Нет свободных ячеек' });
+        await storage.addSystemLog({
+          level: 'SUCCESS',
+          message: `Возвращена книга: ${result.book?.title || bookRfid}`,
+          component: 'SYSTEM',
+        });
       }
 
-      const targetCell = availableCells[0];
-
-      // Обновляем ячейку
-      await storage.updateCell(targetCell.id, {
-        status: 'occupied',
-        bookRfid,
-        bookTitle: book.title,
-        needsExtraction: true,
-      });
-
-      // Обновляем книгу
-      await storage.updateBook(book.id, {
-        status: 'in_cabinet',
-        issuedToRfid: null,
-        cellId: targetCell.id,
-      });
-
-      await storage.createOperation({
-        operation: 'RETURN',
-        cellRow: targetCell.row,
-        cellX: targetCell.x,
-        cellY: targetCell.y,
-        bookRfid,
-        userRfid,
-        result: 'OK',
-        durationMs: Date.now() - startTime,
-      });
-
-      await storage.addSystemLog({
-        level: 'SUCCESS',
-        message: `Возвращена книга: ${book.title}`,
-        component: 'SYSTEM',
-      });
-
-      res.json({ success: true, book, cell: targetCell });
+      res.json(result);
     } catch (error) {
       res.status(500).json({ error: error instanceof Error ? error.message : 'Return failed' });
     }

@@ -190,175 +190,40 @@ class Motors:
 
     async def home_with_sensors(self, sensors) -> bool:
         """
-        Хоминг XY: move_corexy-style (_wave_steps) + pigpio callback на концевик.
-        1. Быстрая: _wave_steps @ xy speed, callback стопит wave_tx мгновенно
-        2. Отъезд через move_corexy
-        3. Медленная: _wave_steps @ 1000, callback стопит точно
+        Хоминг XY по концевикам.
+        Делегирует в corexy_motion_v2.py (canonical baseline).
+        HOME = LEFT + BOTTOM (подтверждено 2026-04-10).
+        Скорости: FAST=800, SLOW=300.
         """
-        import pigpio
-        FAST_SPEED = 1000  # homing fast speed
-        SLOW_SPEED = 300
-        MAX_STEPS = 80000
-        BACKOFF = 300
-
-        PIN_A_STEP = GPIO_PINS["MOTOR_A_STEP"]
-        PIN_A_DIR  = GPIO_PINS["MOTOR_A_DIR"]
-        PIN_B_STEP = GPIO_PINS["MOTOR_B_STEP"]
-        PIN_B_DIR  = GPIO_PINS["MOTOR_B_DIR"]
-        PIN_X_HOME = GPIO_PINS["SENSOR_X_END"]
-        PIN_Y_HOME = GPIO_PINS["SENSOR_Y_BEGIN"]
-
-        step_pins = [PIN_A_STEP, PIN_B_STEP]
-
         if self.mock_mode:
             await asyncio.sleep(2.0)
             self.position["x"] = 0
             self.position["y"] = 0
             return True
 
-        def _move_with_chunks(a_dir, b_dir, steps, speed, sensor_pin, chunk=200):
-            """Chunk approach: маленькие wave, проверка сенсора между ними (моторы стоят)."""
-            import pigpio as _pg
-            self.pi.write(PIN_A_DIR, a_dir)
-            self.pi.write(PIN_B_DIR, b_dir)
-            time.sleep(0.001)
+        print("[homing] Делегирование в corexy_motion_v2 (HOME=LEFT+BOTTOM)...")
+        try:
+            import sys, os
+            v2_dir = os.path.join(os.path.dirname(__file__), '..', '..', 'tools')
+            v2_dir = os.path.abspath(v2_dir)
+            if v2_dir not in sys.path:
+                sys.path.insert(0, v2_dir)
+            from corexy_motion_v2 import CoreXYMotionV2, MotionConfig
 
-            pulse_us = int(500000 / speed)
-            step_mask = (1 << PIN_A_STEP) | (1 << PIN_B_STEP)
+            # Переиспользуем текущее pigpio-соединение
+            motion = CoreXYMotionV2(pi=self.pi, config=MotionConfig())
+            ok = motion.home_xy()
 
-            done = 0
-            while done < steps:
-                if self.pi.read(sensor_pin):
-                    return True
-                remaining = min(chunk, steps - done)
-                wf = []
-                for _ in range(remaining):
-                    wf.append(_pg.pulse(step_mask, 0, pulse_us))
-                    wf.append(_pg.pulse(0, step_mask, pulse_us))
-                self.pi.wave_clear()
-                self.pi.wave_add_generic(wf)
-                wid = self.pi.wave_create()
-                if wid < 0:
-                    return False
-                self.pi.wave_send_once(wid)
-                while self.pi.wave_tx_busy():
-                    time.sleep(0.0001)
-                self.pi.wave_delete(wid)
-                done += remaining
-            return self.pi.read(sensor_pin)
-
-        def _move_with_glitch_stop(a_dir, b_dir, steps, speed, sensor_pin, glitch_us=5000):
-            """Один большой wave + glitch filter + callback = мгновенный стоп."""
-            import pigpio as _pg
-
-            # Если уже на концевике — сразу выход
-            if self.pi.read(sensor_pin):
-                print(f"[homing] pin {sensor_pin} уже HIGH, пропуск движения")
-                return True
-
-            # Glitch filter: игнорирует наводки короче glitch_us
-            self.pi.set_glitch_filter(sensor_pin, glitch_us)
-            time.sleep(0.01)  # дать фильтру стабилизироваться
-
-            # Callback: при срабатывании концевика — мгновенный стоп DMA
-            hit_flag = [False]
-            def _on_endstop(gpio, level, tick):
-                if level == 1:  # HIGH = нажат
-                    self.pi.wave_tx_stop()
-                    hit_flag[0] = True
-
-            cb = self.pi.callback(sensor_pin, pigpio.RISING_EDGE, _on_endstop)
-
-            self.pi.write(PIN_A_DIR, a_dir)
-            self.pi.write(PIN_B_DIR, b_dir)
-            time.sleep(0.001)
-
-            pulse_us = int(500000 / speed)
-            step_mask = (1 << PIN_A_STEP) | (1 << PIN_B_STEP)
-
-            # Строим wave чанками по 2000 (лимит pigpio ~12000 pulses)
-            chunk = 2000
-            done = 0
-            while done < steps and not hit_flag[0]:
-                remaining = min(chunk, steps - done)
-                wf = []
-                for _ in range(remaining):
-                    wf.append(_pg.pulse(step_mask, 0, pulse_us))
-                    wf.append(_pg.pulse(0, step_mask, pulse_us))
-                self.pi.wave_clear()
-                self.pi.wave_add_generic(wf)
-                wid = self.pi.wave_create()
-                if wid < 0:
-                    break
-                self.pi.wave_send_once(wid)
-                while self.pi.wave_tx_busy():
-                    time.sleep(0.0005)
-                self.pi.wave_delete(wid)
-                done += remaining
-
-            # Cleanup
-            cb.cancel()
-            self.pi.set_glitch_filter(sensor_pin, 0)
-            return hit_flag[0] or self.pi.read(sensor_pin)
-
-
-        print("[homing] Начало хоминга XY (glitch_filter + callback)")
-
-        # === X HOME → правый ===
-        hit = _move_with_chunks(1, 1, MAX_STEPS, FAST_SPEED, PIN_X_HOME, chunk=200)
-        print(f"[homing] X быстрая: {'HIT' if hit else 'MISS'}")
-        # Отъезд
-        self.pi.write(PIN_A_DIR, 0)
-        self.pi.write(PIN_B_DIR, 0)
-        time.sleep(0.001)
-        self._wave_steps(step_pins, 500, FAST_SPEED)
-        time.sleep(0.1)
-        # Ждём пока X сенсор отпустится после backoff
-        for _w in range(50):
-            if not self.pi.read(PIN_X_HOME):
-                break
-            time.sleep(0.01)
-        else:
-            print("[homing] WARN: X сенсор не отпустился после backoff, увеличиваю отъезд")
-            self.pi.write(PIN_A_DIR, 0)
-            self.pi.write(PIN_B_DIR, 0)
-            time.sleep(0.001)
-            self._wave_steps(step_pins, 300, FAST_SPEED)
-            time.sleep(0.1)
-        # Медленная
-        hit2 = _move_with_chunks(1, 1, 1000, SLOW_SPEED, PIN_X_HOME, chunk=25)
-        print(f"[homing] X точная: {'HIT' if hit2 else 'MISS'}")
-        self.position["x"] = 0
-        time.sleep(0.2)
-
-        # === Y HOME → нижний ===
-        hit = _move_with_glitch_stop(0, 1, MAX_STEPS, FAST_SPEED, PIN_Y_HOME, glitch_us=500)
-        print(f"[homing] Y быстрая: {'HIT' if hit else 'MISS'}")
-        # Отъезд
-        self.pi.write(PIN_A_DIR, 1)
-        self.pi.write(PIN_B_DIR, 0)
-        time.sleep(0.001)
-        self._wave_steps(step_pins, 500, FAST_SPEED)
-        time.sleep(0.1)
-        # Ждём пока сенсор отпустится после backoff
-        for _w in range(50):
-            if not self.pi.read(PIN_Y_HOME):
-                break
-            time.sleep(0.01)
-        else:
-            print("[homing] WARN: Y сенсор не отпустился после backoff, увеличиваю отъезд")
-            self.pi.write(PIN_A_DIR, 1)
-            self.pi.write(PIN_B_DIR, 0)
-            time.sleep(0.001)
-            self._wave_steps(step_pins, 300, FAST_SPEED)
-            time.sleep(0.1)
-        # Медленная
-        hit2 = _move_with_glitch_stop(0, 1, BACKOFF + 500, SLOW_SPEED, PIN_Y_HOME, glitch_us=0)
-        print(f"[homing] Y точная: {'HIT' if hit2 else 'MISS'}")
-        self.position["y"] = 0
-
-        print(f"[homing] Готово. Позиция: {self.position}")
-        return True
+            self.position["x"] = 0
+            self.position["y"] = 0
+            print(f"[homing] v2 результат: {'OK' if ok else 'FAIL'}")
+            return ok
+        except ImportError as e:
+            print(f"[homing] WARN: corexy_motion_v2 недоступен ({e})")
+            return False
+        except Exception as e:
+            print(f"[homing] Ошибка v2 homing: {e}")
+            return False
 
     async def home_tray_with_sensor(self, sensors) -> bool:
         """

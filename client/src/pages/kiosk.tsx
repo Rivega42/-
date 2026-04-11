@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { Card, CardContent } from "@/components/ui/card";
@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import type { User, Book, Cell, SystemStatus, Operation, Statistics, CalibrationData } from "@shared/schema";
+import type { User, Book, Cell, SystemStatus, Operation, Statistics, CalibrationData, WebSocketMessage } from "@shared/schema";
 import { 
   BookOpen, 
   Undo2, 
@@ -84,6 +84,58 @@ export default function KioskPage() {
   const [newBookAuthor, setNewBookAuthor] = useState('');
   const [, setLocation] = useLocation();
   const { toast } = useToast();
+  const wsRef = useRef<WebSocket | null>(null);
+
+  // WebSocket: автоматическая авторизация при обнаружении карты
+  useEffect(() => {
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsUrl = `${protocol}//${window.location.host}/ws`;
+    let reconnectTimer: ReturnType<typeof setTimeout>;
+
+    function connect() {
+      const ws = new WebSocket(wsUrl);
+      wsRef.current = ws;
+
+      ws.onmessage = async (event) => {
+        try {
+          const msg: WebSocketMessage = JSON.parse(event.data);
+          if (msg.type === 'card_read' && screen === 'welcome') {
+            const uid = (msg.data as any)?.uid;
+            if (uid) {
+              toast({ title: 'Карта обнаружена', description: `UID: ${uid}` });
+              try {
+                const response = await apiRequest('POST', '/api/auth/card', { rfid: uid });
+                const result = await response.json();
+                if (result.success) {
+                  setSession({
+                    user: result.user,
+                    reservedBooks: result.reservedBooks || [],
+                    needsExtraction: result.needsExtraction || 0,
+                  });
+                  const role = result.user.role;
+                  setScreen(role === 'admin' ? 'admin_menu' : role === 'librarian' ? 'librarian_menu' : 'reader_menu');
+                } else {
+                  toast({ title: 'Ошибка', description: result.error || 'Карта не зарегистрирована', variant: 'destructive' });
+                }
+              } catch (err: any) {
+                toast({ title: 'Ошибка', description: err.message, variant: 'destructive' });
+              }
+            }
+          }
+        } catch {}
+      };
+
+      ws.onclose = () => {
+        reconnectTimer = setTimeout(connect, 3000);
+      };
+    }
+
+    connect();
+    return () => {
+      clearTimeout(reconnectTimer);
+      wsRef.current?.close();
+    };
+  }, [screen]);
 
   const { data: systemStatus } = useQuery<SystemStatus>({
     queryKey: ['/api/status'],

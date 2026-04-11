@@ -27,6 +27,22 @@ from ..config import TIMEOUTS, IRBIS, TELEGRAM, RFID, MOCK_MODE
 from .websocket_handler import ws_handler
 from ..mechanics.teach import teach_mode
 from ..mechanics.calibration import AutoCalibrator
+from ..irbis.service import library_service
+
+
+def _check_irbis_connected() -> bool:
+    """Проверка реального подключения к ИРБИС (TCP или mock)"""
+    if IRBIS.get('mock', True):
+        return False  # Mock режим — не подключен к реальному ИРБИС
+    try:
+        import socket
+        host = IRBIS.get('host', '127.0.0.1')
+        port = IRBIS.get('port', 6666)
+        sock = socket.create_connection((host, port), timeout=2)
+        sock.close()
+        return True
+    except (socket.timeout, ConnectionRefusedError, OSError):
+        return False
 
 
 # Глобальная задача для card reader polling
@@ -163,7 +179,7 @@ async def get_status(request):
         'sensors': state['sensors'],
         'servos': state['servos'],
         'shutters': state['shutters'],
-        'irbisConnected': not IRBIS['mock'],
+        'irbisConnected': _check_irbis_connected(),
         'autonomousMode': IRBIS['mock'],
         'maintenanceMode': False,
         'statistics': stats,
@@ -199,7 +215,7 @@ async def get_diagnostics(request):
             'IQRFID-5102 (карты ЕКП)': 'connected' if uhf_card_connected else 'disconnected',
             'RRU9816 (книги)': 'connected' if book_reader_connected else 'disconnected',
         },
-        'irbisConnected': not IRBIS['mock'],
+        'irbisConnected': _check_irbis_connected(),
     })
 
 

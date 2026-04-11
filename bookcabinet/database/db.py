@@ -188,8 +188,22 @@ class Database:
             row_data = cursor.fetchone()
             return dict(row_data) if row_data else None
     
+    ALLOWED_CELL_COLUMNS = frozenset({
+        'status', 'book_rfid', 'book_title', 'reserved_for',
+        'needs_extraction', 'updated_at',
+    })
+
+    ALLOWED_BOOK_COLUMNS = frozenset({
+        'status', 'cell_id', 'reserved_by', 'issued_to', 'issued_at',
+        'due_date', 'title', 'author', 'isbn',
+    })
+
     def update_cell(self, cell_id: int, **kwargs) -> bool:
         kwargs['updated_at'] = datetime.now().isoformat()
+        # Whitelist: только разрешённые столбцы
+        bad_keys = set(kwargs.keys()) - self.ALLOWED_CELL_COLUMNS
+        if bad_keys:
+            raise ValueError(f"Недопустимые столбцы для cells: {bad_keys}")
         with self.get_connection() as conn:
             cursor = conn.cursor()
             set_clause = ', '.join(f'{k} = ?' for k in kwargs.keys())
@@ -236,6 +250,10 @@ class Database:
             return [dict(row) for row in cursor.fetchall()]
     
     def update_book(self, book_id: int, **kwargs) -> bool:
+        # Whitelist: только разрешённые столбцы
+        bad_keys = set(kwargs.keys()) - self.ALLOWED_BOOK_COLUMNS
+        if bad_keys:
+            raise ValueError(f"Недопустимые столбцы для books: {bad_keys}")
         with self.get_connection() as conn:
             cursor = conn.cursor()
             set_clause = ', '.join(f'{k} = ?' for k in kwargs.keys())
