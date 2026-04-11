@@ -177,3 +177,64 @@ class WatchdogService:
 
 
 watchdog = WatchdogService()
+
+
+class StartupRecovery:
+    """Checks hardware state on startup and recovers if needed.
+
+    Called once during service startup to ensure the cabinet is in a
+    known-safe state: shutters closed, tray retracted, position homed.
+    """
+
+    async def check_and_recover(self) -> dict:
+        """Run startup recovery sequence.
+
+        Returns dict summarizing what was done.
+        """
+        results = {'shutters': None, 'tray': None, 'homing': None}
+
+        try:
+            from ..hardware.shutters import shutters
+
+            # Close shutters for safety
+            await shutters.close_shutter('outer')
+            await shutters.close_shutter('inner')
+            results['shutters'] = 'closed'
+        except Exception as e:
+            results['shutters'] = f'error: {e}'
+            db.add_system_log('ERROR', f'Startup recovery shutters: {e}', 'watchdog')
+
+        try:
+            from ..hardware.sensors import sensors
+            from ..hardware.motors import motors
+
+            # Check tray — retract if extended
+            if not sensors.is_tray_retracted():
+                await motors.retract_tray()
+                results['tray'] = 'retracted'
+            else:
+                results['tray'] = 'already_retracted'
+        except Exception as e:
+            results['tray'] = f'error: {e}'
+            db.add_system_log('ERROR', f'Startup recovery tray: {e}', 'watchdog')
+
+        try:
+            from ..hardware.sensors import sensors
+            from ..hardware.motors import motors
+
+            # Home if needed
+            result = await motors.home_with_sensors(sensors)
+            results['homing'] = 'ok' if result else 'failed'
+        except Exception as e:
+            results['homing'] = f'error: {e}'
+            db.add_system_log('ERROR', f'Startup recovery homing: {e}', 'watchdog')
+
+        db.add_system_log(
+            'INFO',
+            f'Startup recovery complete: {results}',
+            'watchdog',
+        )
+        return results
+
+
+startup_recovery = StartupRecovery()

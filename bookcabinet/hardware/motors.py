@@ -14,7 +14,13 @@ class Motors:
         self.is_moving = False
         self.mock_mode = MOCK_MODE
         self.pi = None
-        
+
+        # Real step counters via pigpio callbacks on STEP pins
+        self._step_count_a = 0
+        self._step_count_b = 0
+        self._step_callback_a = None
+        self._step_callback_b = None
+
         if not self.mock_mode:
             try:
                 import pigpio
@@ -27,9 +33,38 @@ class Motors:
                     for pin_name in ["MOTOR_A_STEP", "MOTOR_A_DIR", "MOTOR_B_STEP", "MOTOR_B_DIR", "TRAY_STEP", "TRAY_DIR"]:
                         self.pi.set_mode(GPIO_PINS[pin_name], pigpio.OUTPUT)
                         self.pi.write(GPIO_PINS[pin_name], 0)
+                    self._setup_step_counter()
             except ImportError:
                 print("WARNING: pigpio not installed, switching to mock mode")
                 self.mock_mode = True
+
+    def _setup_step_counter(self):
+        """Setup pigpio callbacks on STEP pins for real step counting."""
+        if self.pi and not self.mock_mode:
+            import pigpio
+            self._step_callback_a = self.pi.callback(
+                GPIO_PINS["MOTOR_A_STEP"], pigpio.RISING_EDGE, self._on_step_a
+            )
+            self._step_callback_b = self.pi.callback(
+                GPIO_PINS["MOTOR_B_STEP"], pigpio.RISING_EDGE, self._on_step_b
+            )
+            print("[motors] Step counters active on pins "
+                  f"A={GPIO_PINS['MOTOR_A_STEP']}, B={GPIO_PINS['MOTOR_B_STEP']}")
+
+    def _on_step_a(self, gpio, level, tick):
+        self._step_count_a += 1
+
+    def _on_step_b(self, gpio, level, tick):
+        self._step_count_b += 1
+
+    def get_real_step_counts(self) -> dict:
+        """Return the number of steps counted on each motor since last reset."""
+        return {'a': self._step_count_a, 'b': self._step_count_b}
+
+    def reset_step_counts(self):
+        """Reset both step counters to zero."""
+        self._step_count_a = 0
+        self._step_count_b = 0
     
     def _wave_steps(self, step_pins: list, steps: int, frequency: int = 4000) -> bool:
         """Execute steps using hardware waves (DMA) for smooth operation"""
@@ -216,6 +251,8 @@ class Motors:
 
             self.position["x"] = 0
             self.position["y"] = 0
+            if ok:
+                self.reset_step_counts()
             print(f"[homing] v2 результат: {'OK' if ok else 'FAIL'}")
             return ok
         except ImportError as e:

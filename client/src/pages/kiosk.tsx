@@ -95,11 +95,67 @@ export default function KioskPage() {
   const [adminPin, setAdminPin] = useState('');
   const [showPinDialog, setShowPinDialog] = useState(false);
   const [manualReturnRfid, setManualReturnRfid] = useState('');
+  // Operations log filters
+  const [logFilterType, setLogFilterType] = useState<string>('all');
+  const [logFilterDate, setLogFilterDate] = useState<string>('all');
+  const [logSearchText, setLogSearchText] = useState('');
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const wsRef = useRef<WebSocket | null>(null);
 
-  // WebSocket: автоматическая авторизация при обнаружении карты
+  // ─── Session timeout / auto-logout (60 s inactivity) ────────────
+  const inactivityTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const warningTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const SESSION_TIMEOUT_MS = 60_000;
+  const SESSION_WARNING_MS = 45_000;
+
+  const clearInactivityTimers = useCallback(() => {
+    if (inactivityTimerRef.current) { clearTimeout(inactivityTimerRef.current); inactivityTimerRef.current = null; }
+    if (warningTimerRef.current) { clearTimeout(warningTimerRef.current); warningTimerRef.current = null; }
+  }, []);
+
+  const performAutoLogout = useCallback(async () => {
+    clearInactivityTimers();
+    // Emergency stop + close shutters for book safety
+    try { await apiRequest('POST', '/api/emergency-stop', {}); } catch {}
+    try { await apiRequest('POST', '/api/shutter/close-all', {}); } catch {}
+    try { await apiRequest('POST', '/api/auth/logout', {}); } catch {}
+    setSession(null);
+    setScreen('welcome');
+  }, [clearInactivityTimers]);
+
+  const resetInactivityTimer = useCallback(() => {
+    clearInactivityTimers();
+    warningTimerRef.current = setTimeout(() => {
+      toast({ title: 'Автоматический выход через 15 секунд', variant: 'destructive' });
+    }, SESSION_WARNING_MS);
+    inactivityTimerRef.current = setTimeout(() => {
+      performAutoLogout();
+    }, SESSION_TIMEOUT_MS);
+  }, [clearInactivityTimers, performAutoLogout, toast]);
+
+  useEffect(() => {
+    const isActive = session !== null && screen !== 'welcome';
+    if (!isActive) {
+      clearInactivityTimers();
+      return;
+    }
+
+    resetInactivityTimer();
+
+    const events = ['click', 'touchstart', 'keydown'] as const;
+    const handler = () => resetInactivityTimer();
+    events.forEach((e) => window.addEventListener(e, handler, { passive: true }));
+
+    return () => {
+      clearInactivityTimers();
+      events.forEach((e) => window.removeEventListener(e, handler));
+    };
+  }, [session, screen, resetInactivityTimer, clearInactivityTimers]);
+  // ─── end session timeout ────────────────────────────────────────
+
+  // WebSocket: автоматическая авторизация при обнаружении к��рты
   useEffect(() => {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const wsUrl = `${protocol}//${window.location.host}/ws`;
@@ -1175,47 +1231,138 @@ export default function KioskPage() {
     </div>
   );
 
-  const renderOperationsLog = () => (
-    <div className="min-h-screen bg-slate-100 pt-28 p-6" data-testid="screen-operations-log">
-      <div className="max-w-4xl mx-auto">
-        <h2 className="text-3xl font-bold text-slate-800 mb-6">Журнал операций</h2>
-        
-        {operations.length === 0 ? (
-          <Card className="p-10 text-center">
-            <History className="w-16 h-16 text-slate-400 mx-auto mb-4" />
-            <p className="text-xl text-slate-500">Нет операций</p>
-          </Card>
-        ) : (
-          <ScrollArea className="h-[calc(100vh-200px)]">
-            <div className="space-y-3">
-              {operations.map((op) => (
-                <Card key={op.id} className="p-4" data-testid={`card-operation-${op.id}`}>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <Badge variant={op.result === 'OK' ? 'default' : 'destructive'}>
-                          {op.operation}
-                        </Badge>
-                        <span className="text-sm text-slate-500">
-                          {op.timestamp ? new Date(op.timestamp).toLocaleString() : '-'}
-                        </span>
-                      </div>
-                      {op.bookRfid && (
-                        <p className="text-slate-600 mt-1">RFID: {op.bookRfid}</p>
-                      )}
-                    </div>
-                    <div className={`text-sm ${op.result === 'OK' ? 'text-green-600' : 'text-red-600'}`}>
-                      {op.result === 'OK' ? 'Успешно' : op.result}
-                    </div>
-                  </div>
-                </Card>
-              ))}
+  const getFilteredOperations = useCallback(() => {
+    let filtered = [...operations];
+
+    // Filter by type
+    if (logFilterType !== 'all') {
+      filtered = filtered.filter((op) => op.operation === logFilterType);
+    }
+
+    // Filter by date range
+    if (logFilterDate === 'today') {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      filtered = filtered.filter((op) => op.timestamp && new Date(op.timestamp) >= today);
+    } else if (logFilterDate === 'week') {
+      const weekAgo = new Date();
+      weekAgo.setDate(weekAgo.getDate() - 7);
+      weekAgo.setHours(0, 0, 0, 0);
+      filtered = filtered.filter((op) => op.timestamp && new Date(op.timestamp) >= weekAgo);
+    }
+
+    // Filter by search text (bookRfid)
+    if (logSearchText.trim()) {
+      const q = logSearchText.trim().toLowerCase();
+      filtered = filtered.filter((op) => op.bookRfid?.toLowerCase().includes(q));
+    }
+
+    return filtered;
+  }, [operations, logFilterType, logFilterDate, logSearchText]);
+
+  const handleExportCsv = useCallback(() => {
+    const rows = getFilteredOperations();
+    const header = 'ID,Operation,Timestamp,BookRfid,UserRfid,Result\n';
+    const csv = header + rows.map((op) =>
+      [op.id, op.operation, op.timestamp || '', op.bookRfid || '', op.userRfid || '', op.result || '']
+        .map((v) => `"${String(v).replace(/"/g, '""')}"`)
+        .join(',')
+    ).join('\n');
+
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `operations_${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [getFilteredOperations]);
+
+  const renderOperationsLog = () => {
+    const filtered = getFilteredOperations();
+    return (
+      <div className="min-h-screen bg-slate-100 pt-28 p-6" data-testid="screen-operations-log">
+        <div className="max-w-4xl mx-auto">
+          <h2 className="text-3xl font-bold text-slate-800 mb-6">Журнал операций</h2>
+
+          {/* Filters */}
+          <div className="flex flex-wrap items-end gap-4 mb-4">
+            <div>
+              <Label className="text-sm text-slate-500 mb-1 block">Тип</Label>
+              <select
+                className="border rounded px-3 py-2 text-sm bg-white"
+                value={logFilterType}
+                onChange={(e) => setLogFilterType(e.target.value)}
+              >
+                <option value="all">Все</option>
+                <option value="ISSUE">ISSUE</option>
+                <option value="RETURN">RETURN</option>
+                <option value="LOAD">LOAD</option>
+                <option value="EXTRACT">EXTRACT</option>
+              </select>
             </div>
-          </ScrollArea>
-        )}
+            <div>
+              <Label className="text-sm text-slate-500 mb-1 block">Период</Label>
+              <select
+                className="border rounded px-3 py-2 text-sm bg-white"
+                value={logFilterDate}
+                onChange={(e) => setLogFilterDate(e.target.value)}
+              >
+                <option value="all">Все</option>
+                <option value="today">Сегодня</option>
+                <option value="week">Неделя</option>
+              </select>
+            </div>
+            <div className="flex-1 min-w-[200px]">
+              <Label className="text-sm text-slate-500 mb-1 block">Поиск по RFID</Label>
+              <Input
+                placeholder="RFID книги..."
+                value={logSearchText}
+                onChange={(e) => setLogSearchText(e.target.value)}
+              />
+            </div>
+            <Button variant="outline" onClick={handleExportCsv} className="h-10">
+              Экспорт CSV
+            </Button>
+          </div>
+
+          {filtered.length === 0 ? (
+            <Card className="p-10 text-center">
+              <History className="w-16 h-16 text-slate-400 mx-auto mb-4" />
+              <p className="text-xl text-slate-500">Нет операций</p>
+            </Card>
+          ) : (
+            <ScrollArea className="h-[calc(100vh-280px)]">
+              <div className="space-y-3">
+                {filtered.map((op) => (
+                  <Card key={op.id} className="p-4" data-testid={`card-operation-${op.id}`}>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <Badge variant={op.result === 'OK' ? 'default' : 'destructive'}>
+                            {op.operation}
+                          </Badge>
+                          <span className="text-sm text-slate-500">
+                            {op.timestamp ? new Date(op.timestamp).toLocaleString() : '-'}
+                          </span>
+                        </div>
+                        {op.bookRfid && (
+                          <p className="text-slate-600 mt-1">RFID: {op.bookRfid}</p>
+                        )}
+                      </div>
+                      <div className={`text-sm ${op.result === 'OK' ? 'text-green-600' : 'text-red-600'}`}>
+                        {op.result === 'OK' ? 'Успешно' : op.result}
+                      </div>
+                    </div>
+                  </Card>
+                ))}
+              </div>
+            </ScrollArea>
+          )}
+        </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   const renderStatistics = () => (
     <div className="min-h-screen bg-slate-100 pt-28 p-6" data-testid="screen-statistics">
