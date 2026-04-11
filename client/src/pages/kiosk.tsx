@@ -48,6 +48,8 @@ import {
 import { CabinetViewer } from "@/components/CabinetViewer";
 import SettingsPanel from "@/components/SettingsPanel";
 import TeachMode from "@/components/TeachMode";
+import { ReaderMenu, BookList, ReturnBook } from "@/components/kiosk/ReaderScreens";
+import { ProgressScreen, SuccessScreen, ErrorScreen, MaintenanceScreen } from "@/components/kiosk/FeedbackScreens";
 
 type Screen = 
   | 'welcome' 
@@ -608,7 +610,7 @@ export default function KioskPage() {
       <div className="max-w-4xl mx-auto">
         <h2 className="text-3xl font-bold text-slate-800 mb-6 text-center">Выберите действие</h2>
         
-        <div className="grid grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
           <Card 
             className="cursor-pointer hover:shadow-xl transition-all border-2 hover:border-blue-500 active:scale-[0.98]"
             onClick={() => setScreen('book_list')}
@@ -680,7 +682,7 @@ export default function KioskPage() {
           </div>
         )}
         
-        <div className="grid grid-cols-3 gap-5">
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-5">
           <Card 
             className="cursor-pointer hover:shadow-xl transition-all active:scale-[0.98]"
             onClick={() => setScreen('load_books')}
@@ -767,7 +769,7 @@ export default function KioskPage() {
       <div className="max-w-5xl mx-auto">
         <h2 className="text-3xl font-bold text-slate-800 mb-6 text-center">Администрирование</h2>
         
-        <div className="grid grid-cols-3 gap-5">
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-5">
           <Card 
             className="cursor-pointer hover:shadow-xl transition-all active:scale-[0.98]"
             onClick={() => setLocation('/admin')}
@@ -1140,7 +1142,7 @@ export default function KioskPage() {
       <div className="max-w-4xl mx-auto">
         <h2 className="text-3xl font-bold text-slate-800 mb-6">Статистика</h2>
         
-        <div className="grid grid-cols-2 gap-5">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
           <Card className="p-6">
             <div className="flex items-center gap-4">
               <BookOpen className="w-12 h-12 text-blue-500" />
@@ -1196,7 +1198,7 @@ export default function KioskPage() {
       <div className="max-w-4xl mx-auto">
         <h2 className="text-3xl font-bold text-slate-800 mb-6">Диагностика оборудования</h2>
         
-        <div className="grid grid-cols-2 gap-5">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
           <Card className="p-6">
             <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
               <Activity className="w-5 h-5" />
@@ -1266,7 +1268,7 @@ export default function KioskPage() {
           </Button>
         </div>
 
-        <div className="grid grid-cols-2 gap-5">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
           <Card className="p-6">
             <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
               <Move className="w-5 h-5" />
@@ -1511,7 +1513,7 @@ export default function KioskPage() {
           </div>
         </div>
         
-        <div className="grid grid-cols-2 gap-5">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
           <Card className="p-6">
             <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
               <Cog className="w-5 h-5" />
@@ -1838,11 +1840,24 @@ export default function KioskPage() {
     <>
       {renderHeader()}
       {screen === 'welcome' && renderWelcome()}
-      {screen === 'reader_menu' && renderReaderMenu()}
+      {screen === 'reader_menu' && (
+        <ReaderMenu
+          session={session}
+          onGetBooks={() => setScreen('book_list')}
+          onReturnBook={() => setScreen('return_book')}
+        />
+      )}
       {screen === 'librarian_menu' && renderLibrarianMenu()}
       {screen === 'admin_menu' && renderAdminMenu()}
-      {screen === 'book_list' && renderBookList()}
-      {screen === 'return_book' && renderReturnBook()}
+      {screen === 'book_list' && (
+        <BookList
+          books={session?.reservedBooks || []}
+          userRfid={session?.user.rfid || ''}
+          onIssue={(bookRfid, userRfid) => issueMutation.mutate({ bookRfid, userRfid })}
+          issuing={issueMutation.isPending}
+        />
+      )}
+      {screen === 'return_book' && <ReturnBook isPending={false} />}
       {screen === 'load_books' && renderLoadBooks()}
       {screen === 'extract_books' && renderExtractBooks()}
       {screen === 'operations_log' && renderOperationsLog()}
@@ -1867,10 +1882,16 @@ export default function KioskPage() {
           </div>
         </div>
       )}
-      {screen === 'progress' && renderProgress()}
-      {screen === 'success' && renderSuccess()}
-      {screen === 'error' && renderError()}
-      {screen === 'maintenance' && renderMaintenance()}
+      {screen === 'progress' && <ProgressScreen message={progressMessage} value={progressValue} />}
+      {screen === 'success' && <SuccessScreen message={successMessage} onContinue={() => {
+        const role = session?.user.role;
+        setScreen(role === 'admin' ? 'admin_menu' : role === 'librarian' ? 'librarian_menu' : 'reader_menu');
+      }} />}
+      {screen === 'error' && <ErrorScreen message={errorMessage} onBack={() => {
+        const role = session?.user.role;
+        setScreen(role === 'admin' ? 'admin_menu' : role === 'librarian' ? 'librarian_menu' : 'reader_menu');
+      }} />}
+      {screen === 'maintenance' && <MaintenanceScreen />}
     </>
   );
 }
