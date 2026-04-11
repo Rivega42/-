@@ -348,7 +348,8 @@ class UnifiedCardReader:
         last_time = self._last_uid_time.get(uid, 0)
         
         if (now - last_time) * 1000 < DEBOUNCE_MS:
-            return  # Слишком рано, пропускаем
+            print(f"[{source.upper()}] Debounce: {uid} (повтор через {int((now - last_time) * 1000)}ms, порог {DEBOUNCE_MS}ms)")
+            return
         
         self._last_uid_time[uid] = now
         

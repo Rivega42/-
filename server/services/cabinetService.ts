@@ -187,8 +187,8 @@ class CabinetService extends EventEmitter {
       this.state.bookOnTray = bookRfid;
       this.emit('book_detected', bookRfid);
 
-      await irbisService.issueBook(bookRfid, userRfid);
-
+      // Сначала обновляем локальную БД, потом ИРБИС
+      // (ИРБИС после механики — если лоток сломался, книга не помечена выданной)
       await storage.updateBook(book.id, {
         status: 'issued',
         issuedToRfid: userRfid,
@@ -201,6 +201,13 @@ class CabinetService extends EventEmitter {
         bookRfid: null,
         bookTitle: null,
       });
+
+      // ИРБИС — после механики и обновления локальной БД
+      try {
+        await irbisService.issueBook(bookRfid, userRfid);
+      } catch (irbisError: any) {
+        await storage.addLog('WARNING', `ИРБИС: ошибка регистрации выдачи: ${irbisError.message}. Книга выдана локально.`);
+      }
 
       const operation = await storage.addOperation({
         operation: 'ISSUE',
@@ -291,11 +298,10 @@ class CabinetService extends EventEmitter {
       this.state.bookOnTray = bookRfid;
       this.emit('book_detected', bookRfid);
 
-      await irbisService.returnBook(bookRfid, book.issuedToRfid ?? undefined);
-
       await this.moveToPosition({ x: emptyCell.x, y: emptyCell.y, row: emptyCell.row as CellRow });
       await this.openTray();
 
+      // Сначала механика и локальная БД, потом ИРБИС
       await storage.updateBook(book.id, {
         status: 'returned',
         issuedToRfid: null,
@@ -308,6 +314,13 @@ class CabinetService extends EventEmitter {
         bookTitle: book.title,
         needsExtraction: true,
       });
+
+      // ИРБИС — после механики и обновления локальной БД
+      try {
+        await irbisService.returnBook(bookRfid, book.issuedToRfid ?? undefined);
+      } catch (irbisError: any) {
+        await storage.addLog('WARNING', `ИРБИС: ошибка регистрации возврата: ${irbisError.message}. Книга возвращена локально.`);
+      }
 
       const operation = await storage.addOperation({
         operation: 'RETURN',
