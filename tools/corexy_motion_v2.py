@@ -227,6 +227,7 @@ class CoreXYMotionV2:
         backoff: int,
         fast_steps: int = 100000,
         slow_extra: int = 100,
+        opposite_sensor: int | None = None,
     ) -> bool:
         print(f'[{name}] FAST...', end=' ', flush=True)
         hit_fast = self.move(go_ad, go_bd, fast_steps, self.config.homing_fast, sensor)
@@ -235,9 +236,14 @@ class CoreXYMotionV2:
             return False
 
         print(f'[{name}] BACKOFF {backoff}...', end=' ', flush=True)
-        self.move(back_ad, back_bd, backoff, self.config.slow)
+        self.move(back_ad, back_bd, backoff, self.config.slow, opposite_sensor)
         print('OK', self.state())
         time.sleep(0.05)
+
+        # Safety check: if opposite sensor hit during backoff, abort
+        if opposite_sensor is not None and self.pi.read(opposite_sensor):
+            print(f'[{name}] ABORT: opposite sensor {opposite_sensor} triggered during backoff!')
+            return False
 
         print(f'[{name}] SLOW...', end=' ', flush=True)
         hit_slow = self.move(go_ad, go_bd, backoff + slow_extra, self.config.slow, sensor)
@@ -251,10 +257,10 @@ class CoreXYMotionV2:
         self.backoff_if_pressed('BOTTOM', SENSOR_BOTTOM, 1, 0, self.config.backoff_y)
         self.backoff_if_pressed('TOP', SENSOR_TOP, 0, 1, self.config.backoff_y)
 
-        ok_x = self.seek_axis('X->LEFT', 0, 0, SENSOR_LEFT, 1, 1, self.config.backoff_x)
+        ok_x = self.seek_axis('X->LEFT', 0, 0, SENSOR_LEFT, 1, 1, self.config.backoff_x, opposite_sensor=SENSOR_RIGHT)
         if not ok_x:
             return False
-        return self.seek_axis('Y->BOTTOM', 0, 1, SENSOR_BOTTOM, 1, 0, self.config.backoff_y)
+        return self.seek_axis('Y->BOTTOM', 0, 1, SENSOR_BOTTOM, 1, 0, self.config.backoff_y, opposite_sensor=SENSOR_TOP)
 
     def x_sweep(self) -> bool:
         print('X sweep start', self.state())
@@ -272,7 +278,7 @@ class CoreXYMotionV2:
         if not ok_t:
             return False
         self.backoff_if_pressed('TOP', SENSOR_TOP, 0, 1, self.config.backoff_y)
-        return self.seek_axis('Y->BOTTOM', 0, 1, SENSOR_BOTTOM, 1, 0, self.config.backoff_y)
+        return self.seek_axis('Y->BOTTOM', 0, 1, SENSOR_BOTTOM, 1, 0, self.config.backoff_y, opposite_sensor=SENSOR_TOP)
 
     def stop(self) -> None:
         self.pi.wave_tx_stop()
