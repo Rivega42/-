@@ -43,6 +43,8 @@ class MotionConfig:
     backoff_x: int = 300
     backoff_y: int = 500
     wave_seg: int = 200
+    accel_steps: int = 400
+    min_speed: int = 400
     glitch_us: int = 300
     stable_reads: int = 5
     stable_delay: float = 0.002
@@ -96,8 +98,8 @@ class CoreXYMotionV2:
             time.sleep(delay)
         return acc >= need
 
-    def move(self, a_dir: int, b_dir: int, steps: int, speed: int, stop_sensor: int | None = None) -> bool:
-        """Smooth repeated wave_chain motion with stable endstop stop."""
+    def _move_at_speed(self, a_dir: int, b_dir: int, steps: int, speed: int, stop_sensor: int | None = None) -> bool:
+        """Internal: move at fixed speed. Returns True if endstop hit."""
         if steps <= 0:
             return False
 
@@ -204,6 +206,65 @@ class CoreXYMotionV2:
             pass
         self.pi.wave_clear()
         return hit
+
+
+    def move(self, a_dir: int, b_dir: int, steps: int, speed: int, stop_sensor: int | None = None) -> bool:
+        """
+        Move with trapezoidal acceleration profile (3 segments).
+        Ramps up over accel_steps, cruises, then ramps down.
+        Each segment uses a fixed speed waveform — no jitter.
+        """
+        if steps <= 0:
+            return False
+
+        ramp = min(self.config.accel_steps, steps // 3)
+        v_start = self.config.min_speed
+        v_max = max(speed, v_start)
+
+        # Build speed segments: [(steps, speed), ...]
+        if ramp < 10 or v_start >= v_max:
+            # Short move or no ramp needed — single speed
+            return self._move_at_speed(a_dir, b_dir, steps, speed, stop_sensor)
+
+        # 5-step trapezoid for smooth acceleration
+        # v_start -> v25 -> v_max (accel), v_max (cruise), v_max -> v25 -> v_start (decel)
+        v25 = v_start + (v_max - v_start) // 4
+        v50 = v_start + (v_max - v_start) // 2
+        v75 = v_start + 3 * (v_max - v_start) // 4
+
+        ramp5 = max(1, ramp // 5)
+        accel_total = ramp5 * 4  # 4 sub-segments per ramp
+        cruise = steps - accel_total * 2
+        if cruise < 0:
+            # Too short for full ramp — use simple 3-segment
+            ramp3 = steps // 3
+            cruise3 = steps - ramp3 * 2
+            segments = [
+                (ramp3, v50),
+                (cruise3, v_max),
+                (ramp3, v50),
+            ]
+        else:
+            segments = [
+                (ramp5, v25),
+                (ramp5, v50),
+                (ramp5, v75),
+                (ramp5, v_max),
+                (cruise, v_max),
+                (ramp5, v_max),
+                (ramp5, v75),
+                (ramp5, v50),
+                (ramp5, v25),
+            ]
+
+        for seg_steps, seg_speed in segments:
+            if seg_steps <= 0:
+                continue
+            hit = self._move_at_speed(a_dir, b_dir, seg_steps, seg_speed, stop_sensor)
+            if hit:
+                return True
+
+        return False
 
     def backoff_if_pressed(self, name: str, sensor: int, a_dir: int, b_dir: int, steps: int) -> None:
         if self.sensor_stable(
