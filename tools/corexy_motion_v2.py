@@ -37,7 +37,7 @@ STEP_MASK = (1 << MOTOR_A_STEP) | (1 << MOTOR_B_STEP)
 
 @dataclass(frozen=True)
 class MotionConfig:
-    fast: int = 2000
+    fast: int = 2500
     homing_fast: int = 1500
     slow: int = 300
     backoff_x: int = 300
