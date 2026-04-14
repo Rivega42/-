@@ -1,4 +1,6 @@
-# BookCabinet — Аппаратная карта (10.03.2026)
+# BookCabinet — Аппаратная карта
+
+> Обновлено: 2026-04-14
 
 ## GPIO распиновка (BCM)
 
@@ -14,26 +16,36 @@
 | Функция | BCM Pin | Описание |
 |---------|---------|----------|
 | TRAY_STEP | 18 | CLK+ на драйвере |
-| TRAY_DIR | 27 | CW+. LOW=вперёд, HIGH=назад |
-| TRAY_ENA? | 25, 26 | ⚠️ OUTPUT LOW перед работой мотора |
+| TRAY_DIR | 27 | DIR=0 → вперёд, DIR=1 → назад |
+| TRAY_EN1 | 25 | Enable 1 — LOW для работы |
+| TRAY_EN2 | 26 | Enable 2 — LOW для работы |
 
-### Концевики (INPUT, PUD_UP, HIGH = сработал)
-| Функция | BCM Pin | Описание |
-|---------|---------|----------|
-| SENSOR_LEFT | 9 | Каретка — левый |
-| SENSOR_RIGHT | 10 | Каретка — правый |
-| SENSOR_BOTTOM | 8 | Каретка — нижний |
-| SENSOR_TOP | 11 | Каретка — верхний |
-| SENSOR_TRAY_END | 7 | Платформа — передний |
-| SENSOR_TRAY_BEGIN | 20 | Платформа — задний ⚠️ дребезг |
+### Концевики платформы
+| Функция | BCM Pin | Логика |
+|---------|---------|--------|
+| ENDSTOP_FRONT | 7 | 1 = нажат, 0 = свободен |
+| ENDSTOP_BACK | 20 | 1 = нажат, 0 = свободен |
+
+> Требуется pull-up: `pi.set_pull_up_down(pin, pigpio.PUD_UP)`
+
+### Концевики каретки XY
+| Функция | BCM Pin | Логика |
+|---------|---------|--------|
+| SENSOR_LEFT | 9 | HIGH = сработал |
+| SENSOR_RIGHT | 10 | HIGH = сработал |
+| SENSOR_BOTTOM | 8 | HIGH = сработал |
+| SENSOR_TOP | 11 | HIGH = сработал |
+
+> glitch filter обязателен на пинах 9, 10 (300 мкс)
 
 ### Сервоприводы замков (PWM 50 Гц)
-| Функция | BCM Pin | Открыт | Закрыт |
-|---------|---------|--------|--------|
-| LOCK_FRONT | 12 | DutyCycle 2.5 (0°) | DutyCycle 7.5 (90°) |
-| LOCK_REAR | 13 | DutyCycle 2.5 (0°) | DutyCycle 7.5 (90°) |
+| Функция | BCM Pin | Статус | Примечание |
+|---------|---------|--------|------------|
+| LOCK_FRONT | 12 | ❌ НЕИСПРАВЕН | Крутит только в одну сторону |
+| LOCK_REAR | 13 | ✅ Работает | 0°=500us, 90°=1500us, 180°=2500us |
 
-> После установки угла → `ChangeDutyCycle(0)` чтобы серва не жужжала.
+> Метод: `pi.set_servo_pulsewidth(pin, us)`
+> После установки угла: `pi.set_servo_pulsewidth(pin, 0)` — отключить сигнал
 
 ### Шторки (реле)
 | Функция | BCM Pin | Описание |
@@ -41,78 +53,155 @@
 | SHUTTER_OUTER | 2 | LOW=закрыта, HIGH=открыта (SDA1) |
 | SHUTTER_INNER | 3 | LOW=закрыта, HIGH=открыта (SCL1) |
 
-### Свободные/неопределённые пины
-4, 5, 6, 16, 17, 22, 23, 24
-
 ---
 
-## Метод управления
+## Управление платформой
 
-### XY моторы (CoreXY)
-- Актуальный подтверждённый хоминг использует **pigpio wave_chain**
-- Остановка на концевике: callback + резервный polling `pi.read(stop_sensor)`
-- `wave_tx_stop()` используется для мгновенной остановки
-- glitch filter на XY-концевиках обязателен
+### Метод: pigpio wave (аппаратные импульсы)
 
-#### CoreXY кинематика
-| Движение | MOTOR_A_DIR | MOTOR_B_DIR |
-|----------|-------------|-------------|
-| Вправо (X+) | HIGH | HIGH |
-| Влево (X-) | LOW | LOW |
-| Вверх (Y+) | HIGH | LOW |
-| Вниз (Y-) | LOW | HIGH |
+Плавное движение без рывков. Python не участвует в генерации импульсов.
 
-### Мотор платформы
-- **RPi.GPIO + `time.perf_counter()` busy-wait**
-- ⚠️ Перед работой: пины 25, 26 → OUTPUT LOW
-- Скорость: **8000 шагов/сек**
-- Антидребезг pin 20: `sensor_stable()` — 3 чтения, проверка каждые 200 шагов
+```python
+import pigpio
+import time
 
-### Сервоприводы замков
-- **RPi.GPIO PWM**, частота 50 Гц
-- `pwm.start(0)` → `ChangeDutyCycle(2.5)` = открыть → `ChangeDutyCycle(7.5)` = закрыть
-- После → `ChangeDutyCycle(0)` (отключить сигнал)
+STEP = 18
+DIR = 27
+ENABLE1 = 25
+ENABLE2 = 26
+ENDSTOP_FRONT = 7
+ENDSTOP_BACK = 20
 
----
+FREQ = 12000  # Гц — оптимально для тишины и точности
 
-## Границы движения
+pi = pigpio.pi()
 
-### Каретка XY
-| Ось | Шаги | мм | steps/mm |
-|-----|------|----|----------|
-| X (RIGHT→LEFT) | 19 948 | ~200 | 100 |
-| Y (BOTTOM→TOP) | 44 853 | ~449 | 100 |
+# Настройка пинов
+pi.set_mode(STEP, pigpio.OUTPUT)
+pi.set_mode(DIR, pigpio.OUTPUT)
+pi.set_mode(ENABLE1, pigpio.OUTPUT)
+pi.set_mode(ENABLE2, pigpio.OUTPUT)
+pi.set_mode(ENDSTOP_FRONT, pigpio.INPUT)
+pi.set_mode(ENDSTOP_BACK, pigpio.INPUT)
+pi.set_pull_up_down(ENDSTOP_FRONT, pigpio.PUD_UP)
+pi.set_pull_up_down(ENDSTOP_BACK, pigpio.PUD_UP)
 
-- **Home:** LEFT + BOTTOM (0,0)
-- **Хоминг (подтверждено 10.04.2026):** FAST=800, SLOW=300
+# Включить драйвер
+pi.write(ENABLE1, 0)
+pi.write(ENABLE2, 0)
 
-### Платформа (лоток)
+# Создать волну
+period_us = int(1000000 / FREQ)
+pulse_us = period_us // 2
+
+pi.wave_clear()
+waveform = [
+    pigpio.pulse(1 << STEP, 0, pulse_us),
+    pigpio.pulse(0, 1 << STEP, pulse_us)
+]
+pi.wave_add_generic(waveform)
+wave_id = pi.wave_create()
+
+# Движение до концевика
+def move_until_endstop(direction, endstop_pin, max_time=10):
+    pi.write(DIR, direction)  # 0=вперёд, 1=назад
+    time.sleep(0.01)
+    
+    pi.wave_send_repeat(wave_id)
+    
+    start = time.time()
+    while pi.read(endstop_pin) == 0 and (time.time() - start) < max_time:
+        time.sleep(0.0005)
+    
+    pi.wave_tx_stop()
+    elapsed = time.time() - start
+    steps = int(elapsed * FREQ)
+    reached = pi.read(endstop_pin) == 1
+    return steps, reached
+
+# Пример: калибровка
+pi.write(DIR, 0)  # вперёд
+steps_front, _ = move_until_endstop(0, ENDSTOP_FRONT)
+steps_total, _ = move_until_endstop(1, ENDSTOP_BACK)
+middle = steps_total // 2
+
+# Выключить
+pi.wave_delete(wave_id)
+pi.write(ENABLE1, 1)
+pi.write(ENABLE2, 1)
+pi.stop()
+```
+
+### Калиброванные параметры (2026-04-14)
+
 | Параметр | Значение |
 |----------|----------|
-| Полный ход | ~22 000 шагов |
-| Скорость | 8000 шагов/сек |
-| Home | задний концевик (BACK) |
+| Частота | 12000 Гц |
+| Полный ход | 21011 шагов |
+| Центр | 10505 шагов |
+| DIR=0 | Вперёд (к FRONT) |
+| DIR=1 | Назад (к BACK) |
+
+### Почему wave, а не bit-bang?
+
+| Метод | Плюсы | Минусы |
+|-------|-------|--------|
+| time.sleep() | Простой | Рывки, неточность, шум |
+| pigpio wave | Плавно, тихо, точно | Сложнее код |
 
 ---
 
-## Хоминг
+## Управление замками (SG90)
 
-1. Если концевик уже нажат — сначала backoff от него
-2. Быстрый подход: FAST=800
-3. Отъезд после срабатывания: X=300 шагов, Y=500 шагов
-4. Медленный подход: SLOW=300
-5. Стоп = HOME
+### Метод: pigpio servo PWM
 
-Порядок: X (→LEFT), потом Y (→BOTTOM)
+```python
+import pigpio
+import time
 
-Операторский entrypoint: `~/bookcabinet/tools/homing_pigpio.py`
-Канонический motion layer: `~/bookcabinet/tools/corexy_motion_v2.py`
+LOCK_PIN = 13  # Замок 2 (рабочий)
+
+pi = pigpio.pi()
+
+# Открыть (0°)
+pi.set_servo_pulsewidth(LOCK_PIN, 500)
+time.sleep(1)
+
+# Закрыть (90°)
+pi.set_servo_pulsewidth(LOCK_PIN, 1500)
+time.sleep(1)
+
+# Отключить сигнал (чтобы не жужжала)
+pi.set_servo_pulsewidth(LOCK_PIN, 0)
+
+pi.stop()
+```
+
+### Диапазон SG90
+
+| Угол | Pulsewidth |
+|------|------------|
+| 0° | 500 мкс |
+| 45° | 1000 мкс |
+| 90° | 1500 мкс |
+| 135° | 2000 мкс |
+| 180° | 2500 мкс |
+
+---
+
+## Хоминг каретки XY
+
+См. `tools/corexy_pigpio.py`
+
+- Метод: wave_chain + callback + wave_tx_stop()
+- Скорости: FAST=1500, SLOW=400 (>3000 = stall)
+- glitch filter: 300μs на пинах 9, 10
 
 ---
 
 ## Известные проблемы
 
-1. **Pin 20 дребезг** — задний концевик платформы, нужен программный антидребезг
-2. **Старые заметки про PCM conflict устарели** — текущий подтверждённый хоминг использует pigpio wave_chain успешно
-3. **Undervoltage** — RPi 3, проверить БП
-4. **Старые docs про RIGHT+BOTTOM и неизвестные шторки устарели** — ориентироваться на `CLAUDE.md`, `config.py`, `tools/corexy_motion_v2.py` и `tools/homing_pigpio.py`
+1. **Замок 1 (GPIO 12)** — неисправен, крутит только в одну сторону
+2. **Концевик BACK (GPIO 20)** — возможен дребезг, использовать debounce
+3. **Шторки (GPIO 2, 3)** — GPIO.cleanup() откроет шторки, нужен daemon или pull-down
+
