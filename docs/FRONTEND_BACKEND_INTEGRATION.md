@@ -1,5 +1,70 @@
 # BookCabinet — Интеграция фронтенда с бэкендом
 
+## Дизайн-система: Cal.com
+
+**ВСЕЙ интерфейс в стиле Cal.com** (как в BCRM и emdr42)
+
+### CSS-переменные `--cal-*`
+
+```css
+:root {
+  --cal-bg: white;
+  --cal-bg-subtle: #f3f4f6;
+  --cal-bg-muted: #f9fafb;
+  --cal-bg-emphasis: #e5e7eb;
+  --cal-bg-inverted: #111827;
+  --cal-bg-info: #dee9fc;
+  --cal-bg-success: #e2fbe8;
+  --cal-bg-attention: #fceed8;
+  --cal-bg-error: #f9e3e2;
+  --cal-text: #111827;
+  --cal-text-muted: #6b7280;
+  --cal-text-subtle: #9ca3af;
+  --cal-text-inverted: white;
+  --cal-border: #e5e7eb;
+  --cal-border-emphasis: #d1d5db;
+  --cal-success: #10b981;
+  --cal-warning: #f59e0b;
+  --cal-error: #ef4444;
+  --cal-info: #3b82f6;
+}
+```
+
+### Основные принципы
+
+- **Шрифт:** Inter
+- **Border-radius:** 8px (карточки, кнопки, инпуты)
+- **Тема:** Светлая (для киоска в библиотеке)
+- **Touch-targets:** WCAG-совместимые (мин. 44x44px для сенсорного экрана)
+- **Анимации:** Плавные переходы (150-300ms)
+- **Состояния:** hover, focus, active, disabled
+
+### Компоненты
+
+```
+Кнопки:
+- Primary: bg-inverted, text-inverted, hover:opacity-90
+- Secondary: border, bg-transparent, hover:bg-subtle
+- Danger: bg-error, text-inverted
+
+Карточки:
+- bg-white, border, rounded-lg, shadow-sm
+
+Списки:
+- divide-y, hover:bg-subtle
+
+Инпуты:
+- border, rounded-md, focus:ring-2
+```
+
+### Референсы
+
+- `emdr42/app/globals.css` — полные CSS-переменные
+- `BCRM/docs/SPEC.md` — описание стиля
+- https://cal.com — оригинальный продукт
+
+---
+
 ## Архитектура
 
 ```

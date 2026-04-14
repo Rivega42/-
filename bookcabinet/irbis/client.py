@@ -256,6 +256,7 @@ class IrbisClient:
         Поиск книги по RFID метке
         
         Пробует индексы:
+        - IN= (работает на KAT%SERV09%, проверено 14.04.2026)
         - H= (по полю 910^h)
         - HI= (альтернативный)
         - RF= / RFID= (если настроен)
@@ -263,7 +264,8 @@ class IrbisClient:
         if not rfid:
             return None
         
-        patterns = ['"H={0}"', '"HI={0}"', '"RF={0}"', '"RFID={0}"']
+        # IN= - проверенный индекс для KAT%SERV09%
+        patterns = ['"IN={0}"', '"H={0}"', '"HI={0}"', '"RF={0}"', '"RFID={0}"']
         
         for rfid_variant in make_uid_variants(rfid):
             for pattern in patterns:
