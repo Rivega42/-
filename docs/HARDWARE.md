@@ -1,5 +1,7 @@
 # BookCabinet — Аппаратная карта
 
+**Источник истины:** `bookcabinet/config.py`
+
 ## GPIO распиновка (BCM)
 
 ### Моторы XY (CoreXY)
@@ -14,9 +16,11 @@
 | Функция | BCM Pin | Описание |
 |---------|---------|----------|
 | TRAY_STEP | 18 | Шаг |
-| TRAY_DIR | 27 | Направление. 0=вперед (FRONT), 1=назад (BACK) |
-| TRAY_EN1 | 25 | Enable 1. LOW=работа, HIGH=отключен |
-| TRAY_EN2 | 26 | Enable 2. LOW=работа, HIGH=отключен |
+| TRAY_DIR | 27 | Направление: 0=вперед (FRONT), 1=назад (BACK) |
+| TRAY_EN1 | 25 | Enable 1: LOW=работа, HIGH=отключен |
+| TRAY_EN2 | 26 | Enable 2: LOW=работа, HIGH=отключен |
+
+**Файл управления:** `tools/tray_platform.py`
 
 ### Концевики XY
 | Функция | BCM Pin | Логика |
@@ -35,35 +39,53 @@
 ### Шторки (реле)
 | Функция | BCM Pin | Логика |
 |---------|---------|--------|
-| SHUTTER_OUTER | 2 | HIGH=открыта, LOW=закрыта (SDA1) |
-| SHUTTER_INNER | 3 | HIGH=открыта, LOW=закрыта (SCL1) |
+| SHUTTER_OUTER | 2 | HIGH=открыта, LOW=закрыта |
+| SHUTTER_INNER | 3 | HIGH=открыта, LOW=закрыта |
 
-**ВАЖНО:** Использовать через bookcabinet.hardware.gpio_manager, не напрямую!
+**ВАЖНО:** Использовать через `bookcabinet.hardware.gpio_manager`!
 
 ### Замки (сервоприводы SG90)
 | Функция | BCM Pin | Статус |
 |---------|---------|--------|
-| LOCK_FRONT | 12 | НЕИСПРАВЕН — крутит только в одну сторону |
-| LOCK_BACK | 13 | Работает, диапазон 0-90 градусов |
+| LOCK_FRONT | 12 | НЕИСПРАВЕН |
+| LOCK_BACK | 13 | НЕИСПРАВЕН (колбасит) |
 
 ---
 
 ## Калибровка платформы
 
-- **Метод:** pigpio wave (аппаратные импульсы)
-- **Частота:** 12000 Гц
-- **Total travel:** ~21000 шагов
-- **Center:** ~10500 шагов
-- **DIR:** 0=вперед (к FRONT), 1=назад (к BACK)
+**Файл:** `tools/tray_platform.py`
+
+```bash
+python3 tools/tray_platform.py calibrate  # Полная калибровка
+python3 tools/tray_platform.py status     # Состояние концевиков
+python3 tools/tray_platform.py front      # Двигать к FRONT
+python3 tools/tray_platform.py back       # Двигать к BACK
+```
+
+**Параметры:**
+- Частота: 12000 Hz (оптимум тишины и надежности)
+- Total travel: ~21000 шагов
+- Center: ~10500 шагов
+- Метод: pigpio wave (аппаратные импульсы)
 
 ---
 
 ## Хоминг XY
 
-- **HOME позиция:** LEFT + BOTTOM (0,0)
-- **Скорость FAST:** 800 шаг/сек
-- **Скорость SLOW:** 300 шаг/сек
-- **Glitch filter:** 300us на всех концевиках
+**Файл:** `tools/corexy_motion_v2.py`
+
+```bash
+python3 tools/corexy_motion_v2.py home     # Хоминг к LEFT + BOTTOM
+python3 tools/corexy_motion_v2.py x-sweep  # Тест X оси
+python3 tools/corexy_motion_v2.py y-sweep  # Тест Y оси
+```
+
+**Параметры:**
+- HOME позиция: LEFT + BOTTOM (0,0)
+- Скорость FAST: 800 шаг/сек
+- Скорость SLOW: 300 шаг/сек
+- Glitch filter: 300us на всех концевиках
 
 ### CoreXY направления
 | Движение | A_DIR | B_DIR |
@@ -77,16 +99,18 @@
 
 ## Startup Sequence
 
-Файл: tools/startup_sequence.py
+**Файл:** `tools/startup_sequence.py`
 
-1. **XY Homing** - LEFT + BOTTOM
-2. **Tray Calibration** - FRONT - BACK - CENTER
+1. XY Homing -> LEFT + BOTTOM
+2. Tray Calibration -> FRONT -> BACK -> CENTER
 
-Калибровка платформы выполняется ТОЛЬКО после успешного хоминга XY!
+**ВАЖНО:** Калибровка платформы выполняется ТОЛЬКО после успешного хоминга XY!
 
 ---
 
 ## Управление шторками
+
+**Файл:** `bookcabinet/hardware/shutters.py`
 
 ```python
 from bookcabinet.hardware.gpio_manager import gpio
@@ -103,11 +127,15 @@ gpio.write(GPIO_PINS['SHUTTER_INNER'], 0)
 
 ---
 
-## Файлы
+## Ключевые файлы
 
-- bookcabinet/config.py — GPIO_PINS (источник истины)
-- bookcabinet/hardware/shutters.py — управление шторками
-- bookcabinet/hardware/gpio_manager.py — абстракция GPIO
-- tools/startup_sequence.py — хоминг + калибровка
-- tools/corexy_motion_v2.py — движение XY
-- calibration.json — координаты стоек/полок
+| Файл | Назначение |
+|------|------------|
+| `bookcabinet/config.py` | GPIO_PINS (источник истины) |
+| `tools/tray_platform.py` | Управление платформой |
+| `tools/corexy_motion_v2.py` | Движение XY |
+| `tools/startup_sequence.py` | Хоминг + калибровка |
+| `tools/homing_pigpio.py` | Обертка хоминга |
+| `bookcabinet/hardware/shutters.py` | Управление шторками |
+| `bookcabinet/hardware/gpio_manager.py` | Абстракция GPIO |
+| `calibration.json` | Координаты стоек/полок |
