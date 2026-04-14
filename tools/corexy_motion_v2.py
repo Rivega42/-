@@ -123,7 +123,10 @@ class CoreXYMotionV2:
                 need=self.config.poll_need,
             ):
                 hit = True
-                self.pi.wave_tx_stop()
+                try:
+                    self.pi.wave_tx_stop()
+                except Exception:
+                    pass
 
         cb = None
         if stop_sensor is not None:
