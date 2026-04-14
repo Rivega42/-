@@ -139,3 +139,18 @@ gpio.write(GPIO_PINS['SHUTTER_INNER'], 0)
 | `bookcabinet/hardware/shutters.py` | Управление шторками |
 | `bookcabinet/hardware/gpio_manager.py` | Абстракция GPIO |
 | `calibration.json` | Координаты стоек/полок |
+
+---
+
+## RFID Считыватели
+
+| Порт | Устройство | Назначение | Baudrate |
+|------|------------|------------|----------|
+| /dev/ttyUSB0 | RRU9816 | UHF книги | 115200 |
+| /dev/ttyUSB1 | IQRFID-5102 | UHF карты ЕКП | 57600 |
+| PC/SC | ACR1281 1S Dual Reader | NFC читательские билеты | - |
+
+### Примечания
+- RRU9816 — считыватель RFID меток на книгах
+- IQRFID-5102 — считыватель карт ЕКП (единая карта петербуржца)
+- ACR1281 — NFC считыватель для читательских билетов библиотеки
