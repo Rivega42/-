@@ -119,27 +119,27 @@
     "note": "Smooth acceleration TBD - requires pigpio wave_chain research"
   },
   "shutters": {
-    "front": {
+    "outer": {
       "pin": 2,
       "open": 1,
       "close": 0,
-      "note": "pigpio digital, HIGH=open"
+      "note": "GPIO 2 (SDA1), HIGH=open, LOW=close. Use via gpio_manager!"
     },
-    "back": {
+    "inner": {
       "pin": 3,
       "open": 1,
       "close": 0,
-      "note": "pigpio digital, HIGH=open"
+      "note": "GPIO 3 (SCL1), HIGH=open, LOW=close. Use via gpio_manager!"
     }
   },
   "locks": {
     "front": {
-      "pin": 18,
-      "status": "BROKEN - stripped gears, replace before use"
+      "pin": 12,
+      "status": "BROKEN - spins one direction only, needs replacement"
     },
     "back": {
       "pin": 13,
-      "status": "pin unconfirmed - verify on Monday"
+      "status": "OK - range 0-90 degrees"
     }
   },
   "notes": [

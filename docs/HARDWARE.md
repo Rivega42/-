@@ -1,4 +1,6 @@
-# BookCabinet — Аппаратная карта (10.03.2026)
+# BookCabinet — Аппаратная карта
+
+**Источник истины:** `bookcabinet/config.py`
 
 ## GPIO распиновка (BCM)
 
@@ -13,106 +15,142 @@
 ### Мотор платформы (лоток)
 | Функция | BCM Pin | Описание |
 |---------|---------|----------|
-| TRAY_STEP | 18 | CLK+ на драйвере |
-| TRAY_DIR | 27 | CW+. LOW=вперёд, HIGH=назад |
-| TRAY_ENA? | 25, 26 | ⚠️ OUTPUT LOW перед работой мотора |
+| TRAY_STEP | 18 | Шаг |
+| TRAY_DIR | 27 | Направление: 0=вперед (FRONT), 1=назад (BACK) |
+| TRAY_EN1 | 25 | Enable 1: LOW=работа, HIGH=отключен |
+| TRAY_EN2 | 26 | Enable 2: LOW=работа, HIGH=отключен |
 
-### Концевики (INPUT, PUD_UP, HIGH = сработал)
-| Функция | BCM Pin | Описание |
-|---------|---------|----------|
-| SENSOR_LEFT | 9 | Каретка — левый |
-| SENSOR_RIGHT | 10 | Каретка — правый |
-| SENSOR_BOTTOM | 8 | Каретка — нижний |
-| SENSOR_TOP | 11 | Каретка — верхний |
-| SENSOR_TRAY_END | 7 | Платформа — передний |
-| SENSOR_TRAY_BEGIN | 20 | Платформа — задний ⚠️ дребезг |
+**Файл управления:** `tools/tray_platform.py`
 
-### Сервоприводы замков (PWM 50 Гц)
-| Функция | BCM Pin | Открыт | Закрыт |
-|---------|---------|--------|--------|
-| LOCK_FRONT | 12 | DutyCycle 2.5 (0°) | DutyCycle 7.5 (90°) |
-| LOCK_REAR | 13 | DutyCycle 2.5 (0°) | DutyCycle 7.5 (90°) |
+### Концевики XY
+| Функция | BCM Pin | Логика |
+|---------|---------|--------|
+| LEFT | 9 | 1=нажат, 0=свободен |
+| RIGHT | 10 | 1=нажат, 0=свободен |
+| BOTTOM | 8 | 1=нажат, 0=свободен |
+| TOP | 11 | 1=нажат, 0=свободен |
 
-> После установки угла → `ChangeDutyCycle(0)` чтобы серва не жужжала.
+### Концевики платформы
+| Функция | BCM Pin | Логика |
+|---------|---------|--------|
+| FRONT | 7 | 1=нажат, 0=свободен |
+| BACK | 20 | 1=нажат, 0=свободен |
 
 ### Шторки (реле)
-| Функция | BCM Pin | Описание |
-|---------|---------|----------|
-| SHUTTER_OUTER | 2 | LOW=закрыта, HIGH=открыта (SDA1) |
-| SHUTTER_INNER | 3 | LOW=закрыта, HIGH=открыта (SCL1) |
+| Функция | BCM Pin | Логика |
+|---------|---------|--------|
+| SHUTTER_OUTER | 2 | HIGH=открыта, LOW=закрыта |
+| SHUTTER_INNER | 3 | HIGH=открыта, LOW=закрыта |
 
-### Свободные/неопределённые пины
-4, 5, 6, 16, 17, 22, 23, 24
+**ВАЖНО:** Использовать через `bookcabinet.hardware.gpio_manager`!
 
----
-
-## Метод управления
-
-### XY моторы (CoreXY)
-- Актуальный подтверждённый хоминг использует **pigpio wave_chain**
-- Остановка на концевике: callback + резервный polling `pi.read(stop_sensor)`
-- `wave_tx_stop()` используется для мгновенной остановки
-- glitch filter на XY-концевиках обязателен
-
-#### CoreXY кинематика
-| Движение | MOTOR_A_DIR | MOTOR_B_DIR |
-|----------|-------------|-------------|
-| Вправо (X+) | HIGH | HIGH |
-| Влево (X-) | LOW | LOW |
-| Вверх (Y+) | HIGH | LOW |
-| Вниз (Y-) | LOW | HIGH |
-
-### Мотор платформы
-- **RPi.GPIO + `time.perf_counter()` busy-wait**
-- ⚠️ Перед работой: пины 25, 26 → OUTPUT LOW
-- Скорость: **8000 шагов/сек**
-- Антидребезг pin 20: `sensor_stable()` — 3 чтения, проверка каждые 200 шагов
-
-### Сервоприводы замков
-- **RPi.GPIO PWM**, частота 50 Гц
-- `pwm.start(0)` → `ChangeDutyCycle(2.5)` = открыть → `ChangeDutyCycle(7.5)` = закрыть
-- После → `ChangeDutyCycle(0)` (отключить сигнал)
+### Замки (сервоприводы SG90)
+| Функция | BCM Pin | Статус |
+|---------|---------|--------|
+| LOCK_FRONT | 12 | НЕИСПРАВЕН |
+| LOCK_BACK | 13 | НЕИСПРАВЕН (колбасит) |
 
 ---
 
-## Границы движения
+## Калибровка платформы
 
-### Каретка XY
-| Ось | Шаги | мм | steps/mm |
-|-----|------|----|----------|
-| X (RIGHT→LEFT) | 19 948 | ~200 | 100 |
-| Y (BOTTOM→TOP) | 44 853 | ~449 | 100 |
+**Файл:** `tools/tray_platform.py`
 
-- **Home:** LEFT + BOTTOM (0,0)
-- **Хоминг (подтверждено 10.04.2026):** FAST=800, SLOW=300
+```bash
+python3 tools/tray_platform.py calibrate  # Полная калибровка
+python3 tools/tray_platform.py status     # Состояние концевиков
+python3 tools/tray_platform.py front      # Двигать к FRONT
+python3 tools/tray_platform.py back       # Двигать к BACK
+```
 
-### Платформа (лоток)
-| Параметр | Значение |
-|----------|----------|
-| Полный ход | ~22 000 шагов |
-| Скорость | 8000 шагов/сек |
-| Home | задний концевик (BACK) |
-
----
-
-## Хоминг
-
-1. Если концевик уже нажат — сначала backoff от него
-2. Быстрый подход: FAST=800
-3. Отъезд после срабатывания: X=300 шагов, Y=500 шагов
-4. Медленный подход: SLOW=300
-5. Стоп = HOME
-
-Порядок: X (→LEFT), потом Y (→BOTTOM)
-
-Операторский entrypoint: `~/bookcabinet/tools/homing_pigpio.py`
-Канонический motion layer: `~/bookcabinet/tools/corexy_motion_v2.py`
+**Параметры:**
+- Частота: 12000 Hz (оптимум тишины и надежности)
+- Total travel: ~21000 шагов
+- Center: ~10500 шагов
+- Метод: pigpio wave (аппаратные импульсы)
 
 ---
 
-## Известные проблемы
+## Хоминг XY
 
-1. **Pin 20 дребезг** — задний концевик платформы, нужен программный антидребезг
-2. **Старые заметки про PCM conflict устарели** — текущий подтверждённый хоминг использует pigpio wave_chain успешно
-3. **Undervoltage** — RPi 3, проверить БП
-4. **Старые docs про RIGHT+BOTTOM и неизвестные шторки устарели** — ориентироваться на `CLAUDE.md`, `config.py`, `tools/corexy_motion_v2.py` и `tools/homing_pigpio.py`
+**Файл:** `tools/corexy_motion_v2.py`
+
+```bash
+python3 tools/corexy_motion_v2.py home     # Хоминг к LEFT + BOTTOM
+python3 tools/corexy_motion_v2.py x-sweep  # Тест X оси
+python3 tools/corexy_motion_v2.py y-sweep  # Тест Y оси
+```
+
+**Параметры:**
+- HOME позиция: LEFT + BOTTOM (0,0)
+- Скорость FAST: 800 шаг/сек
+- Скорость SLOW: 300 шаг/сек
+- Glitch filter: 300us на всех концевиках
+
+### CoreXY направления
+| Движение | A_DIR | B_DIR |
+|----------|-------|-------|
+| Вправо | 1 | 1 |
+| Влево | 0 | 0 |
+| Вверх | 1 | 0 |
+| Вниз | 0 | 1 |
+
+---
+
+## Startup Sequence
+
+**Файл:** `tools/startup_sequence.py`
+
+1. XY Homing -> LEFT + BOTTOM
+2. Tray Calibration -> FRONT -> BACK -> CENTER
+
+**ВАЖНО:** Калибровка платформы выполняется ТОЛЬКО после успешного хоминга XY!
+
+---
+
+## Управление шторками
+
+**Файл:** `bookcabinet/hardware/shutters.py`
+
+```python
+from bookcabinet.hardware.gpio_manager import gpio
+from bookcabinet.config import GPIO_PINS
+
+# Открыть
+gpio.write(GPIO_PINS['SHUTTER_OUTER'], 1)
+gpio.write(GPIO_PINS['SHUTTER_INNER'], 1)
+
+# Закрыть
+gpio.write(GPIO_PINS['SHUTTER_OUTER'], 0)
+gpio.write(GPIO_PINS['SHUTTER_INNER'], 0)
+```
+
+---
+
+## Ключевые файлы
+
+| Файл | Назначение |
+|------|------------|
+| `bookcabinet/config.py` | GPIO_PINS (источник истины) |
+| `tools/tray_platform.py` | Управление платформой |
+| `tools/corexy_motion_v2.py` | Движение XY |
+| `tools/startup_sequence.py` | Хоминг + калибровка |
+| `tools/homing_pigpio.py` | Обертка хоминга |
+| `bookcabinet/hardware/shutters.py` | Управление шторками |
+| `bookcabinet/hardware/gpio_manager.py` | Абстракция GPIO |
+| `calibration.json` | Координаты стоек/полок |
+
+---
+
+## RFID Считыватели
+
+| Порт | Устройство | Назначение | Baudrate |
+|------|------------|------------|----------|
+| /dev/ttyUSB0 | RRU9816 | UHF книги | 115200 |
+| /dev/ttyUSB1 | IQRFID-5102 | UHF карты ЕКП | 57600 |
+| PC/SC | ACR1281 1S Dual Reader | NFC читательские билеты | - |
+
+### Примечания
+- RRU9816 — считыватель RFID меток на книгах
+- IQRFID-5102 — считыватель карт ЕКП (единая карта петербуржца)
+- ACR1281 — NFC считыватель для читательских билетов библиотеки

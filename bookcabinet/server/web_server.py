@@ -9,7 +9,7 @@ from .api_routes import setup_routes
 
 
 async def index_handler(request):
-    return web.FileResponse('server/static/index.html')
+    static_dir = os.path.join(os.path.dirname(__file__), 'static'); return web.FileResponse(os.path.join(static_dir, 'index.html'))
 
 
 def create_app() -> web.Application:
@@ -20,6 +20,7 @@ def create_app() -> web.Application:
     static_path = os.path.join(os.path.dirname(__file__), 'static')
     if os.path.exists(static_path):
         app.router.add_static('/static', static_path)
+        app.router.add_static('/assets', os.path.join(static_path, 'assets'))
     
     app.router.add_get('/', index_handler)
     app.router.add_get('/admin', index_handler)

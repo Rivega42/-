@@ -16,8 +16,8 @@ except ImportError:
     sys.exit(1)
 
 # Конфигурация шторок
-SHUTTER_OUTER = 14  # Внешняя
-SHUTTER_INNER = 15  # Внутренняя
+SHUTTER_OUTER = 2  # Внешняя
+SHUTTER_INNER = 3  # Внутренняя
 
 # Логика реле: True = HIGH включает, False = LOW включает
 ACTIVE_HIGH = True

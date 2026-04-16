@@ -81,7 +81,7 @@ RFID = {
     'nfc_card_reader': '/dev/pcsc',
     'uhf_card_reader': '/dev/ttyUSB1',
     'uhf_card_baudrate': 57600,
-    'book_reader': '/dev/ttyUSB0',
+    'book_reader': '/dev/ttyUSB2',
     'book_baudrate': 57600,
     'uhf_card_reader_fallback': '/dev/ttyUSB1',
     'book_reader_fallback': '/dev/ttyUSB0',
@@ -105,7 +105,11 @@ TELEGRAM = {
 
 IRBIS = {
     'mock': os.environ.get('IRBIS_MOCK', 'true').lower() == 'true',
-    'host': os.environ.get('IRBIS_HOST', 'localhost'),
-    'port': int(os.environ.get('IRBIS_PORT', '6666' )),
+    'host': os.environ.get('IRBIS_HOST', '172.29.67.70'),
+    'port': int(os.environ.get('IRBIS_PORT', '6666')),
     'db': os.environ.get('IRBIS_DB', 'IBIS'),
+    'books_db': os.environ.get('IRBIS_BOOKS_DB', 'KAT%SERV09%'),
+    'readers_db': os.environ.get('IRBIS_READERS_DB', 'RDR'),
+    'username': os.environ.get('IRBIS_USERNAME', '09f00st'),
+    'password': os.environ.get('IRBIS_PASSWORD', 'f00st'),
 }
