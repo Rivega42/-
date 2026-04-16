@@ -67,6 +67,7 @@ class TrayPlatform:
         for pin in [ENDSTOP_FRONT, ENDSTOP_BACK]:
             self.pi.set_mode(pin, pigpio.INPUT)
             self.pi.set_pull_up_down(pin, pigpio.PUD_UP)
+            self.pi.set_glitch_filter(pin, 300)  # 300μs filter — prevents bounce
     
     def _create_wave(self):
         """Создать wave для генерации импульсов."""
