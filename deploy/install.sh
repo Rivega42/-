@@ -42,6 +42,7 @@ echo -e "${GREEN}OK${NC}"
 
 # 3. Копирование systemd units
 echo -e "${YELLOW}[3/6] Установка systemd сервисов...${NC}"
+cp "$DEPLOY_DIR/bookcabinet-calibration.service" /etc/systemd/system/
 cp "$DEPLOY_DIR/bookcabinet-daemon.service" /etc/systemd/system/
 cp "$DEPLOY_DIR/bookcabinet-ui.service" /etc/systemd/system/
 cp "$DEPLOY_DIR/chromium-kiosk.service" /etc/systemd/system/
@@ -51,6 +52,7 @@ echo -e "${GREEN}OK${NC}"
 # 4. Включение сервисов
 echo -e "${YELLOW}[4/6] Включение автозапуска...${NC}"
 systemctl enable pigpiod 2>/dev/null || true
+systemctl enable bookcabinet-calibration
 systemctl enable bookcabinet-daemon
 systemctl enable bookcabinet-ui
 systemctl enable chromium-kiosk
@@ -59,6 +61,7 @@ echo -e "${GREEN}OK${NC}"
 # 5. Запуск
 echo -e "${YELLOW}[5/6] Запуск сервисов...${NC}"
 systemctl start pigpiod 2>/dev/null || true
+systemctl start bookcabinet-calibration || echo -e "${YELLOW}  ⚠ Калибровка пропущена (нет железа?)${NC}"
 systemctl start bookcabinet-daemon
 systemctl start bookcabinet-ui
 echo -e "${GREEN}OK${NC}"
@@ -70,7 +73,7 @@ sleep 3
 echo ""
 echo "Статус сервисов:"
 echo "-----------------"
-for svc in pigpiod bookcabinet-daemon bookcabinet-ui; do
+for svc in pigpiod bookcabinet-calibration bookcabinet-daemon bookcabinet-ui; do
     if systemctl is-active --quiet "$svc"; then
         echo -e "${GREEN}  ✓ $svc — работает${NC}"
     else

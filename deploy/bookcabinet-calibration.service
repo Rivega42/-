@@ -1,0 +1,20 @@
+[Unit]
+Description=BookCabinet Startup Calibration (locks + XY home + tray)
+After=pigpiod.service
+Requires=pigpiod.service
+Before=bookcabinet-daemon.service bookcabinet-ui.service
+
+[Service]
+Type=oneshot
+User=admin42
+Group=admin42
+WorkingDirectory=/home/admin42/bookcabinet/tools
+ExecStart=/usr/bin/python3 startup_calibration.py
+RemainAfterExit=yes
+TimeoutStartSec=120
+
+# Permissions
+SupplementaryGroups=dialout gpio i2c spi
+
+[Install]
+WantedBy=multi-user.target
