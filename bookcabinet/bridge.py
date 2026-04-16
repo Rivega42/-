@@ -7,16 +7,21 @@ Bridge: TS server вызывает Python бизнес-логику через s
     spawn('python3', ['-m', 'bookcabinet.bridge', 'return', bookRfid])
     spawn('python3', ['-m', 'bookcabinet.bridge', 'home'])
     spawn('python3', ['-m', 'bookcabinet.bridge', 'stop'])
+    spawn('python3', ['-m', 'bookcabinet.bridge', 'issue_sequence', cellAddress])
+    spawn('python3', ['-m', 'bookcabinet.bridge', 'return_sequence', cellAddress])
 
-Вывод: JSON на stdout.
+Вывод: JSON на stdout (one JSON object per line).
+Progress events: {"type": "progress", "step": N, "label": "...", "status": "running"|"done"}
+Final result:    {"type": "result", "success": true|false, ...}
 """
 import sys
 import json
 import asyncio
 
-# Добавляем путь для импорта bookcabinet
+# Добавляем путь для импорта bookcabinet и tools
 import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'tools'))
 
 
 def output(data: dict):
@@ -61,12 +66,44 @@ async def cmd_status():
     output({'type': 'result', 'success': True, **state})
 
 
+async def cmd_issue_sequence(cell_address: str):
+    """Run the full mechanical issue sequence for a cell address (e.g. '1.1.5')."""
+    from book_sequences import BookSequenceRunner
+
+    def on_progress(**event):
+        output({'type': 'progress', **event})
+
+    runner = BookSequenceRunner(progress_cb=on_progress)
+    try:
+        result = await runner.issue_book_sequence(cell_address)
+        output({'type': 'result', **result})
+    finally:
+        runner.close()
+
+
+async def cmd_return_sequence(cell_address: str):
+    """Run the full mechanical return sequence, placing book into cell_address."""
+    from book_sequences import BookSequenceRunner
+
+    def on_progress(**event):
+        output({'type': 'progress', **event})
+
+    runner = BookSequenceRunner(progress_cb=on_progress)
+    try:
+        result = await runner.return_book_sequence(cell_address)
+        output({'type': 'result', **result})
+    finally:
+        runner.close()
+
+
 COMMANDS = {
     'issue': lambda args: cmd_issue(args[0], args[1]),
     'return': lambda args: cmd_return(args[0]),
     'home': lambda args: cmd_home(),
     'stop': lambda args: cmd_stop(),
     'status': lambda args: cmd_status(),
+    'issue_sequence': lambda args: cmd_issue_sequence(args[0]),
+    'return_sequence': lambda args: cmd_return_sequence(args[0]),
 }
 
 

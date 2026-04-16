@@ -530,9 +530,7 @@ export default function KioskPage() {
     if (!session) return;
     setIssuingBook(book);
     setScreen('issue_process');
-
-    // Trigger the actual issue
-    issueMutation.mutate({ bookRfid: book.rfid, userRfid: session.user.rfid });
+    // IssueProcess component now triggers the API call itself on mount
   };
 
   const handleLoadBook = () => {
@@ -2115,13 +2113,20 @@ export default function KioskPage() {
         <BookList
           books={session?.reservedBooks || []}
           userRfid={session?.user.rfid || ''}
-          onIssue={(bookRfid, userRfid) => issueMutation.mutate({ bookRfid, userRfid })}
-          issuing={issueMutation.isPending}
+          onIssue={(bookRfid, _userRfid) => {
+            const book = session?.reservedBooks.find(b => b.rfid === bookRfid);
+            if (book) {
+              setIssuingBook(book);
+              setScreen('issue_process');
+            }
+          }}
+          issuing={false}
         />
       )}
       {screen === 'issue_process' && (
         <IssueProcess
           book={issuingBook}
+          userRfid={session?.user.rfid}
           wsRef={wsRef}
           onComplete={() => {
             setSuccessMessage(`Книга "${issuingBook?.title || ''}" выдана`);
@@ -2135,7 +2140,20 @@ export default function KioskPage() {
           }}
         />
       )}
-      {screen === 'return_book' && <ReturnBook isPending={false} wsRef={wsRef} />}
+      {screen === 'return_book' && (
+        <ReturnBook
+          isPending={false}
+          wsRef={wsRef}
+          onComplete={() => {
+            setSuccessMessage('Книга успешно возвращена');
+            setScreen('success');
+          }}
+          onError={(msg) => {
+            setErrorMessage(msg);
+            setScreen('error');
+          }}
+        />
+      )}
       {screen === 'load_books' && renderLoadBooks()}
       {screen === 'extract_books' && renderExtractBooks()}
       {screen === 'operations_log' && renderOperationsLog()}

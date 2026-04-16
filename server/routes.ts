@@ -2199,18 +2199,44 @@ except Exception as e:
     }
   });
 
-  // #20: POST /api/book/issue — alias for /api/issue with field name mapping
+  // #20/#32: POST /api/book/issue — full issue cycle with mechanical sequence
   app.post("/api/book/issue", async (req, res) => {
     try {
       const { reader_uid, book_rfid } = req.body;
       const bookRfid = book_rfid || req.body.bookRfid;
       const userRfid = reader_uid || req.body.userRfid;
+      const cellAddress = req.body.cellAddress || req.body.cell_address;
 
       if (!bookRfid || !userRfid) {
         return res.status(400).json({ error: 'book_rfid/bookRfid and reader_uid/userRfid are required' });
       }
 
-      const result = await runPythonBridge('issue', [bookRfid, userRfid]);
+      // Broadcast operation started
+      broadcast({ type: 'operation_started', data: { operation: 'issue', bookRfid, userRfid } } as any);
+
+      // Determine cell address: from request body, or look up by book's cellId
+      let resolvedCell = cellAddress;
+      if (!resolvedCell) {
+        const book = await storage.getBookByRfid(bookRfid);
+        if (book && book.cellId !== null) {
+          const cell = await storage.getCell(book.cellId);
+          if (cell) {
+            // Convert cell record to calibration address format: depth.rack.shelf
+            resolvedCell = `${cell.row === 'FRONT' ? 1 : 2}.${cell.x + 1}.${cell.y + 1}`;
+          }
+        }
+      }
+
+      let result: any;
+      if (resolvedCell) {
+        // Use the new mechanical issue_sequence via python bridge
+        result = await pythonBridge.issueSequence(resolvedCell, (msg) => {
+          broadcast({ type: 'progress', data: msg } as any);
+        });
+      } else {
+        // Fallback to old bridge command if no cell address available
+        result = await runPythonBridge('issue', [bookRfid, userRfid]);
+      }
 
       if (result.success) {
         const book = await storage.getBookByRfid(bookRfid);
@@ -2231,15 +2257,19 @@ except Exception as e:
           }
         }
         broadcast({ type: 'operation_completed', data: { operation: 'issue', bookRfid, userRfid } } as any);
+      } else {
+        broadcast({ type: 'operation_failed', data: { operation: 'issue', message: result.error || 'Issue sequence failed' } } as any);
       }
 
       res.json(result);
     } catch (error) {
-      res.status(500).json({ error: error instanceof Error ? error.message : 'Issue failed' });
+      const msg = error instanceof Error ? error.message : 'Issue failed';
+      broadcast({ type: 'operation_failed', data: { operation: 'issue', message: msg } } as any);
+      res.status(500).json({ error: msg });
     }
   });
 
-  // #21: POST /api/book/return — alias for /api/return with field mapping
+  // #21/#33: POST /api/book/return — full return cycle with mechanical sequence
   app.post("/api/book/return", async (req, res) => {
     try {
       const bookRfid = req.body.book_rfid || req.body.bookRfid;
@@ -2247,29 +2277,55 @@ except Exception as e:
         return res.status(400).json({ error: 'book_rfid/bookRfid is required' });
       }
 
-      const result = await runPythonBridge('return', [bookRfid]);
+      // Broadcast operation started
+      broadcast({ type: 'operation_started', data: { operation: 'return', bookRfid } } as any);
+
+      // Find a free cell for the return
+      let cellAddress = req.body.cellAddress || req.body.cell_address;
+      let targetCell: any = null;
+      if (!cellAddress) {
+        targetCell = await storage.getEmptyCell();
+        if (targetCell) {
+          cellAddress = `${targetCell.row === 'FRONT' ? 1 : 2}.${targetCell.x + 1}.${targetCell.y + 1}`;
+        }
+      }
+
+      let result: any;
+      if (cellAddress) {
+        // Use the new mechanical return_sequence via python bridge
+        result = await pythonBridge.returnSequence(cellAddress, (msg) => {
+          broadcast({ type: 'progress', data: msg } as any);
+        });
+      } else {
+        // Fallback: no free cell, try the old bridge command
+        result = await runPythonBridge('return', [bookRfid]);
+      }
 
       if (result.success) {
         const book = await storage.getBookByRfid(bookRfid);
-        if (book && result.cell) {
+        if (book && targetCell) {
           await storage.updateBook(book.id, {
             status: 'in_cabinet',
             issuedToRfid: null,
-            cellId: result.cell.id,
+            cellId: targetCell.id,
           });
-          await storage.updateCell(result.cell.id, {
+          await storage.updateCell(targetCell.id, {
             status: 'occupied',
             bookRfid,
             bookTitle: book.title,
             needsExtraction: true,
           });
         }
-        broadcast({ type: 'operation_completed', data: { operation: 'return', bookRfid } } as any);
+        broadcast({ type: 'operation_completed', data: { operation: 'return', bookRfid, cell: cellAddress } } as any);
+      } else {
+        broadcast({ type: 'operation_failed', data: { operation: 'return', message: result.error || 'Return sequence failed' } } as any);
       }
 
       res.json(result);
     } catch (error) {
-      res.status(500).json({ error: error instanceof Error ? error.message : 'Return failed' });
+      const msg = error instanceof Error ? error.message : 'Return failed';
+      broadcast({ type: 'operation_failed', data: { operation: 'return', message: msg } } as any);
+      res.status(500).json({ error: msg });
     }
   });
 
