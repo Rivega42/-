@@ -1,0 +1,185 @@
+import { useState, useEffect, useRef, useCallback } from "react";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Progress } from "@/components/ui/progress";
+import { Badge } from "@/components/ui/badge";
+import { BookOpen, CheckCircle2, Loader2, Clock, Package } from "lucide-react";
+import type { Book } from "@shared/schema";
+
+interface IssueStep {
+  id: number;
+  label: string;
+  description: string;
+}
+
+const ISSUE_STEPS: IssueStep[] = [
+  { id: 1, label: "Подготовка", description: "Каретка перемещается к ячейке с книгой" },
+  { id: 2, label: "Захват", description: "Захват полки с книгой" },
+  { id: 3, label: "Перемещение", description: "Каретка едет к окну выдачи" },
+  { id: 4, label: "Проверка", description: "Сканирование RFID-метки книги" },
+  { id: 5, label: "Выдача", description: "Заберите книгу из окна" },
+  { id: 6, label: "Завершение", description: "Закрытие шторок, регистрация выдачи" },
+];
+
+interface IssueProcessProps {
+  book: Book | null;
+  onComplete: () => void;
+  onError: (message: string) => void;
+  wsRef: React.RefObject<WebSocket | null>;
+}
+
+export function IssueProcess({ book, onComplete, onError, wsRef }: IssueProcessProps) {
+  const [currentStep, setCurrentStep] = useState(1);
+  const [shutterTimer, setShutterTimer] = useState<number | null>(null);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Listen for WebSocket progress events
+  useEffect(() => {
+    const ws = wsRef.current;
+    if (!ws) return;
+
+    const handler = (event: MessageEvent) => {
+      try {
+        const msg = JSON.parse(event.data);
+        if (msg.type === 'progress' && msg.data) {
+          const data = msg.data;
+          if (data.step && typeof data.step === 'number') {
+            setCurrentStep(data.step);
+          }
+        }
+        if (msg.type === 'motion_complete') {
+          if (currentStep <= 3) setCurrentStep(prev => Math.max(prev, 4));
+        }
+        if (msg.type === 'shutter_state' && msg.data?.shutter === 'outer' && msg.data?.state === 'open') {
+          setCurrentStep(5);
+          setShutterTimer(30);
+        }
+        if (msg.type === 'book_presence' && msg.data?.present === false) {
+          // Book was taken
+          setCurrentStep(6);
+          setShutterTimer(null);
+        }
+        if (msg.type === 'operation_completed') {
+          setCurrentStep(6);
+          setTimeout(onComplete, 1500);
+        }
+        if (msg.type === 'operation_failed' || msg.type === 'error') {
+          onError(msg.data?.message || 'Operation failed');
+        }
+      } catch {}
+    };
+
+    ws.addEventListener('message', handler);
+    return () => ws.removeEventListener('message', handler);
+  }, [wsRef, onComplete, onError, currentStep]);
+
+  // Timer countdown when shutter is open (step 5)
+  useEffect(() => {
+    if (shutterTimer === null || shutterTimer <= 0) {
+      if (timerRef.current) clearInterval(timerRef.current);
+      return;
+    }
+
+    timerRef.current = setInterval(() => {
+      setShutterTimer(prev => {
+        if (prev === null || prev <= 1) {
+          if (timerRef.current) clearInterval(timerRef.current);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
+  }, [shutterTimer !== null]);
+
+  const progressPercent = Math.round((currentStep / ISSUE_STEPS.length) * 100);
+
+  return (
+    <div className="min-h-screen bg-white pt-28 p-6" data-testid="screen-issue-process">
+      <div className="max-w-2xl mx-auto">
+        {/* Book info */}
+        {book && (
+          <Card className="p-5 mb-6">
+            <div className="flex items-center gap-4">
+              <BookOpen className="w-10 h-10 text-black" />
+              <div>
+                <h3 className="text-xl font-bold">{book.title}</h3>
+                <p className="text-base text-black">{book.author}</p>
+              </div>
+            </div>
+          </Card>
+        )}
+
+        {/* Step indicator */}
+        <div className="mb-6">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-lg font-bold">
+              Шаг {currentStep} / {ISSUE_STEPS.length}
+            </span>
+            <Badge variant="default">{progressPercent}%</Badge>
+          </div>
+          <Progress value={progressPercent} className="h-3 mb-2" />
+          <p className="text-base text-black font-medium">
+            {ISSUE_STEPS[currentStep - 1]?.description || "Обработка..."}
+          </p>
+        </div>
+
+        {/* Steps list */}
+        <div className="space-y-3 mb-6">
+          {ISSUE_STEPS.map((step) => {
+            const isCompleted = step.id < currentStep;
+            const isCurrent = step.id === currentStep;
+            return (
+              <div
+                key={step.id}
+                className={`flex items-center gap-3 p-3 rounded-xl border-2 ${
+                  isCompleted
+                    ? "border-black bg-white"
+                    : isCurrent
+                    ? "border-black bg-white"
+                    : "border-gray-300 bg-white opacity-50"
+                }`}
+              >
+                <div className="w-8 h-8 flex items-center justify-center">
+                  {isCompleted ? (
+                    <CheckCircle2 className="w-6 h-6 text-black" />
+                  ) : isCurrent ? (
+                    <Loader2 className="w-6 h-6 text-black animate-spin" />
+                  ) : (
+                    <span className="w-6 h-6 rounded-full border-2 border-gray-400 flex items-center justify-center text-sm text-gray-400">
+                      {step.id}
+                    </span>
+                  )}
+                </div>
+                <div>
+                  <span className={`font-bold ${isCompleted || isCurrent ? "text-black" : "text-gray-400"}`}>
+                    {step.label}
+                  </span>
+                  {isCurrent && (
+                    <p className="text-sm text-black">{step.description}</p>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Timer when shutter is open */}
+        {shutterTimer !== null && shutterTimer > 0 && currentStep === 5 && (
+          <Card className="p-6 text-center border-2 border-black">
+            <Package className="w-16 h-16 mx-auto mb-3 text-black" />
+            <h3 className="text-2xl font-bold mb-2">Заберите книгу!</h3>
+            <div className="flex items-center justify-center gap-2 text-lg">
+              <Clock className="w-5 h-5" />
+              <span className="font-bold text-2xl">{shutterTimer}</span>
+              <span>сек.</span>
+            </div>
+          </Card>
+        )}
+      </div>
+    </div>
+  );
+}

@@ -43,17 +43,39 @@
   --font-sans: "Inter", system-ui, -apple-system, sans-serif;
   --font-serif: Georgia, serif;
   --font-mono: "JetBrains Mono", "Courier New", monospace;
-  --radius: 0.5rem;
+  --radius: 0.75rem;
   --shadow-2xs: none;
   --shadow-xs: none;
-  --shadow-sm: none;
-  --shadow: none;
-  --shadow-md: none;
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.1);
   --shadow-lg: none;
   --shadow-xl: none;
   --shadow-2xl: none;
   --tracking-normal: 0em;
   --spacing: 0.25rem;
+  /* Cal.com design refinements — keep B&W contrast */
+  --cal-bg: white;
+  --cal-bg-subtle: #f3f4f6;
+  --cal-bg-muted: #f9fafb;
+  --cal-bg-emphasis: #e5e7eb;
+  --cal-bg-inverted: #111827;
+  --cal-bg-info: #dee9fc;
+  --cal-bg-success: #e2fbe8;
+  --cal-bg-attention: #fceed8;
+  --cal-bg-error: #f9e3e2;
+  --cal-text: #111827;
+  --cal-text-muted: #6b7280;
+  --cal-text-subtle: #9ca3af;
+  --cal-text-inverted: white;
+  --cal-border: #e5e7eb;
+  --cal-border-emphasis: #d1d5db;
+  --cal-success: #10b981;
+  --cal-warning: #f59e0b;
+  --cal-error: #ef4444;
+  --cal-info: #3b82f6;
+  --cal-transition: 150ms ease;
+  --cal-touch-min: 48px;
 }
 
 /* No dark mode — sunlight theme only */
@@ -88,21 +110,30 @@
     @apply font-sans antialiased bg-background text-foreground;
   }
 
+  /* Cal.com smooth transitions on all interactive elements */
+  button, [role="button"], a, input, select, textarea, [data-slot="card"], .card {
+    transition: all var(--cal-transition, 150ms ease);
+  }
+
   /* Force high contrast on all interactive elements */
   button, [role="button"] {
     @apply font-bold;
+    min-height: var(--cal-touch-min, 48px);
+    border-radius: var(--radius, 0.75rem);
   }
 
-  /* Cards get visible borders instead of shadows */
+  /* Cards get visible borders instead of shadows + Cal.com rounded corners */
   [data-slot="card"], .card {
     border: 2px solid black !important;
+    border-radius: var(--radius, 0.75rem) !important;
   }
 
-  /* Inputs: thick border, high contrast */
+  /* Inputs: thick border, high contrast + Cal.com rounded corners */
   input, select, textarea {
     border: 2px solid black !important;
     background: white !important;
     color: black !important;
+    border-radius: var(--radius, 0.75rem) !important;
   }
 
   input:focus, select:focus, textarea:focus {
@@ -113,6 +144,7 @@
   /* Badges: black bg, white text */
   [data-slot="badge"] {
     font-weight: 800 !important;
+    border-radius: calc(var(--radius, 0.75rem) / 2) !important;
   }
 }
 
@@ -200,4 +232,16 @@
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(10px); }
   to { opacity: 1; transform: translateY(0); }
+}
+
+/* Green checkmark success animation */
+.animate-bounce-once {
+  animation: bounceOnce 0.6s ease-out;
+}
+
+@keyframes bounceOnce {
+  0% { transform: scale(0); opacity: 0; }
+  50% { transform: scale(1.2); opacity: 1; }
+  70% { transform: scale(0.9); }
+  100% { transform: scale(1); opacity: 1; }
 }

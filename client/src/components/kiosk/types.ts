@@ -7,6 +7,7 @@ export type Screen =
   | 'admin_menu'
   | 'book_list'
   | 'return_book'
+  | 'issue_process'
   | 'load_books'
   | 'extract_books'
   | 'inventory'

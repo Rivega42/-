@@ -46,20 +46,21 @@ import {
   Sliders,
   Radio,
 } from "lucide-react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { CabinetViewer } from "@/components/CabinetViewer";
 import SettingsPanel from "@/components/SettingsPanel";
 import TeachMode from "@/components/TeachMode";
 import { ReaderMenu, BookList, ReturnBook } from "@/components/kiosk/ReaderScreens";
 import { ProgressScreen, SuccessScreen, ErrorScreen, MaintenanceScreen } from "@/components/kiosk/FeedbackScreens";
+import { IssueProcess } from "@/components/kiosk/IssueProcess";
 
-type Screen = 
-  | 'welcome' 
-  | 'reader_menu' 
-  | 'librarian_menu' 
+type Screen =
+  | 'welcome'
+  | 'reader_menu'
+  | 'librarian_menu'
   | 'admin_menu'
-  | 'book_list' 
-  | 'return_book' 
+  | 'book_list'
+  | 'return_book'
+  | 'issue_process'
   | 'load_books'
   | 'extract_books'
   | 'inventory'
@@ -71,8 +72,8 @@ type Screen =
   | 'cabinet_view'
   | 'settings'
   | 'teach_mode'
-  | 'progress' 
-  | 'success' 
+  | 'progress'
+  | 'success'
   | 'error'
   | 'maintenance';
 
@@ -92,9 +93,8 @@ export default function KioskPage() {
   const [newBookRfid, setNewBookRfid] = useState('');
   const [newBookTitle, setNewBookTitle] = useState('');
   const [newBookAuthor, setNewBookAuthor] = useState('');
-  const [adminPin, setAdminPin] = useState('');
-  const [showPinDialog, setShowPinDialog] = useState(false);
   const [manualReturnRfid, setManualReturnRfid] = useState('');
+  const [issuingBook, setIssuingBook] = useState<Book | null>(null);
   // Operations log filters
   const [logFilterType, setLogFilterType] = useState<string>('all');
   const [logFilterDate, setLogFilterDate] = useState<string>('all');
@@ -528,13 +528,11 @@ export default function KioskPage() {
 
   const handleIssueBook = (book: Book) => {
     if (!session) return;
-    setProgressMessage(`Выдача книги: ${book.title}`);
-    setProgressValue(50);
-    setScreen('progress');
-    
-    setTimeout(() => {
-      issueMutation.mutate({ bookRfid: book.rfid, userRfid: session.user.rfid });
-    }, 1000);
+    setIssuingBook(book);
+    setScreen('issue_process');
+
+    // Trigger the actual issue
+    issueMutation.mutate({ bookRfid: book.rfid, userRfid: session.user.rfid });
   };
 
   const handleLoadBook = () => {
@@ -625,8 +623,8 @@ export default function KioskPage() {
         <p className="text-base text-black mb-6">или выберите тестового пользователя</p>
         
         <div className="flex flex-wrap gap-3 justify-center">
-          <Button 
-            size="lg" 
+          <Button
+            size="lg"
             className="h-20 px-8 text-xl min-w-[200px]"
             onClick={() => handleCardScan('CARD001')}
             data-testid="button-test-reader"
@@ -634,8 +632,8 @@ export default function KioskPage() {
             <UserIcon className="w-6 h-6 mr-2" />
             Читатель
           </Button>
-          <Button 
-            size="lg" 
+          <Button
+            size="lg"
             variant="secondary"
             className="h-20 px-8 text-xl min-w-[200px]"
             onClick={() => handleCardScan('ADMIN01')}
@@ -648,7 +646,7 @@ export default function KioskPage() {
             size="lg"
             variant="outline"
             className="h-20 px-8 text-xl min-w-[200px] border-2 border-black text-black hover:bg-black hover:text-white"
-            onClick={() => { setAdminPin(''); setShowPinDialog(true); }}
+            onClick={() => handleCardScan('ADMIN99')}
             data-testid="button-test-admin"
           >
             <Shield className="w-6 h-6 mr-2" />
@@ -663,46 +661,6 @@ export default function KioskPage() {
           <span>Авторизация...</span>
         </div>
       )}
-
-      <Dialog open={showPinDialog} onOpenChange={setShowPinDialog}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Введите PIN администратора</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <Input
-              type="password"
-              placeholder="PIN-код"
-              value={adminPin}
-              onChange={(e) => setAdminPin(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  if (adminPin === '1234') {
-                    setShowPinDialog(false);
-                    handleCardScan('ADMIN99');
-                  } else {
-                    toast({ title: 'Ошибка', description: 'Неверный PIN-код', variant: 'destructive' });
-                    setAdminPin('');
-                  }
-                }
-              }}
-              autoFocus
-            />
-            <div className="flex gap-3 justify-end">
-              <Button variant="outline" onClick={() => setShowPinDialog(false)}>Отмена</Button>
-              <Button onClick={() => {
-                if (adminPin === '1234') {
-                  setShowPinDialog(false);
-                  handleCardScan('ADMIN99');
-                } else {
-                  toast({ title: 'Ошибка', description: 'Неверный PIN-код', variant: 'destructive' });
-                  setAdminPin('');
-                }
-              }}>Войти</Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 
@@ -2161,7 +2119,23 @@ export default function KioskPage() {
           issuing={issueMutation.isPending}
         />
       )}
-      {screen === 'return_book' && <ReturnBook isPending={false} />}
+      {screen === 'issue_process' && (
+        <IssueProcess
+          book={issuingBook}
+          wsRef={wsRef}
+          onComplete={() => {
+            setSuccessMessage(`Книга "${issuingBook?.title || ''}" выдана`);
+            setIssuingBook(null);
+            setScreen('success');
+          }}
+          onError={(msg) => {
+            setErrorMessage(msg);
+            setIssuingBook(null);
+            setScreen('error');
+          }}
+        />
+      )}
+      {screen === 'return_book' && <ReturnBook isPending={false} wsRef={wsRef} />}
       {screen === 'load_books' && renderLoadBooks()}
       {screen === 'extract_books' && renderExtractBooks()}
       {screen === 'operations_log' && renderOperationsLog()}

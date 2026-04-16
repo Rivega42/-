@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { BookOpen, Undo2, CreditCard, Loader2, Radio } from "lucide-react";
+import { Progress } from "@/components/ui/progress";
+import { BookOpen, Undo2, CreditCard, Loader2, Radio, Clock, CheckCircle2 } from "lucide-react";
 import type { User, Book } from "@shared/schema";
 import type { SessionData } from "./types";
 
@@ -109,33 +110,119 @@ export function BookList({ books, onIssue, userRfid, issuing }: BookListProps) {
 interface ReturnBookProps {
   isPending: boolean;
   onManualReturn?: (rfid: string) => void;
+  wsRef?: React.RefObject<WebSocket | null>;
 }
 
-export function ReturnBook({ isPending, onManualReturn }: ReturnBookProps) {
+export function ReturnBook({ isPending, onManualReturn, wsRef }: ReturnBookProps) {
   const [manualRfid, setManualRfid] = useState('');
+  const [timer, setTimer] = useState(60);
+  const [detectedBook, setDetectedBook] = useState<{ rfid: string; title?: string } | null>(null);
+  const [returnProgress, setReturnProgress] = useState(0);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // 60-second countdown timer
+  useEffect(() => {
+    setTimer(60);
+    timerRef.current = setInterval(() => {
+      setTimer(prev => {
+        if (prev <= 1) {
+          if (timerRef.current) clearInterval(timerRef.current);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
+  }, []);
+
+  // Listen for WebSocket events
+  useEffect(() => {
+    const ws = wsRef?.current;
+    if (!ws) return;
+
+    const handler = (event: MessageEvent) => {
+      try {
+        const msg = JSON.parse(event.data);
+        if (msg.type === 'book_read' || msg.type === 'book_detected') {
+          const rfid = msg.data?.rfid;
+          if (rfid) {
+            setDetectedBook({ rfid, title: msg.data?.title });
+            setReturnProgress(30);
+          }
+        }
+        if (msg.type === 'progress' && msg.data?.step) {
+          setReturnProgress(Math.min(90, msg.data.step * 15));
+        }
+        if (msg.type === 'operation_completed') {
+          setReturnProgress(100);
+        }
+      } catch {}
+    };
+
+    ws.addEventListener('message', handler);
+    return () => ws.removeEventListener('message', handler);
+  }, [wsRef]);
 
   return (
-    <div className="min-h-screen bg-slate-100 pt-28 p-6" data-testid="screen-return-book">
+    <div className="min-h-screen bg-white pt-28 p-6" data-testid="screen-return-book">
       <div className="max-w-3xl mx-auto text-center">
-        <h2 className="text-3xl font-bold text-slate-800 mb-6">Возврат книги</h2>
+        <h2 className="text-3xl font-bold text-black mb-6">Возврат книги</h2>
 
         <Card className="p-10 mb-6">
-          <Radio className="w-20 h-20 text-green-500 mx-auto mb-4 animate-pulse" />
+          <Radio className="w-20 h-20 text-black mx-auto mb-4 animate-pulse" />
           <p className="text-xl mb-3">Положите книгу в окно приёма</p>
-          <p className="text-base text-slate-500 mb-6">
+          <p className="text-base text-black mb-4">
             Книга будет автоматически распознана по RFID-метке
           </p>
 
-          <div className="flex items-center justify-center gap-3 text-green-600 mb-4">
-            <span className="relative flex h-4 w-4">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-4 w-4 bg-green-500"></span>
+          {/* Timer */}
+          <div className="flex items-center justify-center gap-2 mb-4">
+            <Clock className="w-5 h-5 text-black" />
+            <span className={`text-2xl font-bold ${timer <= 10 ? 'text-red-600' : 'text-black'}`}>
+              {timer}
             </span>
-            <span className="text-lg font-medium">Ожидаю скан...</span>
+            <span className="text-black">сек.</span>
           </div>
 
+          {/* Detected book info */}
+          {detectedBook && (
+            <div className="p-4 border-2 border-black rounded-xl mb-4">
+              <div className="flex items-center justify-center gap-2 mb-2">
+                <CheckCircle2 className="w-5 h-5 text-black" />
+                <span className="font-bold">Книга обнаружена</span>
+              </div>
+              {detectedBook.title && (
+                <p className="text-lg font-medium">{detectedBook.title}</p>
+              )}
+              <p className="text-sm text-black">RFID: {detectedBook.rfid}</p>
+            </div>
+          )}
+
+          {/* Progress bar during return */}
+          {returnProgress > 0 && (
+            <div className="mb-4">
+              <Progress value={returnProgress} className="h-3" />
+              <p className="text-sm text-black mt-1">
+                {returnProgress < 100 ? 'Обработка возврата...' : 'Готово!'}
+              </p>
+            </div>
+          )}
+
+          {!detectedBook && (
+            <div className="flex items-center justify-center gap-3 text-black mb-4">
+              <span className="relative flex h-4 w-4">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-black opacity-30"></span>
+                <span className="relative inline-flex rounded-full h-4 w-4 bg-black"></span>
+              </span>
+              <span className="text-lg font-medium">Ожидаю скан...</span>
+            </div>
+          )}
+
           {isPending && (
-            <div className="flex items-center justify-center gap-3 text-slate-600">
+            <div className="flex items-center justify-center gap-3 text-black">
               <Loader2 className="w-6 h-6 animate-spin" />
               <span>Обработка...</span>
             </div>
@@ -143,7 +230,7 @@ export function ReturnBook({ isPending, onManualReturn }: ReturnBookProps) {
         </Card>
 
         <Card className="p-6">
-          <p className="text-sm text-slate-500 mb-3">Ручной ввод RFID (если автоскан не сработал)</p>
+          <p className="text-sm text-black mb-3">Ручной ввод RFID (если автоскан не сработал)</p>
           <div className="flex gap-3 justify-center">
             <Input
               placeholder="RFID метка книги"
