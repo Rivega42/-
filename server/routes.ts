@@ -121,6 +121,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // RFID Service event handlers
   rfidService.on('tagRead', (tagEvent: TagReadEvent) => {
     broadcast({ type: 'tag_read', data: tagEvent });
+    // #23: broadcast book_read and book_presence for book RFID tags
+    if (tagEvent.epc) {
+      broadcast({ type: 'book_read', data: { rfid: tagEvent.epc, timestamp: new Date().toISOString() } } as any);
+      broadcast({ type: 'book_presence', data: { present: true, rfid: tagEvent.epc } } as any);
+    }
   });
 
   rfidService.on('status', (status: RfidReaderStatus) => {
@@ -142,6 +147,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   cabinetService.on('operation_failed', (data) => {
     broadcast({ type: 'operation_failed', data });
+    // #23: Also broadcast as 'error' event for frontend
+    broadcast({ type: 'error', data: { code: 'OPERATION_FAILED', message: data?.message || 'Operation failed' } } as any);
   });
 
   cabinetService.on('cell_opened', (position) => {
@@ -150,6 +157,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   cabinetService.on('book_detected', (rfid) => {
     broadcast({ type: 'book_detected', data: { rfid } });
+    // #23: Also broadcast as 'book_read' for frontend WebSocket listeners
+    broadcast({ type: 'book_read', data: { rfid, timestamp: new Date().toISOString() } } as any);
   });
 
   // WebSocket connection handler
@@ -2113,6 +2122,328 @@ except Exception as e:
       res.json({ success: true, message: 'Wizard закрыт' });
     } catch (error) {
       res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to exit wizard' });
+    }
+  });
+
+  // ==================== READER/BOOK/CABINET API (#18-#22, #30) ====================
+
+  // #18: POST /api/reader/identify
+  app.post("/api/reader/identify", async (req, res) => {
+    try {
+      const { card_uid } = req.body;
+      if (!card_uid) return res.status(400).json({ error: 'card_uid is required' });
+
+      const user = await storage.getUserByRfid(card_uid);
+      if (!user) {
+        return res.status(404).json({ success: false, error: 'User not found' });
+      }
+
+      const booksOnHand = (await storage.getAllBooks()).filter(b => b.issuedToRfid === card_uid);
+      const availableBooks = (await storage.getAllBooks()).filter(b => b.status === 'in_cabinet' || b.status === 'reserved');
+      const cells = await storage.getAllCells();
+      const availableInCabinet = availableBooks.map(b => {
+        const cell = cells.find(c => c.bookRfid === b.rfid);
+        return {
+          rfid: b.rfid,
+          title: b.title,
+          author: b.author,
+          cell: cell ? `${cell.row === 'FRONT' ? 1 : 2}.${cell.x + 1}.${cell.y + 1}` : null,
+        };
+      });
+
+      res.json({
+        success: true,
+        reader: {
+          name: user.name,
+          ticket: user.rfid,
+          role: user.role,
+          books_on_hand: booksOnHand.map(b => ({
+            rfid: b.rfid,
+            title: b.title,
+            due_date: null,
+          })),
+        },
+        available_in_cabinet: availableInCabinet,
+      });
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : 'Identify failed' });
+    }
+  });
+
+  // #19: POST /api/book/lookup
+  app.post("/api/book/lookup", async (req, res) => {
+    try {
+      const { rfid } = req.body;
+      if (!rfid) return res.status(400).json({ error: 'rfid is required' });
+
+      const book = await storage.getBookByRfid(rfid);
+      if (!book) {
+        return res.status(404).json({ success: false, error: 'Book not found' });
+      }
+
+      const cells = await storage.getAllCells();
+      const cell = cells.find(c => c.bookRfid === rfid);
+
+      res.json({
+        success: true,
+        book: {
+          rfid: book.rfid,
+          title: book.title,
+          author: book.author,
+          status: book.status,
+          cell: cell ? `${cell.row === 'FRONT' ? 1 : 2}.${cell.x + 1}.${cell.y + 1}` : null,
+        },
+      });
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : 'Lookup failed' });
+    }
+  });
+
+  // #20: POST /api/book/issue — alias for /api/issue with field name mapping
+  app.post("/api/book/issue", async (req, res) => {
+    try {
+      const { reader_uid, book_rfid } = req.body;
+      const bookRfid = book_rfid || req.body.bookRfid;
+      const userRfid = reader_uid || req.body.userRfid;
+
+      if (!bookRfid || !userRfid) {
+        return res.status(400).json({ error: 'book_rfid/bookRfid and reader_uid/userRfid are required' });
+      }
+
+      const result = await runPythonBridge('issue', [bookRfid, userRfid]);
+
+      if (result.success) {
+        const book = await storage.getBookByRfid(bookRfid);
+        if (book) {
+          await storage.updateBook(book.id, {
+            status: 'issued',
+            issuedToRfid: userRfid,
+            reservedForRfid: null,
+            cellId: null,
+          });
+          if (book.cellId !== null) {
+            await storage.updateCell(book.cellId, {
+              status: 'empty',
+              bookRfid: null,
+              bookTitle: null,
+              reservedFor: null,
+            });
+          }
+        }
+        broadcast({ type: 'operation_completed', data: { operation: 'issue', bookRfid, userRfid } } as any);
+      }
+
+      res.json(result);
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : 'Issue failed' });
+    }
+  });
+
+  // #21: POST /api/book/return — alias for /api/return with field mapping
+  app.post("/api/book/return", async (req, res) => {
+    try {
+      const bookRfid = req.body.book_rfid || req.body.bookRfid;
+      if (!bookRfid) {
+        return res.status(400).json({ error: 'book_rfid/bookRfid is required' });
+      }
+
+      const result = await runPythonBridge('return', [bookRfid]);
+
+      if (result.success) {
+        const book = await storage.getBookByRfid(bookRfid);
+        if (book && result.cell) {
+          await storage.updateBook(book.id, {
+            status: 'in_cabinet',
+            issuedToRfid: null,
+            cellId: result.cell.id,
+          });
+          await storage.updateCell(result.cell.id, {
+            status: 'occupied',
+            bookRfid,
+            bookTitle: book.title,
+            needsExtraction: true,
+          });
+        }
+        broadcast({ type: 'operation_completed', data: { operation: 'return', bookRfid } } as any);
+      }
+
+      res.json(result);
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : 'Return failed' });
+    }
+  });
+
+  // #22: GET /api/cabinet/status
+  app.get("/api/cabinet/status", async (req, res) => {
+    try {
+      const cells = await storage.getAllCells();
+      const total = cells.length;
+      const occupied = cells.filter(c => c.status === 'occupied').length;
+      const empty = cells.filter(c => c.status === 'empty').length;
+      const blocked = cells.filter(c => c.status === 'blocked').length;
+      res.json({
+        total_cells: total,
+        occupied,
+        empty,
+        blocked,
+        cells: cells.map(c => ({
+          address: `${c.row === 'FRONT' ? 1 : 2}.${c.x + 1}.${c.y + 1}`,
+          status: c.status,
+          book_rfid: c.bookRfid || null,
+          book_title: c.bookTitle || null,
+        })),
+      });
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to get cabinet status' });
+    }
+  });
+
+  // #22: GET /api/cabinet/free_cell
+  app.get("/api/cabinet/free_cell", async (req, res) => {
+    try {
+      const cell = await storage.getEmptyCell();
+      if (!cell) return res.status(404).json({ error: 'No free cells' });
+      res.json({
+        cell: `${cell.row === 'FRONT' ? 1 : 2}.${cell.x + 1}.${cell.y + 1}`,
+        x: cell.x,
+        y: cell.y,
+        row: cell.row,
+      });
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to find free cell' });
+    }
+  });
+
+  // #30: POST /api/motion/move
+  app.post("/api/motion/move", async (req, res) => {
+    try {
+      const { cell, x, y } = req.body;
+      let targetX = x;
+      let targetY = y;
+
+      // If cell provided (e.g. "1.2.9"), resolve to x,y coordinates
+      if (cell && typeof cell === 'string') {
+        const parts = cell.split('.').map(Number);
+        if (parts.length === 3) {
+          const [, col, row] = parts;
+          targetX = calibrationData.positions.x[(col || 1) - 1] || 0;
+          targetY = calibrationData.positions.y[(row || 1) - 1] || 0;
+        }
+      }
+
+      if (targetX === undefined || targetY === undefined) {
+        return res.status(400).json({ error: 'Provide cell (e.g. "1.2.9") or x,y coordinates' });
+      }
+
+      // Delegate to python bridge
+      try {
+        await runPythonBridge('move', [String(targetX), String(targetY)]);
+      } catch {
+        // Fallback: update position in simulation mode
+        systemStatus.position = { ...systemStatus.position, x: targetX, y: targetY };
+      }
+
+      broadcast({ type: 'motion_complete', data: { cell, x: targetX, y: targetY } } as any);
+      res.json({ success: true, position: { x: targetX, y: targetY } });
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : 'Motion failed' });
+    }
+  });
+
+  // #30: POST /api/tray/grab
+  app.post("/api/tray/grab", async (req, res) => {
+    try {
+      try {
+        await runPythonBridge('tray_grab', []);
+      } catch {
+        // Simulation fallback
+        systemStatus.locks.front = true;
+        systemStatus.locks.back = true;
+      }
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : 'Tray grab failed' });
+    }
+  });
+
+  // #30: POST /api/tray/release
+  app.post("/api/tray/release", async (req, res) => {
+    try {
+      try {
+        await runPythonBridge('tray_release', []);
+      } catch {
+        systemStatus.locks.front = false;
+        systemStatus.locks.back = false;
+      }
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : 'Tray release failed' });
+    }
+  });
+
+  // #30: POST /api/tray/extend
+  app.post("/api/tray/extend", async (req, res) => {
+    try {
+      try {
+        await runPythonBridge('tray_extend', []);
+      } catch {
+        systemStatus.position = { ...systemStatus.position, tray: 1000 };
+      }
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : 'Tray extend failed' });
+    }
+  });
+
+  // #30: POST /api/tray/retract
+  app.post("/api/tray/retract", async (req, res) => {
+    try {
+      try {
+        await runPythonBridge('tray_retract', []);
+      } catch {
+        systemStatus.position = { ...systemStatus.position, tray: 0 };
+      }
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : 'Tray retract failed' });
+    }
+  });
+
+  // #30: POST /api/shutters/:which/:action (outer|inner, open|close)
+  app.post("/api/shutters/:which/:action", async (req, res) => {
+    try {
+      const { which, action } = req.params;
+      if (!['outer', 'inner'].includes(which) || !['open', 'close'].includes(action)) {
+        return res.status(400).json({ error: 'Invalid shutter/action. Use outer|inner and open|close' });
+      }
+
+      // GPIO pin: outer=2, inner=3. open=HIGH, close=LOW
+      const pin = which === 'outer' ? 2 : 3;
+      const level = action === 'open' ? 'HIGH' : 'LOW';
+
+      const { spawn } = await import('child_process');
+      const script = `import RPi.GPIO as G; G.setmode(G.BCM); G.setwarnings(False); G.setup(${pin},G.OUT); G.output(${pin},G.${level})`;
+      const p = spawn('sudo', ['python3', '-c', script]);
+
+      p.on('close', () => {
+        // Update local state
+        if (which === 'outer') systemStatus.shutters.outer = action === 'open';
+        else systemStatus.shutters.inner = action === 'open';
+
+        broadcast({ type: 'shutter_state', data: { shutter: which, state: action } } as any);
+        broadcast({ type: 'status', data: systemStatus });
+        res.json({ success: true, shutter: which, state: action });
+      });
+
+      p.on('error', () => {
+        // Simulation fallback
+        if (which === 'outer') systemStatus.shutters.outer = action === 'open';
+        else systemStatus.shutters.inner = action === 'open';
+        broadcast({ type: 'shutter_state', data: { shutter: which, state: action } } as any);
+        res.json({ success: true, shutter: which, state: action, simulated: true });
+      });
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : 'Shutter control failed' });
     }
   });
 
