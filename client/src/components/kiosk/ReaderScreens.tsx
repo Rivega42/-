@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
-import { BookOpen, Undo2, CreditCard, Loader2, Radio, Clock, CheckCircle2 } from "lucide-react";
+import { BookOpen, Undo2, CreditCard, Loader2, Radio, Clock, CheckCircle2, Package } from "lucide-react";
 import type { User, Book } from "@shared/schema";
 import type { SessionData } from "./types";
 
@@ -107,21 +107,82 @@ export function BookList({ books, onIssue, userRfid, issuing }: BookListProps) {
   );
 }
 
+interface ReturnStep {
+  id: number;
+  label: string;
+  description: string;
+}
+
+const RETURN_STEPS: ReturnStep[] = [
+  { id: 1, label: "Подготовка", description: "Хоминг каретки" },
+  { id: 2, label: "Окно приёма", description: "Каретка перемещается к окну" },
+  { id: 3, label: "Ожидание", description: "Положите книгу в окно" },
+  { id: 4, label: "Приём", description: "Закрытие шторок, втягивание полки" },
+  { id: 5, label: "Размещение", description: "Перемещение книги в ячейку" },
+  { id: 6, label: "Завершение", description: "Возврат каретки в исходное положение" },
+];
+
 interface ReturnBookProps {
   isPending: boolean;
   onManualReturn?: (rfid: string) => void;
+  onComplete?: () => void;
+  onError?: (message: string) => void;
   wsRef?: React.RefObject<WebSocket | null>;
 }
 
-export function ReturnBook({ isPending, onManualReturn, wsRef }: ReturnBookProps) {
+export function ReturnBook({ isPending, onManualReturn, onComplete, onError, wsRef }: ReturnBookProps) {
   const [manualRfid, setManualRfid] = useState('');
   const [timer, setTimer] = useState(60);
   const [detectedBook, setDetectedBook] = useState<{ rfid: string; title?: string } | null>(null);
-  const [returnProgress, setReturnProgress] = useState(0);
+  const [returnStep, setReturnStep] = useState(0);
+  const [stepLabel, setStepLabel] = useState('');
+  const [sequenceStarted, setSequenceStarted] = useState(false);
+  const [returnPending, setReturnPending] = useState(false);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const returnStartedRef = useRef(false);
 
-  // 60-second countdown timer
+  // Map mechanical step numbers (1-13) to UI steps (1-6)
+  const mapMechanicalStep = (mechStep: number): number => {
+    if (mechStep <= 1) return 1;       // Home XY
+    if (mechStep <= 2) return 2;       // Move to window
+    if (mechStep <= 4) return 3;       // Open outer + wait
+    if (mechStep <= 8) return 4;       // Close outer + open inner + retract + close inner
+    if (mechStep <= 11) return 5;      // Move to cell + open inner + tray back
+    if (mechStep >= 12) return 6;      // Close inner + home
+    return 1;
+  };
+
+  // Start the return sequence when a book RFID is detected
+  const startReturnSequence = (bookRfid: string) => {
+    if (returnStartedRef.current) return;
+    returnStartedRef.current = true;
+    setSequenceStarted(true);
+    setReturnPending(true);
+    setReturnStep(1);
+
+    fetch('/api/book/return', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ bookRfid }),
+    })
+      .then(async (response) => {
+        const data = await response.json();
+        if (!data.success && onError) {
+          onError(data.error || data.message || 'Return sequence failed');
+        }
+        setReturnPending(false);
+      })
+      .catch((err) => {
+        setReturnPending(false);
+        if (onError) {
+          onError(err.message || 'Network error during return');
+        }
+      });
+  };
+
+  // 60-second countdown timer for waiting for book scan
   useEffect(() => {
+    if (sequenceStarted) return; // Don't run scan timer once sequence started
     setTimer(60);
     timerRef.current = setInterval(() => {
       setTimer(prev => {
@@ -136,7 +197,7 @@ export function ReturnBook({ isPending, onManualReturn, wsRef }: ReturnBookProps
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
     };
-  }, []);
+  }, [sequenceStarted]);
 
   // Listen for WebSocket events
   useEffect(() => {
@@ -146,72 +207,88 @@ export function ReturnBook({ isPending, onManualReturn, wsRef }: ReturnBookProps
     const handler = (event: MessageEvent) => {
       try {
         const msg = JSON.parse(event.data);
-        if (msg.type === 'book_read' || msg.type === 'book_detected') {
+
+        // Book RFID detected via reader
+        if ((msg.type === 'book_read' || msg.type === 'book_detected') && !sequenceStarted) {
           const rfid = msg.data?.rfid;
           if (rfid) {
             setDetectedBook({ rfid, title: msg.data?.title });
-            setReturnProgress(30);
+            // Auto-start the return sequence
+            startReturnSequence(rfid);
           }
         }
-        if (msg.type === 'progress' && msg.data?.step) {
-          setReturnProgress(Math.min(90, msg.data.step * 15));
+
+        // Progress events from the mechanical sequence
+        if (msg.type === 'progress' && msg.data) {
+          const data = msg.data;
+          if (data.step && typeof data.step === 'number') {
+            const uiStep = mapMechanicalStep(data.step);
+            setReturnStep(uiStep);
+            if (data.label) {
+              setStepLabel(data.label);
+            }
+            // When outer shutter opens for user wait (mechanical step 4, wait_seconds)
+            if (data.step === 4 && data.status === 'running' && data.wait_seconds) {
+              setTimer(data.wait_seconds);
+              // Restart timer for book placement
+              if (timerRef.current) clearInterval(timerRef.current);
+              let remaining = data.wait_seconds;
+              timerRef.current = setInterval(() => {
+                remaining--;
+                setTimer(remaining);
+                if (remaining <= 0) {
+                  if (timerRef.current) clearInterval(timerRef.current);
+                }
+              }, 1000);
+            }
+          }
         }
-        if (msg.type === 'operation_completed') {
-          setReturnProgress(100);
+
+        if (msg.type === 'operation_completed' && msg.data?.operation === 'return') {
+          setReturnStep(6);
+          if (onComplete) {
+            setTimeout(onComplete, 1500);
+          }
+        }
+
+        if (msg.type === 'operation_failed' && msg.data?.operation === 'return') {
+          if (onError) {
+            onError(msg.data?.message || 'Return operation failed');
+          }
         }
       } catch {}
     };
 
     ws.addEventListener('message', handler);
     return () => ws.removeEventListener('message', handler);
-  }, [wsRef]);
+  }, [wsRef, sequenceStarted, onComplete, onError]);
+
+  // Calculate progress
+  const progressPercent = returnStep > 0 ? Math.round((returnStep / RETURN_STEPS.length) * 100) : 0;
 
   return (
     <div className="min-h-screen bg-white pt-28 p-6" data-testid="screen-return-book">
       <div className="max-w-3xl mx-auto text-center">
         <h2 className="text-3xl font-bold text-black mb-6">Возврат книги</h2>
 
-        <Card className="p-10 mb-6">
-          <Radio className="w-20 h-20 text-black mx-auto mb-4 animate-pulse" />
-          <p className="text-xl mb-3">Положите книгу в окно приёма</p>
-          <p className="text-base text-black mb-4">
-            Книга будет автоматически распознана по RFID-метке
-          </p>
+        {/* Before sequence starts: scan waiting */}
+        {!sequenceStarted && (
+          <Card className="p-10 mb-6">
+            <Radio className="w-20 h-20 text-black mx-auto mb-4 animate-pulse" />
+            <p className="text-xl mb-3">Положите книгу в окно приёма</p>
+            <p className="text-base text-black mb-4">
+              Книга будет автоматически распознана по RFID-метке
+            </p>
 
-          {/* Timer */}
-          <div className="flex items-center justify-center gap-2 mb-4">
-            <Clock className="w-5 h-5 text-black" />
-            <span className={`text-2xl font-bold ${timer <= 10 ? 'text-red-600' : 'text-black'}`}>
-              {timer}
-            </span>
-            <span className="text-black">сек.</span>
-          </div>
-
-          {/* Detected book info */}
-          {detectedBook && (
-            <div className="p-4 border-2 border-black rounded-xl mb-4">
-              <div className="flex items-center justify-center gap-2 mb-2">
-                <CheckCircle2 className="w-5 h-5 text-black" />
-                <span className="font-bold">Книга обнаружена</span>
-              </div>
-              {detectedBook.title && (
-                <p className="text-lg font-medium">{detectedBook.title}</p>
-              )}
-              <p className="text-sm text-black">RFID: {detectedBook.rfid}</p>
+            {/* Timer */}
+            <div className="flex items-center justify-center gap-2 mb-4">
+              <Clock className="w-5 h-5 text-black" />
+              <span className={`text-2xl font-bold ${timer <= 10 ? 'text-red-600' : 'text-black'}`}>
+                {timer}
+              </span>
+              <span className="text-black">сек.</span>
             </div>
-          )}
 
-          {/* Progress bar during return */}
-          {returnProgress > 0 && (
-            <div className="mb-4">
-              <Progress value={returnProgress} className="h-3" />
-              <p className="text-sm text-black mt-1">
-                {returnProgress < 100 ? 'Обработка возврата...' : 'Готово!'}
-              </p>
-            </div>
-          )}
-
-          {!detectedBook && (
             <div className="flex items-center justify-center gap-3 text-black mb-4">
               <span className="relative flex h-4 w-4">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-black opacity-30"></span>
@@ -219,16 +296,108 @@ export function ReturnBook({ isPending, onManualReturn, wsRef }: ReturnBookProps
               </span>
               <span className="text-lg font-medium">Ожидаю скан...</span>
             </div>
-          )}
 
-          {isPending && (
-            <div className="flex items-center justify-center gap-3 text-black">
-              <Loader2 className="w-6 h-6 animate-spin" />
-              <span>Обработка...</span>
+            {isPending && (
+              <div className="flex items-center justify-center gap-3 text-black">
+                <Loader2 className="w-6 h-6 animate-spin" />
+                <span>Обработка...</span>
+              </div>
+            )}
+          </Card>
+        )}
+
+        {/* After sequence starts: progress steps */}
+        {sequenceStarted && (
+          <>
+            {/* Detected book info */}
+            {detectedBook && (
+              <Card className="p-5 mb-6">
+                <div className="flex items-center justify-center gap-3">
+                  <CheckCircle2 className="w-6 h-6 text-black" />
+                  <div>
+                    <span className="font-bold">Книга обнаружена</span>
+                    {detectedBook.title && (
+                      <span className="ml-2 text-black">{detectedBook.title}</span>
+                    )}
+                    <p className="text-sm text-gray-500">RFID: {detectedBook.rfid}</p>
+                  </div>
+                </div>
+              </Card>
+            )}
+
+            {/* Step indicator */}
+            <div className="mb-6 text-left">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-lg font-bold">
+                  Шаг {returnStep} / {RETURN_STEPS.length}
+                </span>
+                <Badge variant="default">{progressPercent}%</Badge>
+              </div>
+              <Progress value={progressPercent} className="h-3 mb-2" />
+              <p className="text-base text-black font-medium">
+                {RETURN_STEPS[returnStep - 1]?.description || "Обработка..."}
+              </p>
+              {stepLabel && (
+                <p className="text-sm text-gray-500 mt-1">{stepLabel}</p>
+              )}
             </div>
-          )}
-        </Card>
 
+            {/* Steps list */}
+            <div className="space-y-3 mb-6 text-left">
+              {RETURN_STEPS.map((step) => {
+                const isCompleted = step.id < returnStep;
+                const isCurrent = step.id === returnStep;
+                return (
+                  <div
+                    key={step.id}
+                    className={`flex items-center gap-3 p-3 rounded-xl border-2 ${
+                      isCompleted
+                        ? "border-black bg-white"
+                        : isCurrent
+                        ? "border-black bg-white"
+                        : "border-gray-300 bg-white opacity-50"
+                    }`}
+                  >
+                    <div className="w-8 h-8 flex items-center justify-center">
+                      {isCompleted ? (
+                        <CheckCircle2 className="w-6 h-6 text-black" />
+                      ) : isCurrent ? (
+                        <Loader2 className="w-6 h-6 text-black animate-spin" />
+                      ) : (
+                        <span className="w-6 h-6 rounded-full border-2 border-gray-400 flex items-center justify-center text-sm text-gray-400">
+                          {step.id}
+                        </span>
+                      )}
+                    </div>
+                    <div>
+                      <span className={`font-bold ${isCompleted || isCurrent ? "text-black" : "text-gray-400"}`}>
+                        {step.label}
+                      </span>
+                      {isCurrent && (
+                        <p className="text-sm text-black">{step.description}</p>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Timer during book placement wait (step 3) */}
+            {returnStep === 3 && timer > 0 && (
+              <Card className="p-6 text-center border-2 border-black mb-6">
+                <Package className="w-16 h-16 mx-auto mb-3 text-black" />
+                <h3 className="text-2xl font-bold mb-2">Положите книгу в окно!</h3>
+                <div className="flex items-center justify-center gap-2 text-lg">
+                  <Clock className="w-5 h-5" />
+                  <span className="font-bold text-2xl">{timer}</span>
+                  <span>сек.</span>
+                </div>
+              </Card>
+            )}
+          </>
+        )}
+
+        {/* Manual RFID input */}
         <Card className="p-6">
           <p className="text-sm text-black mb-3">Ручной ввод RFID (если автоскан не сработал)</p>
           <div className="flex gap-3 justify-center">
@@ -237,15 +406,20 @@ export function ReturnBook({ isPending, onManualReturn, wsRef }: ReturnBookProps
               value={manualRfid}
               onChange={(e) => setManualRfid(e.target.value)}
               className="max-w-xs"
+              disabled={sequenceStarted}
             />
             <Button
               onClick={() => {
-                if (manualRfid.trim() && onManualReturn) {
-                  onManualReturn(manualRfid.trim());
+                if (manualRfid.trim()) {
+                  setDetectedBook({ rfid: manualRfid.trim() });
+                  startReturnSequence(manualRfid.trim());
+                  if (onManualReturn) {
+                    onManualReturn(manualRfid.trim());
+                  }
                   setManualRfid('');
                 }
               }}
-              disabled={!manualRfid.trim() || isPending}
+              disabled={!manualRfid.trim() || isPending || sequenceStarted}
             >
               Вернуть
             </Button>

@@ -117,6 +117,20 @@ export class PythonBridgeService {
   async status(): Promise<any> {
     return this.execute('status', []);
   }
+
+  async issueSequence(
+    cellAddress: string,
+    onProgress?: (msg: any) => void,
+  ): Promise<any> {
+    return this.execute('issue_sequence', [cellAddress], onProgress);
+  }
+
+  async returnSequence(
+    cellAddress: string,
+    onProgress?: (msg: any) => void,
+  ): Promise<any> {
+    return this.execute('return_sequence', [cellAddress], onProgress);
+  }
 }
 
 export const pythonBridge = new PythonBridgeService();
