@@ -3,7 +3,7 @@
  * API endpoints for cabinet control, RFID operations, user management.
  * WebSocket server for real-time tag events and status updates.
  */
-import type { Express } from "express";
+import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { WebSocketServer, WebSocket } from "ws";
 import { storage } from "./storage";
@@ -14,6 +14,9 @@ import { pythonBridge } from "./services/pythonBridge";
 import { operationQueue } from "./services/operationQueue";
 import { execSync } from 'child_process';
 import * as fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import rateLimit from 'express-rate-limit';
 import type {
   WebSocketMessage, TagReadEvent, RfidReaderStatus, SystemLog,
   SystemStatus, User, Cell, Book, CalibrationData
@@ -21,11 +24,49 @@ import type {
 import { ReaderType } from "@shared/schema";
 import { z } from "zod";
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const BOOKCABINET_ROOT =
+  process.env.BOOKCABINET_ROOT || path.resolve(__dirname, '..');
+
 // Zod schemas for request body validation
-const authCardSchema = z.object({ rfid: z.string().min(1) });
-const issueSchema = z.object({ bookRfid: z.string().min(1), userRfid: z.string().min(1) });
-const returnSchema = z.object({ bookRfid: z.string().min(1) });
-const loadBookSchema = z.object({ bookRfid: z.string().min(1), title: z.string().min(1), author: z.string().optional() });
+// #62: RFID / card UID validation — hex-only for book tags; slightly looser for cards
+// because different reader families emit different encodings (NFC UID vs UHF EPC).
+const rfidSchema = z
+  .string()
+  .min(8)
+  .max(48)
+  .regex(/^[A-Fa-f0-9]+$/, 'Invalid hex format');
+const cardUidSchema = z.string().min(6).max(48);
+
+const authCardSchema = z.object({ rfid: cardUidSchema });
+const issueSchema = z.object({
+  bookRfid: rfidSchema,
+  userRfid: cardUidSchema,
+});
+const returnSchema = z.object({ bookRfid: rfidSchema });
+const loadBookSchema = z.object({
+  bookRfid: rfidSchema,
+  title: z.string().min(1),
+  author: z.string().optional(),
+});
+
+// #65: Rate limiters. Small windows, conservative caps — the whole machine
+// is one cabinet serving a line of students, not a public API.
+const authLimiter = rateLimit({
+  windowMs: 60_000,
+  max: 20,
+  message: 'Слишком много попыток, попробуйте позже',
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+const operationLimiter = rateLimit({
+  windowMs: 60_000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
 
 // Состояние системы (будет управляться механикой)
 let systemStatus: SystemStatus = {
@@ -52,6 +93,34 @@ let currentSession: { user: User | null; expiresAt: Date | null } = {
   expiresAt: null,
 };
 
+// #45: Auth middleware. `currentSession` is a module-level singleton representing
+// "the person currently standing in front of the cabinet", so these middlewares
+// simply check whether that session is still valid. They are not a replacement
+// for a per-user token — the cabinet is a single-kiosk device.
+function requireSession(req: Request, res: Response, next: NextFunction) {
+  if (
+    !currentSession.user ||
+    !currentSession.expiresAt ||
+    currentSession.expiresAt < new Date()
+  ) {
+    currentSession = { user: null, expiresAt: null };
+    return res.status(401).json({ error: 'Требуется авторизация' });
+  }
+  next();
+}
+
+function requireRole(...roles: string[]) {
+  return (req: Request, res: Response, next: NextFunction) => {
+    if (!currentSession.user) {
+      return res.status(401).json({ error: 'Требуется авторизация' });
+    }
+    if (!roles.includes(currentSession.user.role)) {
+      return res.status(403).json({ error: 'Недостаточно прав' });
+    }
+    next();
+  };
+}
+
 export async function registerRoutes(app: Express): Promise<Server> {
   const httpServer = createServer(app);
   const wss = new WebSocketServer({ server: httpServer, path: '/ws' });
@@ -59,7 +128,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // ─── Auth Shutter Daemon ───────────────────────────────
   {
     const { spawn } = await import('child_process');
-    const daemonPath = '/home/admin42/bookcabinet/bookcabinet/services/auth_shutter_daemon.py';
+    const daemonPath =
+      process.env.AUTH_DAEMON_PATH ||
+      path.join(BOOKCABINET_ROOT, 'bookcabinet/services/auth_shutter_daemon.py');
     
     const startDaemon = () => {
       const daemon = spawn('sudo', ['python3', daemonPath], { stdio: ['ignore', 'pipe', 'pipe'] });
@@ -576,7 +647,7 @@ except Exception as e:
 
   // ==================== АВТОРИЗАЦИЯ ====================
 
-  app.post("/api/auth/card", async (req, res) => {
+  app.post("/api/auth/card", authLimiter, async (req, res) => {
     try {
       const parsed = authCardSchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ error: 'RFID is required', details: parsed.error.issues });
@@ -646,7 +717,7 @@ except Exception as e:
   const runPythonBridge = (command: string, args: string[]) =>
     pythonBridge.execute(command, args, (msg) => broadcast({ type: 'progress', data: msg }));
 
-  app.post("/api/issue", async (req, res) => {
+  app.post("/api/issue", requireSession, operationLimiter, async (req, res) => {
     try {
       const parsed = issueSchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ error: 'bookRfid and userRfid are required', details: parsed.error.issues });
@@ -688,7 +759,7 @@ except Exception as e:
     }
   });
 
-  app.post("/api/return", async (req, res) => {
+  app.post("/api/return", requireSession, operationLimiter, async (req, res) => {
     try {
       const parsed = returnSchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ error: 'bookRfid is required', details: parsed.error.issues });
@@ -729,7 +800,7 @@ except Exception as e:
 
   // ==================== ОПЕРАЦИИ БИБЛИОТЕКАРЯ ====================
 
-  app.post("/api/reserve", async (req, res) => {
+  app.post("/api/reserve", requireSession, async (req, res) => {
     try {
       const { bookRfid, userRfid } = req.body;
       if (!bookRfid || !userRfid) {
@@ -747,7 +818,7 @@ except Exception as e:
     }
   });
 
-  app.post("/api/cancel-reservation", async (req, res) => {
+  app.post("/api/cancel-reservation", requireSession, async (req, res) => {
     try {
       const { bookRfid, userRfid } = req.body;
       if (!bookRfid || !userRfid) {
@@ -765,7 +836,7 @@ except Exception as e:
     }
   });
 
-  app.post("/api/load-book", async (req, res) => {
+  app.post("/api/load-book", requireSession, requireRole('librarian', 'admin'), async (req, res) => {
     try {
       const parsed = loadBookSchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ error: 'bookRfid and title are required', details: parsed.error.issues });
@@ -782,7 +853,7 @@ except Exception as e:
     }
   });
 
-  app.post("/api/extract", async (req, res) => {
+  app.post("/api/extract", requireSession, requireRole('librarian', 'admin'), async (req, res) => {
     try {
       const { cellId } = req.body;
       if (cellId === undefined) {
@@ -800,7 +871,7 @@ except Exception as e:
     }
   });
 
-  app.post("/api/extract-all", async (req, res) => {
+  app.post("/api/extract-all", requireSession, requireRole('librarian', 'admin'), async (req, res) => {
     try {
       const result = await cabinetService.extractAllReturned();
       res.json(result);
@@ -2200,7 +2271,7 @@ except Exception as e:
   });
 
   // #20/#32: POST /api/book/issue — full issue cycle with mechanical sequence
-  app.post("/api/book/issue", async (req, res) => {
+  app.post("/api/book/issue", requireSession, operationLimiter, async (req, res) => {
     try {
       const { reader_uid, book_rfid } = req.body;
       const bookRfid = book_rfid || req.body.bookRfid;
@@ -2270,7 +2341,7 @@ except Exception as e:
   });
 
   // #21/#33: POST /api/book/return — full return cycle with mechanical sequence
-  app.post("/api/book/return", async (req, res) => {
+  app.post("/api/book/return", requireSession, operationLimiter, async (req, res) => {
     try {
       const bookRfid = req.body.book_rfid || req.body.bookRfid;
       if (!bookRfid) {

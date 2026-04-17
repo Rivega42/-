@@ -14,6 +14,11 @@
  * The socket path would be /tmp/bookcabinet.sock or configurable via env.
  */
 import { spawn } from 'child_process';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 export class PythonBridgeService {
   private bridgePath: string;
@@ -21,10 +26,14 @@ export class PythonBridgeService {
   private timeoutMs: number;
 
   constructor() {
+    // Resolve BOOKCABINET_ROOT from env, or fall back to repo root relative to this file.
+    this.cwd =
+      process.env.BOOKCABINET_ROOT ||
+      process.env.PYTHON_BRIDGE_CWD ||
+      path.resolve(__dirname, '../..');
     this.bridgePath =
       process.env.PYTHON_BRIDGE_PATH ||
-      '/home/admin42/bookcabinet/bookcabinet/bridge.py';
-    this.cwd = process.env.PYTHON_BRIDGE_CWD || '/home/admin42/bookcabinet';
+      path.join(this.cwd, 'bookcabinet', 'bridge.py');
     this.timeoutMs = 120_000;
   }
 
