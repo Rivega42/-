@@ -1,4 +1,11 @@
 /**
+ * DEPRECATED: cabinetService TS business logic is being phased out.
+ * New code should delegate to Python via pythonBridge.
+ * This service remains only for:
+ *  - WebSocket event broadcasting helpers
+ *  - State transitions that don't touch hardware
+ * TODO (#50): Remove after confirming all flows use bridge.
+ *
  * Cabinet business logic service.
  * Book give/take operations, cell management, operation logging.
  * Integrates with IRBIS library system for user/book validation.
