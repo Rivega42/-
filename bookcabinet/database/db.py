@@ -20,6 +20,19 @@ class Database:
     def get_connection(self):
         conn = sqlite3.connect(self.db_path)
         conn.row_factory = sqlite3.Row
+        # #66: WAL + relaxed synchronous + busy timeout.
+        # Rationale: auth_shutter_daemon, bridge.py, and the main service all
+        # touch the same SQLite file. Default "journal" mode serialises writes
+        # and produces SQLITE_BUSY under concurrent access. WAL keeps readers
+        # non-blocking and is a well-understood pattern for small-device
+        # deployments like this one.
+        try:
+            conn.execute("PRAGMA journal_mode=WAL;")
+            conn.execute("PRAGMA synchronous=NORMAL;")
+            conn.execute("PRAGMA busy_timeout=5000;")
+        except sqlite3.DatabaseError:
+            # PRAGMAs are best-effort — never let them block the open.
+            pass
         try:
             yield conn
             conn.commit()

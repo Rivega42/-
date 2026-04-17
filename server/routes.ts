@@ -261,12 +261,49 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // ==================== СИСТЕМА ====================
-  
+
   app.get("/api/status", (req, res) => {
     res.json(systemStatus);
   });
 
+  // #56: Health check endpoint. Deliberately lightweight — tests that the
+  // event loop is alive, the storage layer can answer a trivial query, and the
+  // Python bridge responds. Each sub-check is bounded so the overall response
+  // time is < ~3.5 s even when the bridge is dead.
+  app.get("/api/health", async (req, res) => {
+    const checks: Record<string, boolean | string> = {
+      server: true,
+      storage: false,
+      python_bridge: false,
+    };
 
+    try {
+      await storage.getStatistics();
+      checks.storage = true;
+    } catch (e: any) {
+      checks.storage = `error: ${e?.message ?? 'unknown'}`;
+    }
+
+    try {
+      const result = await Promise.race([
+        pythonBridge.status(),
+        new Promise((_, rej) =>
+          setTimeout(() => rej(new Error('timeout')), 3000),
+        ),
+      ]);
+      checks.python_bridge = !!result;
+    } catch (e: any) {
+      checks.python_bridge = `error: ${e?.message ?? 'unknown'}`;
+    }
+
+    const allHealthy = Object.values(checks).every((v) => v === true);
+    res.status(allHealthy ? 200 : 503).json({
+      status: allHealthy ? 'ok' : 'degraded',
+      checks,
+      timestamp: new Date().toISOString(),
+      uptime_seconds: Math.floor(process.uptime()),
+    });
+  });
 
   // ─── RFID Test (SSE stream) ────────────────────────────
   app.get("/api/rfid-test/:readerId", async (req, res) => {
