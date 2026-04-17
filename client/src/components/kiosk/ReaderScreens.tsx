@@ -201,8 +201,8 @@ export function ReturnBook({ isPending, onManualReturn, onComplete, onError, wsR
 
   // Listen for WebSocket events
   useEffect(() => {
-    const ws = wsRef?.current;
-    if (!ws) return;
+    const currentWs = wsRef?.current;
+    if (!currentWs) return;
 
     const handler = (event: MessageEvent) => {
       try {
@@ -259,8 +259,8 @@ export function ReturnBook({ isPending, onManualReturn, onComplete, onError, wsR
       } catch {}
     };
 
-    ws.addEventListener('message', handler);
-    return () => ws.removeEventListener('message', handler);
+    currentWs.addEventListener('message', handler);
+    return () => currentWs.removeEventListener('message', handler);
   }, [wsRef, sequenceStarted, onComplete, onError]);
 
   // Calculate progress
