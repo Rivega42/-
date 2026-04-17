@@ -40,6 +40,14 @@ cd "$PROJECT_DIR"
 su -c "npm install && npm run build" "$SERVICE_USER"
 echo -e "${GREEN}OK${NC}"
 
+# 2a. Применение миграций БД (Alembic)
+echo -e "${YELLOW}[2a/6] Миграции БД (alembic upgrade head)...${NC}"
+if su -c "cd '$PROJECT_DIR' && python3 -m alembic upgrade head" "$SERVICE_USER"; then
+    echo -e "${GREEN}OK${NC}"
+else
+    echo -e "${YELLOW}  ⚠ alembic upgrade не выполнен (пропускаем)${NC}"
+fi
+
 # 3. Копирование systemd units
 echo -e "${YELLOW}[3/6] Установка systemd сервисов...${NC}"
 cp "$DEPLOY_DIR/bookcabinet-calibration.service" /etc/systemd/system/

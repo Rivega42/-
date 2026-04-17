@@ -3,7 +3,9 @@ Watchdog - мониторинг состояния системы
 """
 import asyncio
 import os
+import shutil
 import socket
+import subprocess
 from typing import Dict, Optional, Callable
 from datetime import datetime
 from ..config import MOCK_MODE
@@ -23,6 +25,9 @@ class WatchdogService:
             'rfid_book': True,
             'database': True,
             'websocket': True,
+            'disk': True,
+            'temperature': True,
+            'pigpiod': True,
         }
         self._consecutive_failures: Dict[str, int] = {}
         self._max_failures = 3
@@ -59,6 +64,56 @@ class WatchdogService:
         await self._check_rfid()
         await self._check_database()
         await self._check_websocket()
+        await self._run_check('disk', self._check_disk_space)
+        await self._run_check('temperature', self._check_temperature)
+        await self._run_check('pigpiod', self._check_pigpiod)
+
+    async def _run_check(self, component: str, check_fn):
+        """Helper: run a (healthy, message) returning coroutine and report."""
+        try:
+            ok, message = await check_fn()
+            if ok:
+                self._report_success(component)
+            else:
+                self._report_failure(component, message)
+        except Exception as e:
+            self._report_failure(component, str(e))
+
+    async def _check_disk_space(self):
+        """Disk space check — warn if free < 10%, critical if < 5%."""
+        import shutil
+        try:
+            usage = shutil.disk_usage('/')
+            free_pct = usage.free / usage.total * 100
+            if free_pct < 5:
+                return False, f"Disk {free_pct:.1f}% free (CRITICAL)"
+            elif free_pct < 10:
+                return False, f"Disk {free_pct:.1f}% free (LOW)"
+            return True, f"Disk {free_pct:.1f}% free"
+        except Exception as e:
+            return False, f"Disk check error: {e}"
+
+    async def _check_temperature(self):
+        """RPi temperature check — warn >75°C, critical >85°C."""
+        try:
+            with open('/sys/class/thermal/thermal_zone0/temp') as f:
+                temp_c = int(f.read().strip()) / 1000
+            if temp_c > 85:
+                return False, f"CPU {temp_c:.1f}°C (CRITICAL)"
+            elif temp_c > 75:
+                return False, f"CPU {temp_c:.1f}°C (HIGH)"
+            return True, f"CPU {temp_c:.1f}°C"
+        except Exception as e:
+            return False, f"Temp check error: {e}"
+
+    async def _check_pigpiod(self):
+        """pigpiod daemon running."""
+        import subprocess
+        try:
+            subprocess.check_output(['pigs', 't'], timeout=2, stderr=subprocess.DEVNULL)
+            return True, "pigpiod OK"
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired, FileNotFoundError) as e:
+            return False, f"pigpiod not responding: {e}"
     
     async def _check_motors(self):
         try:
