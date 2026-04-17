@@ -3,7 +3,7 @@
  * API endpoints for cabinet control, RFID operations, user management.
  * WebSocket server for real-time tag events and status updates.
  */
-import type { Express } from "express";
+import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { WebSocketServer, WebSocket } from "ws";
 import { storage } from "./storage";
@@ -14,6 +14,9 @@ import { pythonBridge } from "./services/pythonBridge";
 import { operationQueue } from "./services/operationQueue";
 import { execSync } from 'child_process';
 import * as fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import rateLimit from 'express-rate-limit';
 import type {
   WebSocketMessage, TagReadEvent, RfidReaderStatus, SystemLog,
   SystemStatus, User, Cell, Book, CalibrationData
@@ -21,11 +24,49 @@ import type {
 import { ReaderType } from "@shared/schema";
 import { z } from "zod";
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const BOOKCABINET_ROOT =
+  process.env.BOOKCABINET_ROOT || path.resolve(__dirname, '..');
+
 // Zod schemas for request body validation
-const authCardSchema = z.object({ rfid: z.string().min(1) });
-const issueSchema = z.object({ bookRfid: z.string().min(1), userRfid: z.string().min(1) });
-const returnSchema = z.object({ bookRfid: z.string().min(1) });
-const loadBookSchema = z.object({ bookRfid: z.string().min(1), title: z.string().min(1), author: z.string().optional() });
+// #62: RFID / card UID validation — hex-only for book tags; slightly looser for cards
+// because different reader families emit different encodings (NFC UID vs UHF EPC).
+const rfidSchema = z
+  .string()
+  .min(8)
+  .max(48)
+  .regex(/^[A-Fa-f0-9]+$/, 'Invalid hex format');
+const cardUidSchema = z.string().min(6).max(48);
+
+const authCardSchema = z.object({ rfid: cardUidSchema });
+const issueSchema = z.object({
+  bookRfid: rfidSchema,
+  userRfid: cardUidSchema,
+});
+const returnSchema = z.object({ bookRfid: rfidSchema });
+const loadBookSchema = z.object({
+  bookRfid: rfidSchema,
+  title: z.string().min(1),
+  author: z.string().optional(),
+});
+
+// #65: Rate limiters. Small windows, conservative caps — the whole machine
+// is one cabinet serving a line of students, not a public API.
+const authLimiter = rateLimit({
+  windowMs: 60_000,
+  max: 20,
+  message: 'Слишком много попыток, попробуйте позже',
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+const operationLimiter = rateLimit({
+  windowMs: 60_000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
 
 // Состояние системы (будет управляться механикой)
 let systemStatus: SystemStatus = {
@@ -52,6 +93,34 @@ let currentSession: { user: User | null; expiresAt: Date | null } = {
   expiresAt: null,
 };
 
+// #45: Auth middleware. `currentSession` is a module-level singleton representing
+// "the person currently standing in front of the cabinet", so these middlewares
+// simply check whether that session is still valid. They are not a replacement
+// for a per-user token — the cabinet is a single-kiosk device.
+function requireSession(req: Request, res: Response, next: NextFunction) {
+  if (
+    !currentSession.user ||
+    !currentSession.expiresAt ||
+    currentSession.expiresAt < new Date()
+  ) {
+    currentSession = { user: null, expiresAt: null };
+    return res.status(401).json({ error: 'Требуется авторизация' });
+  }
+  next();
+}
+
+function requireRole(...roles: string[]) {
+  return (req: Request, res: Response, next: NextFunction) => {
+    if (!currentSession.user) {
+      return res.status(401).json({ error: 'Требуется авторизация' });
+    }
+    if (!roles.includes(currentSession.user.role)) {
+      return res.status(403).json({ error: 'Недостаточно прав' });
+    }
+    next();
+  };
+}
+
 export async function registerRoutes(app: Express): Promise<Server> {
   const httpServer = createServer(app);
   const wss = new WebSocketServer({ server: httpServer, path: '/ws' });
@@ -59,7 +128,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // ─── Auth Shutter Daemon ───────────────────────────────
   {
     const { spawn } = await import('child_process');
-    const daemonPath = '/home/admin42/bookcabinet/bookcabinet/services/auth_shutter_daemon.py';
+    const daemonPath =
+      process.env.AUTH_DAEMON_PATH ||
+      path.join(BOOKCABINET_ROOT, 'bookcabinet/services/auth_shutter_daemon.py');
     
     const startDaemon = () => {
       const daemon = spawn('sudo', ['python3', daemonPath], { stdio: ['ignore', 'pipe', 'pipe'] });
@@ -190,12 +261,49 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // ==================== СИСТЕМА ====================
-  
+
   app.get("/api/status", (req, res) => {
     res.json(systemStatus);
   });
 
+  // #56: Health check endpoint. Deliberately lightweight — tests that the
+  // event loop is alive, the storage layer can answer a trivial query, and the
+  // Python bridge responds. Each sub-check is bounded so the overall response
+  // time is < ~3.5 s even when the bridge is dead.
+  app.get("/api/health", async (req, res) => {
+    const checks: Record<string, boolean | string> = {
+      server: true,
+      storage: false,
+      python_bridge: false,
+    };
 
+    try {
+      await storage.getStatistics();
+      checks.storage = true;
+    } catch (e: any) {
+      checks.storage = `error: ${e?.message ?? 'unknown'}`;
+    }
+
+    try {
+      const result = await Promise.race([
+        pythonBridge.status(),
+        new Promise((_, rej) =>
+          setTimeout(() => rej(new Error('timeout')), 3000),
+        ),
+      ]);
+      checks.python_bridge = !!result;
+    } catch (e: any) {
+      checks.python_bridge = `error: ${e?.message ?? 'unknown'}`;
+    }
+
+    const allHealthy = Object.values(checks).every((v) => v === true);
+    res.status(allHealthy ? 200 : 503).json({
+      status: allHealthy ? 'ok' : 'degraded',
+      checks,
+      timestamp: new Date().toISOString(),
+      uptime_seconds: Math.floor(process.uptime()),
+    });
+  });
 
   // ─── RFID Test (SSE stream) ────────────────────────────
   app.get("/api/rfid-test/:readerId", async (req, res) => {
@@ -576,7 +684,7 @@ except Exception as e:
 
   // ==================== АВТОРИЗАЦИЯ ====================
 
-  app.post("/api/auth/card", async (req, res) => {
+  app.post("/api/auth/card", authLimiter, async (req, res) => {
     try {
       const parsed = authCardSchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ error: 'RFID is required', details: parsed.error.issues });
@@ -646,7 +754,7 @@ except Exception as e:
   const runPythonBridge = (command: string, args: string[]) =>
     pythonBridge.execute(command, args, (msg) => broadcast({ type: 'progress', data: msg }));
 
-  app.post("/api/issue", async (req, res) => {
+  app.post("/api/issue", requireSession, operationLimiter, async (req, res) => {
     try {
       const parsed = issueSchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ error: 'bookRfid and userRfid are required', details: parsed.error.issues });
@@ -688,7 +796,7 @@ except Exception as e:
     }
   });
 
-  app.post("/api/return", async (req, res) => {
+  app.post("/api/return", requireSession, operationLimiter, async (req, res) => {
     try {
       const parsed = returnSchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ error: 'bookRfid is required', details: parsed.error.issues });
@@ -729,7 +837,7 @@ except Exception as e:
 
   // ==================== ОПЕРАЦИИ БИБЛИОТЕКАРЯ ====================
 
-  app.post("/api/reserve", async (req, res) => {
+  app.post("/api/reserve", requireSession, async (req, res) => {
     try {
       const { bookRfid, userRfid } = req.body;
       if (!bookRfid || !userRfid) {
@@ -747,7 +855,7 @@ except Exception as e:
     }
   });
 
-  app.post("/api/cancel-reservation", async (req, res) => {
+  app.post("/api/cancel-reservation", requireSession, async (req, res) => {
     try {
       const { bookRfid, userRfid } = req.body;
       if (!bookRfid || !userRfid) {
@@ -765,7 +873,7 @@ except Exception as e:
     }
   });
 
-  app.post("/api/load-book", async (req, res) => {
+  app.post("/api/load-book", requireSession, requireRole('librarian', 'admin'), async (req, res) => {
     try {
       const parsed = loadBookSchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ error: 'bookRfid and title are required', details: parsed.error.issues });
@@ -782,7 +890,7 @@ except Exception as e:
     }
   });
 
-  app.post("/api/extract", async (req, res) => {
+  app.post("/api/extract", requireSession, requireRole('librarian', 'admin'), async (req, res) => {
     try {
       const { cellId } = req.body;
       if (cellId === undefined) {
@@ -800,7 +908,7 @@ except Exception as e:
     }
   });
 
-  app.post("/api/extract-all", async (req, res) => {
+  app.post("/api/extract-all", requireSession, requireRole('librarian', 'admin'), async (req, res) => {
     try {
       const result = await cabinetService.extractAllReturned();
       res.json(result);
@@ -1256,7 +1364,7 @@ except Exception as e:
 
   let calibrationData: CalibrationData = { ...defaultCalibration };
 
-  app.get("/api/calibration", async (req, res) => {
+  app.get("/api/calibration", requireSession, requireRole('admin'), async (req, res) => {
     try {
       res.json(calibrationData);
     } catch (error) {
@@ -1264,7 +1372,7 @@ except Exception as e:
     }
   });
 
-  app.post("/api/calibration", async (req, res) => {
+  app.post("/api/calibration", requireSession, requireRole('admin'), async (req, res) => {
     try {
       const newData = req.body;
 
@@ -1310,7 +1418,7 @@ except Exception as e:
   });
 
   // Экспорт калибровки в JSON
-  app.get("/api/calibration/export", async (req, res) => {
+  app.get("/api/calibration/export", requireSession, requireRole('admin'), async (req, res) => {
     try {
       res.json({
         success: true,
@@ -1323,7 +1431,7 @@ except Exception as e:
   });
 
   // Импорт калибровки из JSON
-  app.post("/api/calibration/import", async (req, res) => {
+  app.post("/api/calibration/import", requireSession, requireRole('admin'), async (req, res) => {
     try {
       const importedData = req.body;
       
@@ -1349,7 +1457,7 @@ except Exception as e:
     }
   });
 
-  app.post("/api/calibration/reset", async (req, res) => {
+  app.post("/api/calibration/reset", requireSession, requireRole('admin'), async (req, res) => {
     try {
       calibrationData = { ...defaultCalibration };
       
@@ -1366,7 +1474,7 @@ except Exception as e:
   });
 
   // Комплексные тесты калибровки (симуляция в mock режиме)
-  app.post("/api/calibration/test-suite", async (req, res) => {
+  app.post("/api/calibration/test-suite", requireSession, requireRole('admin'), async (req, res) => {
     try {
       const results: {
         test: string;
@@ -1477,7 +1585,7 @@ except Exception as e:
   });
 
   // Отдельные тесты калибровки
-  app.post("/api/calibration/test/:testName", async (req, res) => {
+  app.post("/api/calibration/test/:testName", requireSession, requireRole('admin'), async (req, res) => {
     const { testName } = req.params;
     
     try {
@@ -1568,7 +1676,7 @@ except Exception as e:
   };
 
   // Начать режим калибровки кинематики (K)
-  app.post("/api/calibration/wizard/kinematics/start", async (req, res) => {
+  app.post("/api/calibration/wizard/kinematics/start", requireSession, requireRole('admin'), async (req, res) => {
     try {
       calibrationWizard = {
         ...calibrationWizard,
@@ -1597,7 +1705,7 @@ except Exception as e:
   });
 
   // Шаг теста кинематики - запуск мотора
-  app.post("/api/calibration/wizard/kinematics/step", async (req, res) => {
+  app.post("/api/calibration/wizard/kinematics/step", requireSession, requireRole('admin'), async (req, res) => {
     try {
       const { action } = req.body; // 'run' или 'response' (W/A/S/D)
       const step = calibrationWizard.step;
@@ -1712,7 +1820,7 @@ except Exception as e:
   }
 
   // Начать калибровку 10 ключевых точек (C)
-  app.post("/api/calibration/wizard/points10/start", async (req, res) => {
+  app.post("/api/calibration/wizard/points10/start", requireSession, requireRole('admin'), async (req, res) => {
     try {
       const points10 = [
         { col: 0, row: 0, label: 'Начало координат' },
@@ -1761,7 +1869,7 @@ except Exception as e:
   });
 
   // Движение каретки (WASD)
-  app.post("/api/calibration/wizard/move", async (req, res) => {
+  app.post("/api/calibration/wizard/move", requireSession, requireRole('admin'), async (req, res) => {
     try {
       const { direction, stepIndex } = req.body; // direction: 'W', 'A', 'S', 'D'
 
@@ -1825,7 +1933,7 @@ except Exception as e:
   });
 
   // Сохранить текущую точку калибровки
-  app.post("/api/calibration/wizard/points10/save", async (req, res) => {
+  app.post("/api/calibration/wizard/points10/save", requireSession, requireRole('admin'), async (req, res) => {
     try {
       const step = calibrationWizard.step;
       const points10 = [
@@ -1911,7 +2019,7 @@ except Exception as e:
   });
 
   // Начать калибровку захвата полки (L)
-  app.post("/api/calibration/wizard/grab/start", async (req, res) => {
+  app.post("/api/calibration/wizard/grab/start", requireSession, requireRole('admin'), async (req, res) => {
     try {
       const { side } = req.body; // 'front' или 'back'
       
@@ -1944,7 +2052,7 @@ except Exception as e:
   });
 
   // Изменить параметр захвата
-  app.post("/api/calibration/wizard/grab/adjust", async (req, res) => {
+  app.post("/api/calibration/wizard/grab/adjust", requireSession, requireRole('admin'), async (req, res) => {
     try {
       const { side, param, delta } = req.body; // side: 'front'/'back', param: 'extend1'/'retract'/'extend2', delta: number
       
@@ -1963,7 +2071,7 @@ except Exception as e:
   });
 
   // Тест захвата
-  app.post("/api/calibration/wizard/grab/test", async (req, res) => {
+  app.post("/api/calibration/wizard/grab/test", requireSession, requireRole('admin'), async (req, res) => {
     try {
       const { side, param } = req.body;
       
@@ -1988,7 +2096,7 @@ except Exception as e:
   // ==================== ЗАБЛОКИРОВАННЫЕ ЯЧЕЙКИ ====================
 
   // Получить карту заблокированных ячеек
-  app.get("/api/calibration/blocked-cells", async (req, res) => {
+  app.get("/api/calibration/blocked-cells", requireSession, requireRole('admin'), async (req, res) => {
     try {
       res.json({
         success: true,
@@ -2000,7 +2108,7 @@ except Exception as e:
   });
 
   // Обновить заблокированные ячейки
-  app.post("/api/calibration/blocked-cells", async (req, res) => {
+  app.post("/api/calibration/blocked-cells", requireSession, requireRole('admin'), async (req, res) => {
     try {
       const { side, column, rows, action } = req.body; // action: 'block' или 'unblock'
       
@@ -2036,7 +2144,7 @@ except Exception as e:
   });
 
   // Сброс заблокированных ячеек к значениям по умолчанию
-  app.post("/api/calibration/blocked-cells/reset", async (req, res) => {
+  app.post("/api/calibration/blocked-cells/reset", requireSession, requireRole('admin'), async (req, res) => {
     try {
       calibrationData.blocked_cells = { ...defaultCalibration.blocked_cells };
       calibrationData.timestamp = new Date().toISOString();
@@ -2051,7 +2159,7 @@ except Exception as e:
   });
 
   // Быстрый тест ячейки (X)
-  app.post("/api/calibration/quick-test", async (req, res) => {
+  app.post("/api/calibration/quick-test", requireSession, requireRole('admin'), async (req, res) => {
     try {
       const { side, col, row } = req.body;
       
@@ -2095,7 +2203,7 @@ except Exception as e:
   });
 
   // Получить состояние wizard
-  app.get("/api/calibration/wizard/state", async (req, res) => {
+  app.get("/api/calibration/wizard/state", requireSession, requireRole('admin'), async (req, res) => {
     try {
       res.json({
         success: true,
@@ -2114,7 +2222,7 @@ except Exception as e:
   });
 
   // Выход из wizard
-  app.post("/api/calibration/wizard/exit", async (req, res) => {
+  app.post("/api/calibration/wizard/exit", requireSession, requireRole('admin'), async (req, res) => {
     try {
       calibrationWizard.mode = null;
       calibrationWizard.step = 0;
@@ -2200,7 +2308,7 @@ except Exception as e:
   });
 
   // #20/#32: POST /api/book/issue — full issue cycle with mechanical sequence
-  app.post("/api/book/issue", async (req, res) => {
+  app.post("/api/book/issue", requireSession, operationLimiter, async (req, res) => {
     try {
       const { reader_uid, book_rfid } = req.body;
       const bookRfid = book_rfid || req.body.bookRfid;
@@ -2270,7 +2378,7 @@ except Exception as e:
   });
 
   // #21/#33: POST /api/book/return — full return cycle with mechanical sequence
-  app.post("/api/book/return", async (req, res) => {
+  app.post("/api/book/return", requireSession, operationLimiter, async (req, res) => {
     try {
       const bookRfid = req.body.book_rfid || req.body.bookRfid;
       if (!bookRfid) {
@@ -2506,7 +2614,7 @@ except Exception as e:
   // Периодическая трансляция статистики
   // ==================== НАСТРОЙКИ СИСТЕМЫ ====================
 
-  app.get("/api/settings", async (req, res) => {
+  app.get("/api/settings", requireSession, requireRole('admin'), async (req, res) => {
     try {
       const settings = await storage.getAllSettings();
       const result: Record<string, any> = {};
@@ -2524,7 +2632,7 @@ except Exception as e:
     }
   });
 
-  app.post("/api/settings", async (req, res) => {
+  app.post("/api/settings", requireSession, requireRole('admin'), async (req, res) => {
     try {
       const data = req.body;
       for (const [key, value] of Object.entries(data)) {
@@ -2547,14 +2655,14 @@ except Exception as e:
   };
   const teachSequences: Record<string, any[]> = {};
 
-  app.post("/api/teach/start", (req, res) => {
+  app.post("/api/teach/start", requireSession, requireRole('admin'), (req, res) => {
     const { name } = req.body;
     if (!name) return res.status(400).json({ error: 'Name required' });
     teachState = { active: true, name, steps: [], pending: false };
     res.json({ success: true, message: `Запись "${name}" начата` });
   });
 
-  app.post("/api/teach/execute", async (req, res) => {
+  app.post("/api/teach/execute", requireSession, requireRole('admin'), async (req, res) => {
     if (!teachState.active) return res.status(400).json({ error: 'Запись не активна' });
     const { action, params } = req.body;
     teachState.steps.push({ action, params, confirmed: false });
@@ -2571,7 +2679,7 @@ except Exception as e:
     res.json({ success: true, message: `Выполнено: ${action}`, stepIndex: teachState.steps.length - 1 });
   });
 
-  app.post("/api/teach/jog", (req, res) => {
+  app.post("/api/teach/jog", requireSession, requireRole('admin'), (req, res) => {
     const { axis, steps } = req.body;
     const s = steps || 100;
     if (axis === 'x') systemStatus.position.x += s;
@@ -2580,7 +2688,7 @@ except Exception as e:
     res.json({ success: true, message: `Jog ${axis} ${s > 0 ? '+' : ''}${s}`, position: systemStatus.position });
   });
 
-  app.post("/api/teach/confirm", (req, res) => {
+  app.post("/api/teach/confirm", requireSession, requireRole('admin'), (req, res) => {
     if (teachState.steps.length > 0) {
       teachState.steps[teachState.steps.length - 1].confirmed = true;
     }
@@ -2588,7 +2696,7 @@ except Exception as e:
     res.json({ success: true, message: 'Шаг зафиксирован' });
   });
 
-  app.post("/api/teach/skip", (req, res) => {
+  app.post("/api/teach/skip", requireSession, requireRole('admin'), (req, res) => {
     if (teachState.steps.length > 0) {
       teachState.steps.pop();
     }
@@ -2596,12 +2704,12 @@ except Exception as e:
     res.json({ success: true, message: 'Шаг пропущен' });
   });
 
-  app.post("/api/teach/undo", (req, res) => {
+  app.post("/api/teach/undo", requireSession, requireRole('admin'), (req, res) => {
     teachState.steps.pop();
     res.json({ success: true, message: 'Последний шаг удалён', stepsCount: teachState.steps.length });
   });
 
-  app.post("/api/teach/save", async (req, res) => {
+  app.post("/api/teach/save", requireSession, requireRole('admin'), async (req, res) => {
     if (!teachState.active) return res.status(400).json({ error: 'Нет активной записи' });
     const confirmed = teachState.steps.filter(s => s.confirmed);
     teachSequences[teachState.name] = confirmed;
@@ -2611,16 +2719,16 @@ except Exception as e:
     res.json({ success: true, message: `Сохранено (${confirmed.length} шагов)` });
   });
 
-  app.post("/api/teach/discard", (req, res) => {
+  app.post("/api/teach/discard", requireSession, requireRole('admin'), (req, res) => {
     teachState = { active: false, name: '', steps: [], pending: false };
     res.json({ success: true, message: 'Запись отменена' });
   });
 
-  app.get("/api/teach/status", (req, res) => {
+  app.get("/api/teach/status", requireSession, requireRole('admin'), (req, res) => {
     res.json({ active: teachState.active, name: teachState.name, stepsCount: teachState.steps.length, pending: teachState.pending });
   });
 
-  app.get("/api/teach/sequences", async (req, res) => {
+  app.get("/api/teach/sequences", requireSession, requireRole('admin'), async (req, res) => {
     const settings = await storage.getAllSettings();
     const sequences: Record<string, any> = {};
     for (const s of settings) {
@@ -2633,7 +2741,7 @@ except Exception as e:
     res.json(sequences);
   });
 
-  app.post("/api/teach/play", async (req, res) => {
+  app.post("/api/teach/play", requireSession, requireRole('admin'), async (req, res) => {
     const { name } = req.body;
     const settings = await storage.getAllSettings();
     const setting = settings.find(s => s.key === `teach_${name}`);

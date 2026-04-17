@@ -9,7 +9,7 @@ Importable by bridge.py for integration with the TS server.
 
 GPIO pin assignments:
   Shutters: SHUTTER_OUTER=2 (HIGH=open, LOW=close), SHUTTER_INNER=3
-  Locks:    LOCK_FRONT=12, LOCK_REAR=13 (HIGH=open, LOW=close)
+  Locks:    LOCK_FRONT=12, LOCK_REAR=13 (PWM servos: 500us=open, 1500us=close)
   Tray:     STEP=18, DIR=27, EN1=25, EN2=26
 
 Usage:
@@ -17,10 +17,13 @@ Usage:
   python3 tools/book_sequences.py return 1.3.7
   python3 tools/book_sequences.py test-shutters
 """
+# IMPORTANT: These GPIO pin constants MUST match bookcabinet/config.py GPIO_PINS.
+# TODO: Import from config.py to eliminate duplication (see issue #59).
 from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import os
 import sys
 import time
@@ -42,7 +45,7 @@ LOCK_FRONT = 12
 LOCK_REAR = 13
 
 # === XY homing config (confirmed safe baseline) ===
-XY_CONFIG = MotionConfig(fast=3000, homing_fast=1800, slow=300, backoff_x=300, backoff_y=500)
+XY_CONFIG = MotionConfig(fast=800, homing_fast=1800, slow=300, backoff_x=300, backoff_y=500)
 
 # === Timing constants ===
 ISSUE_USER_WAIT_SEC = 30
@@ -62,6 +65,10 @@ class BookSequenceRunner:
     Controls the full mechanical sequence for issuing/returning books.
     Manages XY motion, tray, shutters, and locks via pigpio.
     """
+
+    # Class-level lock prevents concurrent issue/return sequences
+    # across all BookSequenceRunner instances (issue #44).
+    _global_lock: asyncio.Lock = asyncio.Lock()
 
     def __init__(self, pi: Optional[pigpio.pi] = None, progress_cb: Optional[Callable] = None):
         self._owns_pi = pi is None
@@ -99,30 +106,51 @@ class BookSequenceRunner:
         time.sleep(SHUTTER_SETTLE_SEC)
 
     def _open_lock(self, pin: int):
-        self.pi.write(pin, 1)
-        time.sleep(LOCK_SETTLE_SEC)
+        self.pi.set_servo_pulsewidth(pin, 500)   # 0° = открыт
+        time.sleep(0.5)
+        self.pi.set_servo_pulsewidth(pin, 0)     # снять нагрузку с сервы
 
     def _close_lock(self, pin: int):
-        self.pi.write(pin, 0)
-        time.sleep(LOCK_SETTLE_SEC)
+        self.pi.set_servo_pulsewidth(pin, 1500)  # 90° = закрыт
+        time.sleep(0.5)
+        self.pi.set_servo_pulsewidth(pin, 0)     # снять нагрузку с сервы
 
-    def _safe_shutdown(self):
-        """Emergency safe state: close all shutters, retract tray, stop motion."""
+    def _safe_shutdown(self, reason: str = "unknown"):
+        """Emergency safe state: close shutters, unlock locks, retract tray, stop motion."""
+        log = logging.getLogger(__name__)
+        log.error(f"EMERGENCY SHUTDOWN: {reason}")
+
+        # 1. Close shutters
         try:
             self.pi.write(SHUTTER_OUTER, 0)
             self.pi.write(SHUTTER_INNER, 0)
-        except Exception:
-            pass
+        except Exception as e:
+            log.error(f"  Failed to close shutters: {e}")
+
+        # 2. Unlock BOTH locks (PWM!) — КРИТИЧНО чтобы книга не застряла
+        try:
+            self.pi.set_servo_pulsewidth(LOCK_FRONT, 500)
+            self.pi.set_servo_pulsewidth(LOCK_REAR, 500)
+            time.sleep(0.5)
+            self.pi.set_servo_pulsewidth(LOCK_FRONT, 0)
+            self.pi.set_servo_pulsewidth(LOCK_REAR, 0)
+            log.info("  Locks unlocked for safety")
+        except Exception as e:
+            log.error(f"  Failed to unlock: {e}")
+
+        # 3. Retract tray
         try:
             if self.tray:
                 self.tray.go_front()
-        except Exception:
-            pass
+        except Exception as e:
+            log.error(f"  Failed to retract tray: {e}")
+
+        # 4. Stop motion
         try:
             if self.motion:
                 self.motion.stop()
-        except Exception:
-            pass
+        except Exception as e:
+            log.error(f"  Failed to stop motion: {e}")
 
     def _init_motion(self) -> CoreXYMotionV2:
         """Initialize XY motion controller (reuse if already created)."""
@@ -180,6 +208,32 @@ class BookSequenceRunner:
 
         Returns: dict with success, steps executed, timing info
         """
+        # Early validation of cell address — fail fast before touching hardware (issue #61)
+        try:
+            x, y = resolve_cell(cell_address)
+        except ValueError as e:
+            return {
+                "success": False,
+                "error": f"Ячейка {cell_address} недоступна: {e}",
+                "cell": cell_address,
+                "steps": [],
+                "elapsed_sec": 0.0,
+            }
+
+        # Prevent concurrent sequences (issue #44)
+        if self._global_lock.locked():
+            return {
+                "success": False,
+                "error": "Другая операция уже выполняется",
+                "cell": cell_address,
+                "steps": [],
+                "elapsed_sec": 0.0,
+            }
+
+        async with self._global_lock:
+            return await self._issue_book_sequence_impl(cell_address, x, y)
+
+    async def _issue_book_sequence_impl(self, cell_address: str, x: int, y: int) -> dict:
         t_start = time.time()
         steps_done = []
 
@@ -196,7 +250,6 @@ class BookSequenceRunner:
 
             # Step 2: Move carriage to cell
             self._emit(2, "Moving to cell", "running", cell=cell_address)
-            x, y = resolve_cell(cell_address)
             self._move_to(x, y)
             self._emit(2, "Moving to cell", "done", cell=cell_address, x=x, y=y)
             steps_done.append("move_to_cell")
@@ -298,7 +351,7 @@ class BookSequenceRunner:
             }
 
         except Exception as e:
-            self._safe_shutdown()
+            self._safe_shutdown(reason=f"issue_book_sequence failed: {e}")
             elapsed = round(time.time() - t_start, 2)
             return {
                 "success": False,
@@ -327,6 +380,32 @@ class BookSequenceRunner:
 
         Returns: dict with success, steps executed, timing info
         """
+        # Early validation of cell address — fail fast before touching hardware (issue #61)
+        try:
+            x, y = resolve_cell(free_cell_address)
+        except ValueError as e:
+            return {
+                "success": False,
+                "error": f"Ячейка {free_cell_address} недоступна: {e}",
+                "cell": free_cell_address,
+                "steps": [],
+                "elapsed_sec": 0.0,
+            }
+
+        # Prevent concurrent sequences (issue #44)
+        if self._global_lock.locked():
+            return {
+                "success": False,
+                "error": "Другая операция уже выполняется",
+                "cell": free_cell_address,
+                "steps": [],
+                "elapsed_sec": 0.0,
+            }
+
+        async with self._global_lock:
+            return await self._return_book_sequence_impl(free_cell_address, x, y)
+
+    async def _return_book_sequence_impl(self, free_cell_address: str, x: int, y: int) -> dict:
         t_start = time.time()
         steps_done = []
 
@@ -394,7 +473,6 @@ class BookSequenceRunner:
             ok = self._home_xy()
             if not ok:
                 raise SequenceError("XY homing before cell move failed")
-            x, y = resolve_cell(free_cell_address)
             self._move_to(x, y)
             self._emit(9, "Moving to cell", "done", cell=free_cell_address, x=x, y=y)
             steps_done.append("move_to_cell")
@@ -436,7 +514,7 @@ class BookSequenceRunner:
             }
 
         except Exception as e:
-            self._safe_shutdown()
+            self._safe_shutdown(reason=f"return_book_sequence failed: {e}")
             elapsed = round(time.time() - t_start, 2)
             return {
                 "success": False,

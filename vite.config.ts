@@ -30,6 +30,30 @@ export default defineConfig({
   build: {
     outDir: path.resolve(import.meta.dirname, "dist/public"),
     emptyOutDir: true,
+    // RPi3 optimization: split vendor bundles so we don't ship one huge JS blob
+    // on a slow SD card / weak CPU. Keeps react core separate from UI primitives
+    // and data fetching library so browser cache and parser can handle them in pieces.
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          "react-core": ["react", "react-dom"],
+          "radix-ui": [
+            "@radix-ui/react-dialog",
+            "@radix-ui/react-toast",
+            "@radix-ui/react-dropdown-menu",
+            "@radix-ui/react-tabs",
+            "@radix-ui/react-select",
+            "@radix-ui/react-progress",
+            "@radix-ui/react-tooltip",
+            "@radix-ui/react-label",
+            "@radix-ui/react-slot",
+            "@radix-ui/react-scroll-area",
+          ],
+          tanstack: ["@tanstack/react-query"],
+        },
+      },
+    },
+    chunkSizeWarningLimit: 800,
   },
   server: {
     fs: {

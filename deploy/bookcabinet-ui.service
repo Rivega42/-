@@ -18,7 +18,9 @@ StandardError=journal
 Environment=NODE_ENV=production
 Environment=PORT=5000
 Environment=HOST=0.0.0.0
+Environment=BOOKCABINET_ROOT=/home/admin42/bookcabinet
 Environment=PYTHON_BRIDGE_PATH=/home/admin42/bookcabinet/bookcabinet/bridge.py
+Environment=AUTH_DAEMON_PATH=/home/admin42/bookcabinet/bookcabinet/services/auth_shutter_daemon.py
 Environment=MOCK_MODE=false
 
 # Watchdog

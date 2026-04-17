@@ -41,7 +41,7 @@ export function CabinetViewer({ cells, onCellClick }: CabinetViewerProps) {
 
   const getCellColor = (status: string) => {
     switch (status) {
-      case 'empty': return 'bg-slate-200 dark:bg-slate-700';
+      case 'empty': return 'bg-white border-2 border-black';
       case 'occupied': return 'bg-green-500';
       case 'reserved': return 'bg-blue-500';
       case 'needs_extraction': return 'bg-amber-500';
@@ -87,38 +87,38 @@ export function CabinetViewer({ cells, onCellClick }: CabinetViewerProps) {
 
   return (
     <div className="flex flex-col lg:flex-row gap-4 h-full" data-testid="cabinet-viewer">
-      <div className="flex-1 bg-slate-900 rounded-xl p-4 overflow-auto">
+      <div className="flex-1 bg-white border-4 border-black rounded-xl p-4 overflow-auto">
         <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
-          <h3 className="text-white text-lg font-bold">Схема шкафа (126 ячеек)</h3>
+          <h3 className="text-black text-lg font-bold">Схема шкафа (126 ячеек)</h3>
           <div className="flex gap-3 text-xs">
             <div className="flex items-center gap-1">
-              <div className="w-3 h-3 rounded bg-slate-400"></div>
-              <span className="text-slate-400">Пусто ({stats.empty})</span>
+              <div className="w-3 h-3 rounded bg-white border border-black"></div>
+              <span className="text-black">Пусто ({stats.empty})</span>
             </div>
             <div className="flex items-center gap-1">
               <div className="w-3 h-3 rounded bg-green-500"></div>
-              <span className="text-slate-400">Занято ({stats.occupied})</span>
+              <span className="text-black">Занято ({stats.occupied})</span>
             </div>
             <div className="flex items-center gap-1">
               <div className="w-3 h-3 rounded bg-blue-500"></div>
-              <span className="text-slate-400">Забронировано ({stats.reserved})</span>
+              <span className="text-black">Забронировано ({stats.reserved})</span>
             </div>
             <div className="flex items-center gap-1">
               <div className="w-3 h-3 rounded bg-amber-500"></div>
-              <span className="text-slate-400">Изъятие ({stats.needsExtraction})</span>
+              <span className="text-black">Изъятие ({stats.needsExtraction})</span>
             </div>
           </div>
         </div>
 
         <div className="space-y-6">
           {Array.from({ length: COLUMNS }).map((_, colIndex) => (
-            <div key={colIndex} className="bg-slate-800 rounded-lg p-4">
-              <h4 className="text-slate-300 text-sm font-medium mb-3">Колонка {colIndex + 1}</h4>
+            <div key={colIndex} className="bg-white border-2 border-black rounded-lg p-4">
+              <h4 className="text-black text-sm font-medium mb-3">Колонка {colIndex + 1}</h4>
 
               <div className="space-y-3">
                 {ROWS.map(row => (
                   <div key={`${colIndex}-${row}`} className="flex items-center gap-2">
-                    <span className="text-slate-400 text-xs w-8 shrink-0">Ряд {row}</span>
+                    <span className="text-black text-xs w-8 shrink-0">Ряд {row}</span>
                     <div className="flex flex-wrap gap-1.5">
                       {Array.from({ length: POSITIONS }).map((_, posIndex) => {
                         const cell = getCell(row, colIndex, posIndex);
@@ -133,12 +133,12 @@ export function CabinetViewer({ cells, onCellClick }: CabinetViewerProps) {
                             onClick={() => handleCellClick(cell, row, colIndex, posIndex)}
                             aria-label={`Ячейка ${row}${colIndex + 1}-${posIndex + 1}: ${cell ? getCellStatusText(cell.status) : 'Пустая'}`}
                             className={`
-                              w-10 h-10 sm:w-9 sm:h-9 rounded-md text-xs font-bold transition-all
-                              ${cell ? getCellColor(cell.status) : 'bg-slate-600'}
-                              ${isSelected ? 'ring-2 ring-white ring-offset-2 ring-offset-slate-800 scale-110' : ''}
+                              w-12 h-12 sm:w-11 sm:h-11 rounded-md text-xs font-bold transition-all
+                              ${cell ? getCellColor(cell.status) : 'bg-white border-2 border-black'}
+                              ${isSelected ? 'ring-2 ring-black ring-offset-2 ring-offset-white scale-110' : ''}
                               ${cell?.status === 'occupied' || cell?.status === 'reserved' || cell?.status === 'needs_extraction'
-                                ? 'text-white'
-                                : 'text-slate-400'}
+                                ? 'text-black'
+                                : 'text-black'}
                               hover:opacity-80 active:scale-95
                               touch-manipulation
                             `}
@@ -227,14 +227,14 @@ export function CabinetViewer({ cells, onCellClick }: CabinetViewerProps) {
               )}
 
               {!selectedCell.bookRfid && selectedCell.status === 'empty' && (
-                <div className="text-center py-4 text-slate-400 border rounded-lg">
+                <div className="text-center py-4 text-black border rounded-lg">
                   <BookOpen className="w-8 h-8 mx-auto mb-2 opacity-50" />
                   <p className="text-sm">Ячейка пуста</p>
                 </div>
               )}
             </div>
           ) : (
-            <div className="text-center py-8 text-slate-400">
+            <div className="text-center py-8 text-black">
               <Package className="w-12 h-12 mx-auto mb-3 opacity-50" />
               <p>Выберите ячейку для просмотра информации</p>
             </div>

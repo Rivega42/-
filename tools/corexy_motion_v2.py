@@ -11,6 +11,8 @@ Usage:
   python3 tools/corexy_motion_v2.py x-sweep
   python3 tools/corexy_motion_v2.py y-sweep
 """
+# IMPORTANT: These GPIO pin constants MUST match bookcabinet/config.py GPIO_PINS.
+# TODO: Import from config.py to eliminate duplication (see issue #59).
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -37,7 +39,7 @@ STEP_MASK = (1 << MOTOR_A_STEP) | (1 << MOTOR_B_STEP)
 
 @dataclass(frozen=True)
 class MotionConfig:
-    fast: int = 3000
+    fast: int = 800
     homing_fast: int = 1800
     slow: int = 300
     backoff_x: int = 300

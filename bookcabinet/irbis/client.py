@@ -24,11 +24,17 @@ from ..utils.irbis_helpers import (
 
 @dataclass
 class IrbisConfig:
-    """Конфигурация подключения к ИРБИС64"""
+    """Конфигурация подключения к ИРБИС64.
+
+    Поля `username` и `password` должны быть заданы через переменные окружения
+    (IRBIS_USERNAME / IRBIS_PASSWORD) или явным образом при создании клиента.
+    Встроенные дефолтные значения убраны намеренно — это были реальные
+    учётные данные, лежащие в git истории.
+    """
     host: str = "127.0.0.1"
     port: int = 6666
     username: str = "MASTER"
-    password: str = "MASTERKEY"
+    password: str = ""  # Must be set via env (IRBIS_PASSWORD) or at construction.
     database: str = "IBIS"
     readers_database: str = "RDR"
     workstation: str = "C"
@@ -75,8 +81,8 @@ class IrbisClient:
         self.config = config if config else IrbisConfig(
             host=IRBIS.get('host', '127.0.0.1'),
             port=IRBIS.get('port', 6666),
-            username=IRBIS.get('username', 'MASTER'),
-            password=IRBIS.get('password', 'MASTERKEY'),
+            username=IRBIS.get('username', ''),
+            password=IRBIS.get('password', ''),
         )
         self.client_id = 100000 + int(datetime.now().timestamp() % 100000)
         self.sequence = 1

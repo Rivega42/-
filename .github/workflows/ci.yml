@@ -16,9 +16,14 @@ jobs:
           node-version: '20'
           cache: 'npm'
       - run: npm ci
+      - name: Lint JS/TS
+        # Lint is advisory for now — keep the pipeline green while we clean up warnings.
+        run: npx eslint client/ server/ --ext .ts,.tsx --max-warnings 50 || echo "Lint warnings present"
       - name: TypeScript typecheck
-        # pcscService depends on native pcsclite module; allow failure on CI
-        run: npx tsc --noEmit || true
+        # Critical: tsc must pass.
+        run: npx tsc --noEmit
+      - name: Build
+        run: npm run build
 
   python-syntax:
     runs-on: ubuntu-latest
@@ -27,13 +32,11 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - name: Syntax check key Python files
-        run: |
-          python -m py_compile bookcabinet/config.py
-          python -m py_compile bookcabinet/main.py
-          python -m py_compile bookcabinet/bridge.py
-          python -m py_compile bookcabinet/business/issue.py
-          python -m py_compile bookcabinet/business/return_book.py
-          python -m py_compile bookcabinet/business/load.py
-          python -m py_compile bookcabinet/business/auth.py
-          python -m py_compile bookcabinet/utils/logger.py
+      - name: Install Python deps
+        run: pip install ruff pytest
+      - name: Ruff check
+        # Advisory lint — relaxed rule set while the codebase is being cleaned up.
+        run: ruff check bookcabinet/ tools/ --ignore E501,E402,F401 || echo "Ruff warnings"
+      - name: Syntax check
+        # Critical: every .py file must at least compile.
+        run: find bookcabinet tools -name "*.py" -exec python -m py_compile {} +

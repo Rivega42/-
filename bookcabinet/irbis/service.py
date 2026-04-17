@@ -37,8 +37,8 @@ class LibraryService:
             self.irbis = IrbisClient(IrbisConfig(
                 host=IRBIS.get('host', '127.0.0.1'),
                 port=IRBIS.get('port', 6666),
-                username=IRBIS.get('username', 'MASTER'),
-                password=IRBIS.get('password', 'MASTERKEY'),
+                username=IRBIS.get('username', ''),
+                password=IRBIS.get('password', ''),
                 database=IRBIS.get('database', 'IBIS'),
                 readers_database=IRBIS.get('readers_database', 'RDR'),
                 loan_days=IRBIS.get('loan_days', 30),

@@ -110,6 +110,7 @@ IRBIS = {
     'db': os.environ.get('IRBIS_DB', 'IBIS'),
     'books_db': os.environ.get('IRBIS_BOOKS_DB', 'KAT%SERV09%'),
     'readers_db': os.environ.get('IRBIS_READERS_DB', 'RDR'),
-    'username': os.environ.get('IRBIS_USERNAME', '09f00st'),
-    'password': os.environ.get('IRBIS_PASSWORD', 'f00st'),
+    # Credentials must be supplied via env. No baked-in defaults.
+    'username': os.environ.get('IRBIS_USERNAME', ''),
+    'password': os.environ.get('IRBIS_PASSWORD', ''),
 }

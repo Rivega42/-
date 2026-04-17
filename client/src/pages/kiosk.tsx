@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, lazy, Suspense } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { Card, CardContent } from "@/components/ui/card";
@@ -46,12 +46,24 @@ import {
   Sliders,
   Radio,
 } from "lucide-react";
-import { CabinetViewer } from "@/components/CabinetViewer";
-import SettingsPanel from "@/components/SettingsPanel";
-import TeachMode from "@/components/TeachMode";
 import { ReaderMenu, BookList, ReturnBook } from "@/components/kiosk/ReaderScreens";
 import { ProgressScreen, SuccessScreen, ErrorScreen, MaintenanceScreen } from "@/components/kiosk/FeedbackScreens";
-import { IssueProcess } from "@/components/kiosk/IssueProcess";
+
+// Lazy-load heavy/seldom-used screens to keep initial kiosk bundle small (RPi3 optimization).
+const TeachMode = lazy(() => import("@/components/TeachMode"));
+const SettingsPanel = lazy(() => import("@/components/SettingsPanel"));
+const CabinetViewer = lazy(() =>
+  import("@/components/CabinetViewer").then((m) => ({ default: m.CabinetViewer })),
+);
+const IssueProcess = lazy(() =>
+  import("@/components/kiosk/IssueProcess").then((m) => ({ default: m.IssueProcess })),
+);
+
+const LazyFallback = () => (
+  <div className="min-h-screen bg-white flex items-center justify-center">
+    <Loader2 className="w-12 h-12 animate-spin" />
+  </div>
+);
 
 type Screen =
   | 'welcome'
@@ -106,6 +118,8 @@ export default function KioskPage() {
   // ─── Session timeout / auto-logout (60 s inactivity) ────────────
   const inactivityTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const warningTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Guard against duplicate card_read / authMutation races (WebSocket + button click).
+  const authInProgressRef = useRef(false);
 
   const SESSION_TIMEOUT_MS = 60_000;
   const SESSION_WARNING_MS = 45_000;
@@ -113,6 +127,14 @@ export default function KioskPage() {
   const clearInactivityTimers = useCallback(() => {
     if (inactivityTimerRef.current) { clearTimeout(inactivityTimerRef.current); inactivityTimerRef.current = null; }
     if (warningTimerRef.current) { clearTimeout(warningTimerRef.current); warningTimerRef.current = null; }
+  }, []);
+
+  // Guarantee timers are cleared on unmount (prevents memory leak if component unmounts mid-session).
+  useEffect(() => {
+    return () => {
+      if (inactivityTimerRef.current) clearTimeout(inactivityTimerRef.current);
+      if (warningTimerRef.current) clearTimeout(warningTimerRef.current);
+    };
   }, []);
 
   const performAutoLogout = useCallback(async () => {
@@ -168,9 +190,10 @@ export default function KioskPage() {
       ws.onmessage = async (event) => {
         try {
           const msg: WebSocketMessage = JSON.parse(event.data);
-          if (msg.type === 'card_read' && screen === 'welcome') {
+          if (msg.type === 'card_read' && screen === 'welcome' && !authInProgressRef.current) {
             const uid = (msg.data as any)?.uid;
             if (uid) {
+              authInProgressRef.current = true;
               toast({ title: 'Карта обнаружена', description: `UID: ${uid}` });
               try {
                 const response = await apiRequest('POST', '/api/auth/card', { rfid: uid });
@@ -188,6 +211,8 @@ export default function KioskPage() {
                 }
               } catch (err: any) {
                 toast({ title: 'Ошибка', description: err.message, variant: 'destructive' });
+              } finally {
+                authInProgressRef.current = false;
               }
             }
           }
@@ -206,11 +231,13 @@ export default function KioskPage() {
     };
   }, [screen]);
 
+  // RPi3 optimization: rely on WebSocket for live status; use long interval only as a fallback.
   const { data: systemStatus } = useQuery<SystemStatus>({
     queryKey: ['/api/status'],
-    refetchInterval: 3000,
+    refetchInterval: 30000,
   });
 
+  // Extraction list is refreshed via WebSocket invalidation (no polling).
   const { data: cellsNeedingExtraction = [] } = useQuery<Cell[]>({
     queryKey: ['/api/cells/extraction'],
     enabled: session?.user.role === 'librarian' || session?.user.role === 'admin',
@@ -249,6 +276,7 @@ export default function KioskPage() {
 
   const authMutation = useMutation({
     mutationFn: async (rfid: string) => {
+      authInProgressRef.current = true;
       const response = await apiRequest('POST', '/api/auth/card', { rfid });
       return response.json();
     },
@@ -259,7 +287,7 @@ export default function KioskPage() {
           reservedBooks: data.reservedBooks || [],
           needsExtraction: data.needsExtraction || 0,
         });
-        
+
         switch (data.user.role) {
           case 'admin':
             setScreen('admin_menu');
@@ -271,8 +299,10 @@ export default function KioskPage() {
             setScreen('reader_menu');
         }
       }
+      authInProgressRef.current = false;
     },
     onError: (error: any) => {
+      authInProgressRef.current = false;
       setErrorMessage(error.message || 'Ошибка авторизации');
       setScreen('error');
     },
@@ -2090,7 +2120,9 @@ export default function KioskPage() {
       <div className="min-h-screen bg-slate-100 pt-28 p-6" data-testid="screen-cabinet-view">
         <div className="max-w-7xl mx-auto h-[calc(100vh-160px)]">
           <h2 className="text-3xl font-bold text-slate-800 mb-4">3D-модель шкафа</h2>
-          <CabinetViewer cells={cabinetCells} />
+          <Suspense fallback={<LazyFallback />}>
+            <CabinetViewer cells={cabinetCells} />
+          </Suspense>
         </div>
       </div>
     );
@@ -2124,21 +2156,23 @@ export default function KioskPage() {
         />
       )}
       {screen === 'issue_process' && (
-        <IssueProcess
-          book={issuingBook}
-          userRfid={session?.user.rfid}
-          wsRef={wsRef}
-          onComplete={() => {
-            setSuccessMessage(`Книга "${issuingBook?.title || ''}" выдана`);
-            setIssuingBook(null);
-            setScreen('success');
-          }}
-          onError={(msg) => {
-            setErrorMessage(msg);
-            setIssuingBook(null);
-            setScreen('error');
-          }}
-        />
+        <Suspense fallback={<LazyFallback />}>
+          <IssueProcess
+            book={issuingBook}
+            userRfid={session?.user.rfid}
+            wsRef={wsRef}
+            onComplete={() => {
+              setSuccessMessage(`Книга "${issuingBook?.title || ''}" выдана`);
+              setIssuingBook(null);
+              setScreen('success');
+            }}
+            onError={(msg) => {
+              setErrorMessage(msg);
+              setIssuingBook(null);
+              setScreen('error');
+            }}
+          />
+        </Suspense>
       )}
       {screen === 'return_book' && (
         <ReturnBook
@@ -2166,7 +2200,9 @@ export default function KioskPage() {
         <div className="min-h-screen bg-slate-100 pt-28 p-6">
           <div className="max-w-4xl mx-auto">
             <h2 className="text-3xl font-bold text-slate-800 mb-6">Настройки системы</h2>
-            <SettingsPanel />
+            <Suspense fallback={<LazyFallback />}>
+              <SettingsPanel />
+            </Suspense>
           </div>
         </div>
       )}
@@ -2174,7 +2210,9 @@ export default function KioskPage() {
         <div className="min-h-screen bg-slate-100 pt-28 p-6">
           <div className="max-w-5xl mx-auto">
             <h2 className="text-3xl font-bold text-slate-800 mb-6">Режим обучения</h2>
-            <TeachMode />
+            <Suspense fallback={<LazyFallback />}>
+              <TeachMode />
+            </Suspense>
           </div>
         </div>
       )}
