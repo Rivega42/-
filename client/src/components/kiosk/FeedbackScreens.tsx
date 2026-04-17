@@ -9,12 +9,23 @@ interface ProgressScreenProps {
 }
 
 export function ProgressScreen({ message, value }: ProgressScreenProps) {
+  const displayedMessage = message || 'Выполняется операция...';
   return (
     <div className="min-h-screen bg-white flex flex-col items-center justify-center p-8" data-testid="screen-progress">
-      <Loader2 className="w-16 h-16 text-black animate-spin mb-6" />
-      <h2 className="text-2xl font-bold text-black mb-4">{message || 'Выполняется операция...'}</h2>
+      <Loader2 className="w-16 h-16 text-black animate-spin mb-6" aria-hidden="true" />
+      <div role="status" aria-live="polite">
+        <h2 className="text-2xl font-bold text-black mb-4">{displayedMessage}</h2>
+      </div>
       <div className="w-80">
-        <Progress value={value} className="h-3" />
+        <Progress
+          value={value}
+          className="h-3"
+          role="progressbar"
+          aria-valuenow={value}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-label="Выполнено"
+        />
       </div>
     </div>
   );

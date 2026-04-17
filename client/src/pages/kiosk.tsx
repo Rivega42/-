@@ -641,23 +641,24 @@ export default function KioskPage() {
 
   const renderWelcome = () => (
     <div className="min-h-screen bg-white flex flex-col items-center justify-center text-black p-8" data-testid="screen-welcome">
-      <Library className="w-28 h-28 mb-6 text-black" />
+      <Library className="w-28 h-28 mb-6 text-black" aria-hidden="true" />
       <h1 className="text-5xl font-black mb-3">Добро пожаловать!</h1>
       <p className="text-2xl text-black mb-12">Автоматический шкаф книговыдачи</p>
 
       <div className="border-4 border-black rounded-2xl p-10 flex flex-col items-center max-w-2xl w-full bg-white">
-        <CreditCard className="w-20 h-20 mb-4 text-black animate-pulse" />
+        <CreditCard className="w-20 h-20 mb-4 text-black animate-pulse" aria-hidden="true" />
         <p className="text-xl font-bold mb-2">Приложите карту читателя</p>
         <p className="text-base text-black mb-6">или выберите тестового пользователя</p>
-        
+
         <div className="flex flex-wrap gap-3 justify-center">
           <Button
             size="lg"
             className="h-20 px-8 text-xl min-w-[200px]"
             onClick={() => handleCardScan('CARD001')}
+            aria-label="Войти как тестовый читатель"
             data-testid="button-test-reader"
           >
-            <UserIcon className="w-6 h-6 mr-2" />
+            <UserIcon className="w-6 h-6 mr-2" aria-hidden="true" />
             Читатель
           </Button>
           <Button
@@ -665,9 +666,10 @@ export default function KioskPage() {
             variant="secondary"
             className="h-20 px-8 text-xl min-w-[200px]"
             onClick={() => handleCardScan('ADMIN01')}
+            aria-label="Войти как тестовый библиотекарь"
             data-testid="button-test-librarian"
           >
-            <BookOpen className="w-6 h-6 mr-2" />
+            <BookOpen className="w-6 h-6 mr-2" aria-hidden="true" />
             Библиотекарь
           </Button>
           <Button
@@ -675,17 +677,18 @@ export default function KioskPage() {
             variant="outline"
             className="h-20 px-8 text-xl min-w-[200px] border-2 border-black text-black hover:bg-black hover:text-white"
             onClick={() => handleCardScan('ADMIN99')}
+            aria-label="Войти как тестовый администратор"
             data-testid="button-test-admin"
           >
-            <Shield className="w-6 h-6 mr-2" />
+            <Shield className="w-6 h-6 mr-2" aria-hidden="true" />
             Администратор
           </Button>
         </div>
       </div>
 
       {authMutation.isPending && (
-        <div className="mt-6 flex items-center gap-3">
-          <Loader2 className="w-6 h-6 animate-spin" />
+        <div className="mt-6 flex items-center gap-3" role="status" aria-live="polite">
+          <Loader2 className="w-6 h-6 animate-spin" aria-hidden="true" />
           <span>Авторизация...</span>
         </div>
       )}
@@ -698,16 +701,25 @@ export default function KioskPage() {
         <h2 className="text-3xl font-bold text-slate-800 mb-6 text-center">Выберите действие</h2>
         
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-          <Card 
-            className="cursor-pointer hover:shadow-xl transition-all border-2 hover:border-blue-500 active:scale-[0.98]"
+          <Card
+            className="cursor-pointer hover:shadow-xl transition-all border-2 hover:border-blue-500 active:scale-[0.98] focus:outline-none focus:ring-2 focus:ring-blue-500"
             onClick={() => setScreen('book_list')}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                setScreen('book_list');
+              }
+            }}
+            role="button"
+            tabIndex={0}
+            aria-label="Забрать забронированные книги"
             data-testid="card-get-book"
           >
             <CardContent className="p-10 flex flex-col items-center text-center">
-              <BookOpen className="w-20 h-20 text-blue-500 mb-4" />
+              <BookOpen className="w-20 h-20 text-blue-500 mb-4" aria-hidden="true" />
               <h3 className="text-2xl font-bold mb-2">Забрать книгу</h3>
               <p className="text-lg text-slate-500">
-                {session?.reservedBooks.length 
+                {session?.reservedBooks.length
                   ? `${session.reservedBooks.length} забронировано`
                   : 'Нет бронирований'}
               </p>
@@ -719,13 +731,22 @@ export default function KioskPage() {
             </CardContent>
           </Card>
 
-          <Card 
-            className="cursor-pointer hover:shadow-xl transition-all border-2 hover:border-green-500 active:scale-[0.98]"
+          <Card
+            className="cursor-pointer hover:shadow-xl transition-all border-2 hover:border-green-500 active:scale-[0.98] focus:outline-none focus:ring-2 focus:ring-green-500"
             onClick={() => setScreen('return_book')}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                setScreen('return_book');
+              }
+            }}
+            role="button"
+            tabIndex={0}
+            aria-label="Вернуть книгу"
             data-testid="card-return-book"
           >
             <CardContent className="p-10 flex flex-col items-center text-center">
-              <Undo2 className="w-20 h-20 text-green-500 mb-4" />
+              <Undo2 className="w-20 h-20 text-green-500 mb-4" aria-hidden="true" />
               <h3 className="text-2xl font-bold mb-2">Вернуть книгу</h3>
               <p className="text-lg text-slate-500">
                 Положите книгу в окно приёма
@@ -770,78 +791,135 @@ export default function KioskPage() {
         )}
         
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-5">
-          <Card 
-            className="cursor-pointer hover:shadow-xl transition-all active:scale-[0.98]"
+          <Card
+            className="cursor-pointer hover:shadow-xl transition-all active:scale-[0.98] focus:outline-none focus:ring-2 focus:ring-blue-500"
             onClick={() => setScreen('load_books')}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                setScreen('load_books');
+              }
+            }}
+            role="button"
+            tabIndex={0}
+            aria-label="Загрузить книги в шкаф"
             data-testid="card-load-books"
           >
             <CardContent className="p-7 flex flex-col items-center text-center">
-              <Plus className="w-14 h-14 text-blue-500 mb-3" />
+              <Plus className="w-14 h-14 text-blue-500 mb-3" aria-hidden="true" />
               <h3 className="text-xl font-bold mb-1">Загрузить книги</h3>
               <p className="text-slate-500">Добавить в шкаф</p>
             </CardContent>
           </Card>
 
-          <Card 
-            className="cursor-pointer hover:shadow-xl transition-all active:scale-[0.98]"
+          <Card
+            className="cursor-pointer hover:shadow-xl transition-all active:scale-[0.98] focus:outline-none focus:ring-2 focus:ring-orange-500"
             onClick={() => setScreen('extract_books')}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                setScreen('extract_books');
+              }
+            }}
+            role="button"
+            tabIndex={0}
+            aria-label="Изъять возвращённые книги"
             data-testid="card-unload-books"
           >
             <CardContent className="p-7 flex flex-col items-center text-center">
-              <Package className="w-14 h-14 text-orange-500 mb-3" />
+              <Package className="w-14 h-14 text-orange-500 mb-3" aria-hidden="true" />
               <h3 className="text-xl font-bold mb-1">Изъять книги</h3>
               <p className="text-slate-500">Забрать возвращённые</p>
             </CardContent>
           </Card>
 
-          <Card 
-            className="cursor-pointer hover:shadow-xl transition-all active:scale-[0.98]"
+          <Card
+            className="cursor-pointer hover:shadow-xl transition-all active:scale-[0.98] focus:outline-none focus:ring-2 focus:ring-green-500"
             onClick={() => {
               setProgressMessage('Инвентаризация...');
               setProgressValue(10);
               setScreen('progress');
               inventoryMutation.mutate();
             }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                setProgressMessage('Инвентаризация...');
+                setProgressValue(10);
+                setScreen('progress');
+                inventoryMutation.mutate();
+              }
+            }}
+            role="button"
+            tabIndex={0}
+            aria-label="Запустить инвентаризацию"
             data-testid="card-inventory"
           >
             <CardContent className="p-7 flex flex-col items-center text-center">
-              <Search className="w-14 h-14 text-green-500 mb-3" />
+              <Search className="w-14 h-14 text-green-500 mb-3" aria-hidden="true" />
               <h3 className="text-xl font-bold mb-1">Инвентаризация</h3>
               <p className="text-slate-500">Проверить содержимое</p>
             </CardContent>
           </Card>
 
-          <Card 
-            className="cursor-pointer hover:shadow-xl transition-all active:scale-[0.98]"
+          <Card
+            className="cursor-pointer hover:shadow-xl transition-all active:scale-[0.98] focus:outline-none focus:ring-2 focus:ring-slate-500"
             onClick={() => setScreen('operations_log')}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                setScreen('operations_log');
+              }
+            }}
+            role="button"
+            tabIndex={0}
+            aria-label="Открыть журнал операций"
             data-testid="card-operations-log"
           >
             <CardContent className="p-7 flex flex-col items-center text-center">
-              <History className="w-14 h-14 text-slate-600 mb-3" />
+              <History className="w-14 h-14 text-slate-600 mb-3" aria-hidden="true" />
               <h3 className="text-xl font-bold mb-1">Журнал операций</h3>
               <p className="text-slate-500">История выдач и возвратов</p>
             </CardContent>
           </Card>
 
-          <Card 
-            className="cursor-pointer hover:shadow-xl transition-all active:scale-[0.98]"
+          <Card
+            className="cursor-pointer hover:shadow-xl transition-all active:scale-[0.98] focus:outline-none focus:ring-2 focus:ring-indigo-500"
             onClick={() => setScreen('statistics')}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                setScreen('statistics');
+              }
+            }}
+            role="button"
+            tabIndex={0}
+            aria-label="Открыть статистику"
             data-testid="card-statistics"
           >
             <CardContent className="p-7 flex flex-col items-center text-center">
-              <BarChart3 className="w-14 h-14 text-indigo-500 mb-3" />
+              <BarChart3 className="w-14 h-14 text-indigo-500 mb-3" aria-hidden="true" />
               <h3 className="text-xl font-bold mb-1">Статистика</h3>
               <p className="text-slate-500">Аналитика и отчёты</p>
             </CardContent>
           </Card>
 
-          <Card 
-            className="cursor-pointer hover:shadow-xl transition-all active:scale-[0.98]"
+          <Card
+            className="cursor-pointer hover:shadow-xl transition-all active:scale-[0.98] focus:outline-none focus:ring-2 focus:ring-cyan-500"
             onClick={() => setScreen('cabinet_view')}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                setScreen('cabinet_view');
+              }
+            }}
+            role="button"
+            tabIndex={0}
+            aria-label="Открыть 3D-модель шкафа"
             data-testid="card-cabinet-view"
           >
             <CardContent className="p-7 flex flex-col items-center text-center">
-              <Box className="w-14 h-14 text-cyan-500 mb-3" />
+              <Box className="w-14 h-14 text-cyan-500 mb-3" aria-hidden="true" />
               <h3 className="text-xl font-bold mb-1">3D-модель шкафа</h3>
               <p className="text-slate-500">Визуализация RFID-меток</p>
             </CardContent>
@@ -857,85 +935,148 @@ export default function KioskPage() {
         <h2 className="text-3xl font-bold text-slate-800 mb-6 text-center">Администрирование</h2>
         
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-5">
-          <Card 
-            className="cursor-pointer hover:shadow-xl transition-all active:scale-[0.98]"
+          <Card
+            className="cursor-pointer hover:shadow-xl transition-all active:scale-[0.98] focus:outline-none focus:ring-2 focus:ring-slate-500"
             onClick={() => setLocation('/admin')}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                setLocation('/admin');
+              }
+            }}
+            role="button"
+            tabIndex={0}
+            aria-label="Открыть Dashboard"
             data-testid="card-admin-dashboard"
           >
             <CardContent className="p-7 flex flex-col items-center text-center">
-              <Settings className="w-14 h-14 text-slate-600 mb-3" />
+              <Settings className="w-14 h-14 text-slate-600 mb-3" aria-hidden="true" />
               <h3 className="text-xl font-bold mb-1">Dashboard</h3>
               <p className="text-slate-500">Статистика и мониторинг</p>
             </CardContent>
           </Card>
 
-          <Card 
-            className="cursor-pointer hover:shadow-xl transition-all active:scale-[0.98]"
+          <Card
+            className="cursor-pointer hover:shadow-xl transition-all active:scale-[0.98] focus:outline-none focus:ring-2 focus:ring-blue-500"
             onClick={() => setScreen('librarian_menu')}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                setScreen('librarian_menu');
+              }
+            }}
+            role="button"
+            tabIndex={0}
+            aria-label="Открыть функции библиотекаря"
             data-testid="card-librarian-functions"
           >
             <CardContent className="p-7 flex flex-col items-center text-center">
-              <BookOpen className="w-14 h-14 text-blue-500 mb-3" />
+              <BookOpen className="w-14 h-14 text-blue-500 mb-3" aria-hidden="true" />
               <h3 className="text-xl font-bold mb-1">Функции библиотекаря</h3>
               <p className="text-slate-500">Загрузка, изъятие</p>
             </CardContent>
           </Card>
 
-          <Card 
-            className="cursor-pointer hover:shadow-xl transition-all active:scale-[0.98]"
+          <Card
+            className="cursor-pointer hover:shadow-xl transition-all active:scale-[0.98] focus:outline-none focus:ring-2 focus:ring-purple-500"
             onClick={() => setScreen('diagnostics')}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                setScreen('diagnostics');
+              }
+            }}
+            role="button"
+            tabIndex={0}
+            aria-label="Открыть диагностику"
             data-testid="card-diagnostics"
           >
             <CardContent className="p-7 flex flex-col items-center text-center">
-              <Shield className="w-14 h-14 text-purple-500 mb-3" />
+              <Shield className="w-14 h-14 text-purple-500 mb-3" aria-hidden="true" />
               <h3 className="text-xl font-bold mb-1">Диагностика</h3>
               <p className="text-slate-500">Проверка оборудования</p>
             </CardContent>
           </Card>
 
-          <Card 
-            className="cursor-pointer hover:shadow-xl transition-all active:scale-[0.98]"
+          <Card
+            className="cursor-pointer hover:shadow-xl transition-all active:scale-[0.98] focus:outline-none focus:ring-2 focus:ring-orange-500"
             onClick={() => setScreen('mechanics_test')}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                setScreen('mechanics_test');
+              }
+            }}
+            role="button"
+            tabIndex={0}
+            aria-label="Открыть тест механики"
             data-testid="card-mechanics-test"
           >
             <CardContent className="p-7 flex flex-col items-center text-center">
-              <Cog className="w-14 h-14 text-orange-500 mb-3" />
+              <Cog className="w-14 h-14 text-orange-500 mb-3" aria-hidden="true" />
               <h3 className="text-xl font-bold mb-1">Тест механики</h3>
               <p className="text-slate-500">Моторы, сервоприводы, шторки</p>
             </CardContent>
           </Card>
 
           <Card
-            className="cursor-pointer hover:shadow-xl transition-all active:scale-[0.98]"
+            className="cursor-pointer hover:shadow-xl transition-all active:scale-[0.98] focus:outline-none focus:ring-2 focus:ring-green-500"
             onClick={() => setScreen('calibration')}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                setScreen('calibration');
+              }
+            }}
+            role="button"
+            tabIndex={0}
+            aria-label="Открыть калибровку"
             data-testid="card-calibration"
           >
             <CardContent className="p-7 flex flex-col items-center text-center">
-              <Target className="w-14 h-14 text-green-500 mb-3" />
+              <Target className="w-14 h-14 text-green-500 mb-3" aria-hidden="true" />
               <h3 className="text-xl font-bold mb-1">Калибровка</h3>
               <p className="text-slate-500">Настройка позиций и скоростей</p>
             </CardContent>
           </Card>
 
           <Card
-            className="cursor-pointer hover:shadow-xl transition-all active:scale-[0.98]"
+            className="cursor-pointer hover:shadow-xl transition-all active:scale-[0.98] focus:outline-none focus:ring-2 focus:ring-red-500"
             onClick={() => setScreen('teach_mode')}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                setScreen('teach_mode');
+              }
+            }}
+            role="button"
+            tabIndex={0}
+            aria-label="Открыть режим обучения"
             data-testid="card-teach-mode"
           >
             <CardContent className="p-7 flex flex-col items-center text-center">
-              <GraduationCap className="w-14 h-14 text-red-500 mb-3" />
+              <GraduationCap className="w-14 h-14 text-red-500 mb-3" aria-hidden="true" />
               <h3 className="text-xl font-bold mb-1">Режим обучения</h3>
               <p className="text-slate-500">Запись последовательностей</p>
             </CardContent>
           </Card>
 
           <Card
-            className="cursor-pointer hover:shadow-xl transition-all active:scale-[0.98]"
+            className="cursor-pointer hover:shadow-xl transition-all active:scale-[0.98] focus:outline-none focus:ring-2 focus:ring-cyan-500"
             onClick={() => setScreen('settings')}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                setScreen('settings');
+              }
+            }}
+            role="button"
+            tabIndex={0}
+            aria-label="Открыть настройки"
             data-testid="card-settings"
           >
             <CardContent className="p-7 flex flex-col items-center text-center">
-              <Sliders className="w-14 h-14 text-cyan-500 mb-3" />
+              <Sliders className="w-14 h-14 text-cyan-500 mb-3" aria-hidden="true" />
               <h3 className="text-xl font-bold mb-1">Настройки</h3>
               <p className="text-slate-500">Таймауты, Telegram, ИРБИС</p>
             </CardContent>
