@@ -1327,7 +1327,7 @@ except Exception as e:
 
   let calibrationData: CalibrationData = { ...defaultCalibration };
 
-  app.get("/api/calibration", async (req, res) => {
+  app.get("/api/calibration", requireSession, requireRole('admin'), async (req, res) => {
     try {
       res.json(calibrationData);
     } catch (error) {
@@ -1335,7 +1335,7 @@ except Exception as e:
     }
   });
 
-  app.post("/api/calibration", async (req, res) => {
+  app.post("/api/calibration", requireSession, requireRole('admin'), async (req, res) => {
     try {
       const newData = req.body;
 
@@ -1381,7 +1381,7 @@ except Exception as e:
   });
 
   // Экспорт калибровки в JSON
-  app.get("/api/calibration/export", async (req, res) => {
+  app.get("/api/calibration/export", requireSession, requireRole('admin'), async (req, res) => {
     try {
       res.json({
         success: true,
@@ -1394,7 +1394,7 @@ except Exception as e:
   });
 
   // Импорт калибровки из JSON
-  app.post("/api/calibration/import", async (req, res) => {
+  app.post("/api/calibration/import", requireSession, requireRole('admin'), async (req, res) => {
     try {
       const importedData = req.body;
       
@@ -1420,7 +1420,7 @@ except Exception as e:
     }
   });
 
-  app.post("/api/calibration/reset", async (req, res) => {
+  app.post("/api/calibration/reset", requireSession, requireRole('admin'), async (req, res) => {
     try {
       calibrationData = { ...defaultCalibration };
       
@@ -1437,7 +1437,7 @@ except Exception as e:
   });
 
   // Комплексные тесты калибровки (симуляция в mock режиме)
-  app.post("/api/calibration/test-suite", async (req, res) => {
+  app.post("/api/calibration/test-suite", requireSession, requireRole('admin'), async (req, res) => {
     try {
       const results: {
         test: string;
@@ -1548,7 +1548,7 @@ except Exception as e:
   });
 
   // Отдельные тесты калибровки
-  app.post("/api/calibration/test/:testName", async (req, res) => {
+  app.post("/api/calibration/test/:testName", requireSession, requireRole('admin'), async (req, res) => {
     const { testName } = req.params;
     
     try {
@@ -1639,7 +1639,7 @@ except Exception as e:
   };
 
   // Начать режим калибровки кинематики (K)
-  app.post("/api/calibration/wizard/kinematics/start", async (req, res) => {
+  app.post("/api/calibration/wizard/kinematics/start", requireSession, requireRole('admin'), async (req, res) => {
     try {
       calibrationWizard = {
         ...calibrationWizard,
@@ -1668,7 +1668,7 @@ except Exception as e:
   });
 
   // Шаг теста кинематики - запуск мотора
-  app.post("/api/calibration/wizard/kinematics/step", async (req, res) => {
+  app.post("/api/calibration/wizard/kinematics/step", requireSession, requireRole('admin'), async (req, res) => {
     try {
       const { action } = req.body; // 'run' или 'response' (W/A/S/D)
       const step = calibrationWizard.step;
@@ -1783,7 +1783,7 @@ except Exception as e:
   }
 
   // Начать калибровку 10 ключевых точек (C)
-  app.post("/api/calibration/wizard/points10/start", async (req, res) => {
+  app.post("/api/calibration/wizard/points10/start", requireSession, requireRole('admin'), async (req, res) => {
     try {
       const points10 = [
         { col: 0, row: 0, label: 'Начало координат' },
@@ -1832,7 +1832,7 @@ except Exception as e:
   });
 
   // Движение каретки (WASD)
-  app.post("/api/calibration/wizard/move", async (req, res) => {
+  app.post("/api/calibration/wizard/move", requireSession, requireRole('admin'), async (req, res) => {
     try {
       const { direction, stepIndex } = req.body; // direction: 'W', 'A', 'S', 'D'
 
@@ -1896,7 +1896,7 @@ except Exception as e:
   });
 
   // Сохранить текущую точку калибровки
-  app.post("/api/calibration/wizard/points10/save", async (req, res) => {
+  app.post("/api/calibration/wizard/points10/save", requireSession, requireRole('admin'), async (req, res) => {
     try {
       const step = calibrationWizard.step;
       const points10 = [
@@ -1982,7 +1982,7 @@ except Exception as e:
   });
 
   // Начать калибровку захвата полки (L)
-  app.post("/api/calibration/wizard/grab/start", async (req, res) => {
+  app.post("/api/calibration/wizard/grab/start", requireSession, requireRole('admin'), async (req, res) => {
     try {
       const { side } = req.body; // 'front' или 'back'
       
@@ -2015,7 +2015,7 @@ except Exception as e:
   });
 
   // Изменить параметр захвата
-  app.post("/api/calibration/wizard/grab/adjust", async (req, res) => {
+  app.post("/api/calibration/wizard/grab/adjust", requireSession, requireRole('admin'), async (req, res) => {
     try {
       const { side, param, delta } = req.body; // side: 'front'/'back', param: 'extend1'/'retract'/'extend2', delta: number
       
@@ -2034,7 +2034,7 @@ except Exception as e:
   });
 
   // Тест захвата
-  app.post("/api/calibration/wizard/grab/test", async (req, res) => {
+  app.post("/api/calibration/wizard/grab/test", requireSession, requireRole('admin'), async (req, res) => {
     try {
       const { side, param } = req.body;
       
@@ -2059,7 +2059,7 @@ except Exception as e:
   // ==================== ЗАБЛОКИРОВАННЫЕ ЯЧЕЙКИ ====================
 
   // Получить карту заблокированных ячеек
-  app.get("/api/calibration/blocked-cells", async (req, res) => {
+  app.get("/api/calibration/blocked-cells", requireSession, requireRole('admin'), async (req, res) => {
     try {
       res.json({
         success: true,
@@ -2071,7 +2071,7 @@ except Exception as e:
   });
 
   // Обновить заблокированные ячейки
-  app.post("/api/calibration/blocked-cells", async (req, res) => {
+  app.post("/api/calibration/blocked-cells", requireSession, requireRole('admin'), async (req, res) => {
     try {
       const { side, column, rows, action } = req.body; // action: 'block' или 'unblock'
       
@@ -2107,7 +2107,7 @@ except Exception as e:
   });
 
   // Сброс заблокированных ячеек к значениям по умолчанию
-  app.post("/api/calibration/blocked-cells/reset", async (req, res) => {
+  app.post("/api/calibration/blocked-cells/reset", requireSession, requireRole('admin'), async (req, res) => {
     try {
       calibrationData.blocked_cells = { ...defaultCalibration.blocked_cells };
       calibrationData.timestamp = new Date().toISOString();
@@ -2122,7 +2122,7 @@ except Exception as e:
   });
 
   // Быстрый тест ячейки (X)
-  app.post("/api/calibration/quick-test", async (req, res) => {
+  app.post("/api/calibration/quick-test", requireSession, requireRole('admin'), async (req, res) => {
     try {
       const { side, col, row } = req.body;
       
@@ -2166,7 +2166,7 @@ except Exception as e:
   });
 
   // Получить состояние wizard
-  app.get("/api/calibration/wizard/state", async (req, res) => {
+  app.get("/api/calibration/wizard/state", requireSession, requireRole('admin'), async (req, res) => {
     try {
       res.json({
         success: true,
@@ -2185,7 +2185,7 @@ except Exception as e:
   });
 
   // Выход из wizard
-  app.post("/api/calibration/wizard/exit", async (req, res) => {
+  app.post("/api/calibration/wizard/exit", requireSession, requireRole('admin'), async (req, res) => {
     try {
       calibrationWizard.mode = null;
       calibrationWizard.step = 0;
@@ -2577,7 +2577,7 @@ except Exception as e:
   // Периодическая трансляция статистики
   // ==================== НАСТРОЙКИ СИСТЕМЫ ====================
 
-  app.get("/api/settings", async (req, res) => {
+  app.get("/api/settings", requireSession, requireRole('admin'), async (req, res) => {
     try {
       const settings = await storage.getAllSettings();
       const result: Record<string, any> = {};
@@ -2595,7 +2595,7 @@ except Exception as e:
     }
   });
 
-  app.post("/api/settings", async (req, res) => {
+  app.post("/api/settings", requireSession, requireRole('admin'), async (req, res) => {
     try {
       const data = req.body;
       for (const [key, value] of Object.entries(data)) {
@@ -2618,14 +2618,14 @@ except Exception as e:
   };
   const teachSequences: Record<string, any[]> = {};
 
-  app.post("/api/teach/start", (req, res) => {
+  app.post("/api/teach/start", requireSession, requireRole('admin'), (req, res) => {
     const { name } = req.body;
     if (!name) return res.status(400).json({ error: 'Name required' });
     teachState = { active: true, name, steps: [], pending: false };
     res.json({ success: true, message: `Запись "${name}" начата` });
   });
 
-  app.post("/api/teach/execute", async (req, res) => {
+  app.post("/api/teach/execute", requireSession, requireRole('admin'), async (req, res) => {
     if (!teachState.active) return res.status(400).json({ error: 'Запись не активна' });
     const { action, params } = req.body;
     teachState.steps.push({ action, params, confirmed: false });
@@ -2642,7 +2642,7 @@ except Exception as e:
     res.json({ success: true, message: `Выполнено: ${action}`, stepIndex: teachState.steps.length - 1 });
   });
 
-  app.post("/api/teach/jog", (req, res) => {
+  app.post("/api/teach/jog", requireSession, requireRole('admin'), (req, res) => {
     const { axis, steps } = req.body;
     const s = steps || 100;
     if (axis === 'x') systemStatus.position.x += s;
@@ -2651,7 +2651,7 @@ except Exception as e:
     res.json({ success: true, message: `Jog ${axis} ${s > 0 ? '+' : ''}${s}`, position: systemStatus.position });
   });
 
-  app.post("/api/teach/confirm", (req, res) => {
+  app.post("/api/teach/confirm", requireSession, requireRole('admin'), (req, res) => {
     if (teachState.steps.length > 0) {
       teachState.steps[teachState.steps.length - 1].confirmed = true;
     }
@@ -2659,7 +2659,7 @@ except Exception as e:
     res.json({ success: true, message: 'Шаг зафиксирован' });
   });
 
-  app.post("/api/teach/skip", (req, res) => {
+  app.post("/api/teach/skip", requireSession, requireRole('admin'), (req, res) => {
     if (teachState.steps.length > 0) {
       teachState.steps.pop();
     }
@@ -2667,12 +2667,12 @@ except Exception as e:
     res.json({ success: true, message: 'Шаг пропущен' });
   });
 
-  app.post("/api/teach/undo", (req, res) => {
+  app.post("/api/teach/undo", requireSession, requireRole('admin'), (req, res) => {
     teachState.steps.pop();
     res.json({ success: true, message: 'Последний шаг удалён', stepsCount: teachState.steps.length });
   });
 
-  app.post("/api/teach/save", async (req, res) => {
+  app.post("/api/teach/save", requireSession, requireRole('admin'), async (req, res) => {
     if (!teachState.active) return res.status(400).json({ error: 'Нет активной записи' });
     const confirmed = teachState.steps.filter(s => s.confirmed);
     teachSequences[teachState.name] = confirmed;
@@ -2682,16 +2682,16 @@ except Exception as e:
     res.json({ success: true, message: `Сохранено (${confirmed.length} шагов)` });
   });
 
-  app.post("/api/teach/discard", (req, res) => {
+  app.post("/api/teach/discard", requireSession, requireRole('admin'), (req, res) => {
     teachState = { active: false, name: '', steps: [], pending: false };
     res.json({ success: true, message: 'Запись отменена' });
   });
 
-  app.get("/api/teach/status", (req, res) => {
+  app.get("/api/teach/status", requireSession, requireRole('admin'), (req, res) => {
     res.json({ active: teachState.active, name: teachState.name, stepsCount: teachState.steps.length, pending: teachState.pending });
   });
 
-  app.get("/api/teach/sequences", async (req, res) => {
+  app.get("/api/teach/sequences", requireSession, requireRole('admin'), async (req, res) => {
     const settings = await storage.getAllSettings();
     const sequences: Record<string, any> = {};
     for (const s of settings) {
@@ -2704,7 +2704,7 @@ except Exception as e:
     res.json(sequences);
   });
 
-  app.post("/api/teach/play", async (req, res) => {
+  app.post("/api/teach/play", requireSession, requireRole('admin'), async (req, res) => {
     const { name } = req.body;
     const settings = await storage.getAllSettings();
     const setting = settings.find(s => s.key === `teach_${name}`);
