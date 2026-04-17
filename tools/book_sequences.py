@@ -351,7 +351,7 @@ class BookSequenceRunner:
             }
 
         except Exception as e:
-            self._safe_shutdown()
+            self._safe_shutdown(reason=f"issue_book_sequence failed: {e}")
             elapsed = round(time.time() - t_start, 2)
             return {
                 "success": False,
@@ -380,6 +380,32 @@ class BookSequenceRunner:
 
         Returns: dict with success, steps executed, timing info
         """
+        # Early validation of cell address — fail fast before touching hardware (issue #61)
+        try:
+            x, y = resolve_cell(free_cell_address)
+        except ValueError as e:
+            return {
+                "success": False,
+                "error": f"Ячейка {free_cell_address} недоступна: {e}",
+                "cell": free_cell_address,
+                "steps": [],
+                "elapsed_sec": 0.0,
+            }
+
+        # Prevent concurrent sequences (issue #44)
+        if self._global_lock.locked():
+            return {
+                "success": False,
+                "error": "Другая операция уже выполняется",
+                "cell": free_cell_address,
+                "steps": [],
+                "elapsed_sec": 0.0,
+            }
+
+        async with self._global_lock:
+            return await self._return_book_sequence_impl(free_cell_address, x, y)
+
+    async def _return_book_sequence_impl(self, free_cell_address: str, x: int, y: int) -> dict:
         t_start = time.time()
         steps_done = []
 
@@ -447,7 +473,6 @@ class BookSequenceRunner:
             ok = self._home_xy()
             if not ok:
                 raise SequenceError("XY homing before cell move failed")
-            x, y = resolve_cell(free_cell_address)
             self._move_to(x, y)
             self._emit(9, "Moving to cell", "done", cell=free_cell_address, x=x, y=y)
             steps_done.append("move_to_cell")
@@ -489,7 +514,7 @@ class BookSequenceRunner:
             }
 
         except Exception as e:
-            self._safe_shutdown()
+            self._safe_shutdown(reason=f"return_book_sequence failed: {e}")
             elapsed = round(time.time() - t_start, 2)
             return {
                 "success": False,
