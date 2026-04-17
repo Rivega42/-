@@ -29,12 +29,21 @@ export function ReaderMenu({ session, onGetBooks, onReturnBook }: ReaderMenuProp
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
           <Card
-            className="cursor-pointer hover:shadow-xl transition-all active:scale-[0.98]"
+            className="cursor-pointer hover:shadow-xl transition-all active:scale-[0.98] focus:outline-none focus:ring-2 focus:ring-blue-500"
             onClick={onGetBooks}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                onGetBooks();
+              }
+            }}
+            role="button"
+            tabIndex={0}
+            aria-label="Получить забронированные книги"
             data-testid="card-get-book"
           >
             <CardContent className="p-8 sm:p-10 flex flex-col items-center text-center">
-              <BookOpen className="w-16 h-16 sm:w-20 sm:h-20 text-blue-500 mb-4" />
+              <BookOpen className="w-16 h-16 sm:w-20 sm:h-20 text-blue-500 mb-4" aria-hidden="true" />
               <h3 className="text-2xl font-bold mb-2">Получить книгу</h3>
               <p className="text-slate-500">Забронированные книги</p>
               {(session?.reservedBooks?.length ?? 0) > 0 && (
@@ -44,12 +53,21 @@ export function ReaderMenu({ session, onGetBooks, onReturnBook }: ReaderMenuProp
           </Card>
 
           <Card
-            className="cursor-pointer hover:shadow-xl transition-all active:scale-[0.98]"
+            className="cursor-pointer hover:shadow-xl transition-all active:scale-[0.98] focus:outline-none focus:ring-2 focus:ring-green-500"
             onClick={onReturnBook}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                onReturnBook();
+              }
+            }}
+            role="button"
+            tabIndex={0}
+            aria-label="Вернуть книгу"
             data-testid="card-return-book"
           >
             <CardContent className="p-8 sm:p-10 flex flex-col items-center text-center">
-              <Undo2 className="w-16 h-16 sm:w-20 sm:h-20 text-green-500 mb-4" />
+              <Undo2 className="w-16 h-16 sm:w-20 sm:h-20 text-green-500 mb-4" aria-hidden="true" />
               <h3 className="text-2xl font-bold mb-2">Вернуть книгу</h3>
               <p className="text-slate-500">Поднесите книгу к считывателю</p>
             </CardContent>
@@ -75,13 +93,19 @@ export function BookList({ books, onIssue, userRfid, issuing }: BookListProps) {
 
         {books.length === 0 ? (
           <Card className="p-10 text-center">
-            <BookOpen className="w-16 h-16 text-slate-300 mx-auto mb-4" />
+            <BookOpen className="w-16 h-16 text-slate-300 mx-auto mb-4" aria-hidden="true" />
             <p className="text-xl text-slate-500">Нет забронированных книг</p>
           </Card>
         ) : (
-          <div className="space-y-4">
+          <div className="space-y-4" role="list">
             {books.map((book) => (
-              <Card key={book.id} className="p-5" data-testid={`card-book-${book.rfid}`}>
+              <Card
+                key={book.id}
+                className="p-5 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                role="listitem"
+                aria-label={`Книга: ${book.title}, автор ${book.author}`}
+                data-testid={`card-book-${book.rfid}`}
+              >
                 <div className="flex items-center justify-between">
                   <div>
                     <h3 className="text-xl font-bold">{book.title}</h3>
@@ -91,10 +115,17 @@ export function BookList({ books, onIssue, userRfid, issuing }: BookListProps) {
                     size="lg"
                     className="h-14 px-8 text-lg"
                     onClick={() => onIssue(book.rfid, userRfid)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        onIssue(book.rfid, userRfid);
+                      }
+                    }}
                     disabled={issuing}
+                    aria-label={`Получить книгу ${book.title}`}
                     data-testid={`button-issue-${book.rfid}`}
                   >
-                    {issuing ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : null}
+                    {issuing ? <Loader2 className="w-5 h-5 animate-spin mr-2" aria-hidden="true" /> : null}
                     Получить
                   </Button>
                 </div>

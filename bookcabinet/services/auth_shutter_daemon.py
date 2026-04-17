@@ -10,6 +10,13 @@ sys.path.insert(0, '/usr/lib/python3/dist-packages')
 
 import time, json, threading, serial
 
+# Optional Sentry — no-op if DSN unset or SDK missing.
+try:
+    from bookcabinet.monitoring.sentry_init import init_sentry
+    init_sentry()
+except Exception:
+    pass
+
 def emit(data):
     print(json.dumps(data, ensure_ascii=False), flush=True)
 

@@ -172,8 +172,16 @@ export function IssueProcess({ book, userRfid, onComplete, onError, wsRef }: Iss
             </span>
             <Badge variant="default">{progressPercent}%</Badge>
           </div>
-          <Progress value={progressPercent} className="h-3 mb-2" />
-          <p className="text-base text-black font-medium">
+          <Progress
+            value={progressPercent}
+            className="h-3 mb-2"
+            role="progressbar"
+            aria-valuenow={progressPercent}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-label="Прогресс выдачи книги"
+          />
+          <p className="text-base text-black font-medium" role="status" aria-live="polite">
             {ISSUE_STEPS[currentStep - 1]?.description || "Обработка..."}
           </p>
           {stepLabel && currentStep < 6 && (
@@ -224,10 +232,15 @@ export function IssueProcess({ book, userRfid, onComplete, onError, wsRef }: Iss
         {/* Timer when shutter is open */}
         {shutterTimer !== null && shutterTimer > 0 && currentStep === 6 && (
           <Card className="p-6 text-center border-2 border-black">
-            <Package className="w-16 h-16 mx-auto mb-3 text-black" />
+            <Package className="w-16 h-16 mx-auto mb-3 text-black" aria-hidden="true" />
             <h3 className="text-2xl font-bold mb-2">Заберите книгу!</h3>
-            <div className="flex items-center justify-center gap-2 text-lg">
-              <Clock className="w-5 h-5" />
+            <div
+              className="flex items-center justify-center gap-2 text-lg"
+              role="timer"
+              aria-live="polite"
+              aria-label={`Осталось ${shutterTimer} секунд`}
+            >
+              <Clock className="w-5 h-5" aria-hidden="true" />
               <span className="font-bold text-2xl">{shutterTimer}</span>
               <span>сек.</span>
             </div>

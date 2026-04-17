@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import { Save, RefreshCw, Send, Database, Bell, Clock, Globe } from "lucide-react";
+import { Save, Database, Bell, Clock, Globe } from "lucide-react";
 
 interface SettingsData {
   timeouts: { move: number; tray_extend: number; user_wait: number };

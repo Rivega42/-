@@ -3,6 +3,10 @@
  * Initializes HTTP server, registers routes, sets up Vite for development.
  * Handles global NFC/PCSC error recovery.
  */
+import { initSentry } from "./lib/sentry";
+// Must be called before anything else that could throw.
+initSentry();
+
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";

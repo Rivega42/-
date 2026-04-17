@@ -140,6 +140,7 @@ export function CabinetViewer({ cells, onCellClick }: CabinetViewerProps) {
                                 ? 'text-black'
                                 : 'text-black'}
                               hover:opacity-80 active:scale-95
+                              focus:outline-none focus:ring-2 focus:ring-blue-500
                               touch-manipulation
                             `}
                             data-testid={`cell-${row}-${colIndex}-${posIndex}`}

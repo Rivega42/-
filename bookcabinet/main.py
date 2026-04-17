@@ -11,6 +11,13 @@ import os
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+# Initialize Sentry as early as possible so later import errors are reported.
+try:
+    from bookcabinet.monitoring.sentry_init import init_sentry
+    init_sentry()
+except Exception:
+    pass
+
 from bookcabinet.config import HOST, PORT, MOCK_MODE, LOG_LEVEL, RFID
 from bookcabinet.server.web_server import create_app
 from bookcabinet.database import db
