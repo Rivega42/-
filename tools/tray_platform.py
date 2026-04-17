@@ -26,6 +26,8 @@ GPIO пины (BCM):
   python3 tray_platform.py center     # Двигать в центр (после калибровки)
   python3 tray_platform.py status     # Показать состояние концевиков
 """
+# IMPORTANT: These GPIO pin constants MUST match bookcabinet/config.py GPIO_PINS.
+# TODO: Import from config.py to eliminate duplication (see issue #59).
 
 import pigpio
 import time
