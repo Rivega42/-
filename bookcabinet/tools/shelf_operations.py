@@ -2,12 +2,15 @@
 """
 Операции с полочками BookCabinet.
 Извлечение и возврат полочек из заднего и переднего рядов.
+Кросс-рядные операции (front_to_rear, rear_to_front).
 
 Использование:
     python3 shelf_operations.py extract_rear   # Извлечь из заднего ряда
     python3 shelf_operations.py return_rear    # Вернуть в задний ряд
     python3 shelf_operations.py extract_front  # Извлечь из переднего ряда
     python3 shelf_operations.py return_front   # Вернуть в передний ряд
+    python3 shelf_operations.py front_to_rear  # Переложить из переднего в задний
+    python3 shelf_operations.py rear_to_front  # Переложить из заднего в передний
 """
 import pigpio
 import time
@@ -40,6 +43,11 @@ FRONT_HANDOFF_REAR_FROM_BACK = 18300  # Задний замок на серед�
 
 LOCK_DISTANCE = 12600  # Расстояние между точками перехвата
 
+# Кросс-рядные константы (откалибровано 21.04.2026)
+CROSS_FRONT_TO_REAR_STEP6 = 12500  # front_to_rear: шаг 6 к FRONT
+CROSS_REAR_TO_FRONT_STEP4 = 12700  # rear_to_front: шаг 4 к FRONT
+CROSS_REAR_TO_FRONT_STEP6 = 12600  # rear_to_front: шаг 6 к BACK
+
 LOCK_GRAB_PWM = 1200
 LOCK_RELEASE_PWM = 500
 
@@ -65,10 +73,17 @@ def lock_grab(pin):
     os.system(f"pigs s {pin} 0")
     print(f"  Lock {pin}: GRAB")
 
-def lock_release(pin):
-    os.system(f"pigs s {pin} {LOCK_RELEASE_PWM}")
-    time.sleep(0.5)
-    os.system(f"pigs s {pin} 0")
+def lock_release(pin, strong=False):
+    """Отпустить замок. strong=True для критичных позиций (несколько команд)"""
+    if strong:
+        for _ in range(3):
+            os.system(f"pigs s {pin} {LOCK_RELEASE_PWM}")
+            time.sleep(0.5)
+        os.system(f"pigs s {pin} 0")
+    else:
+        os.system(f"pigs s {pin} {LOCK_RELEASE_PWM}")
+        time.sleep(0.5)
+        os.system(f"pigs s {pin} 0")
     print(f"  Lock {pin}: RELEASE")
 
 # === ДВИЖЕНИЕ ПЛАТФОРМЫ ===
@@ -228,7 +243,7 @@ def return_rear():
     tray_to_endstop(ENDSTOP_BACK)
     
     print("Step 6: Rear lock -> RELEASE")
-    lock_release(LOCK_REAR)
+    lock_release(LOCK_REAR, strong=True)
     
     print("Step 7: Tray -> CENTER")
     tray_move(TRAY_CENTER, 0)
@@ -288,13 +303,105 @@ def return_front():
     tray_to_endstop(ENDSTOP_FRONT)
     
     print("Step 6: Front lock -> RELEASE")
-    lock_release(LOCK_FRONT)
+    lock_release(LOCK_FRONT, strong=True)
     
     print("Step 7: Tray -> CENTER")
     tray_move(TRAY_CENTER, 1)
     
     cleanup()
     print("=== DONE: Shelf in cell, tray at center ===")
+
+# === КРОСС-РЯДНЫЕ ОПЕРАЦИИ ===
+
+def front_to_rear():
+    """Переложить полочку из переднего ряда в задний"""
+    print("=== FRONT TO REAR ===")
+    
+    # Извлекаем из переднего
+    extract_front()
+    
+    # Перекладываем в задний
+    # После extract_front: задний замок держит, ~5700 от BACK
+    print("\n=== TRANSFER TO REAR ===")
+    setup()
+    
+    print("Step 1: Rear lock -> RELEASE")
+    lock_release(LOCK_REAR)
+    
+    print("Step 2: Tray -> 12600 to FRONT")
+    tray_move(LOCK_DISTANCE, 0)
+    
+    print("Step 3: Front lock -> GRAB")
+    lock_grab(LOCK_FRONT)
+    
+    print("Step 4: Tray -> 12600 to BACK")
+    tray_move(LOCK_DISTANCE, 1)
+    
+    print("Step 5: Front lock -> RELEASE")
+    lock_release(LOCK_FRONT)
+    
+    print("Step 6: Tray -> 12500 to FRONT")
+    tray_move(CROSS_FRONT_TO_REAR_STEP6, 0)
+    
+    print("Step 7: Rear lock -> GRAB")
+    lock_grab(LOCK_REAR)
+    
+    print("Step 8: Tray -> BACK endstop")
+    tray_to_endstop(ENDSTOP_BACK)
+    
+    print("Step 9: Rear lock -> RELEASE")
+    lock_release(LOCK_REAR, strong=True)
+    
+    print("Step 10: Tray -> CENTER")
+    tray_move(TRAY_CENTER, 0)
+    
+    cleanup()
+    print("=== DONE: Shelf moved from front to rear ===")
+
+def rear_to_front():
+    """Переложить полочку из заднего ряда в передний"""
+    print("=== REAR TO FRONT ===")
+    
+    # Извлекаем из заднего
+    extract_rear()
+    
+    # Перекладываем в передний
+    # После extract_rear: передний замок держит, ~16800 от BACK
+    print("\n=== TRANSFER TO FRONT ===")
+    setup()
+    
+    print("Step 1: Front lock -> RELEASE")
+    lock_release(LOCK_FRONT)
+    
+    print("Step 2: Tray -> 12600 to BACK")
+    tray_move(LOCK_DISTANCE, 1)
+    
+    print("Step 3: Rear lock -> GRAB")
+    lock_grab(LOCK_REAR)
+    
+    print("Step 4: Tray -> 12700 to FRONT")
+    tray_move(CROSS_REAR_TO_FRONT_STEP4, 0)
+    
+    print("Step 5: Rear lock -> RELEASE")
+    lock_release(LOCK_REAR)
+    
+    print("Step 6: Tray -> 12600 to BACK")
+    tray_move(CROSS_REAR_TO_FRONT_STEP6, 1)
+    
+    print("Step 7: Front lock -> GRAB")
+    lock_grab(LOCK_FRONT)
+    
+    print("Step 8: Tray -> FRONT endstop")
+    tray_to_endstop(ENDSTOP_FRONT)
+    
+    print("Step 9: Front lock -> RELEASE")
+    lock_release(LOCK_FRONT, strong=True)
+    
+    print("Step 10: Tray -> CENTER")
+    tray_move(TRAY_CENTER, 1)
+    
+    cleanup()
+    print("=== DONE: Shelf moved from rear to front ===")
 
 # === MAIN ===
 def main():
@@ -309,6 +416,8 @@ def main():
         "return_rear": return_rear,
         "extract_front": extract_front,
         "return_front": return_front,
+        "front_to_rear": front_to_rear,
+        "rear_to_front": rear_to_front,
     }
     
     if cmd not in commands:
