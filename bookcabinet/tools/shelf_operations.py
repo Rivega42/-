@@ -28,10 +28,17 @@ LOCK_FRONT = 12
 LOCK_REAR = 13
 
 # Откалиброванные значения (21.04.2026)
-TRAY_CENTER = 11325
-HANDOFF_REAR_FROM_BACK = 16800
-HANDOFF_FRONT_FROM_BACK = 4200
-LOCK_DISTANCE = 12600
+TRAY_CENTER = 11300
+
+# Задний ряд (depth=2)
+REAR_HANDOFF_REAR_FROM_BACK = 16800   # Задний замок на середине каретки
+REAR_HANDOFF_FRONT_FROM_BACK = 4200   # Передний замок на середине каретки
+
+# Передний ряд (depth=1)
+FRONT_HANDOFF_FRONT_FROM_BACK = 5700  # Передний замок на середине каретки
+FRONT_HANDOFF_REAR_FROM_BACK = 18300  # Задний замок на середине каретки
+
+LOCK_DISTANCE = 12600  # Расстояние между точками перехвата
 
 LOCK_GRAB_PWM = 1200
 LOCK_RELEASE_PWM = 500
@@ -169,9 +176,10 @@ def tray_to_endstop(endstop_pin):
     
     print(f"OK (slow: {slow_steps} steps)")
 
-# === ОПЕРАЦИИ С ПОЛОЧКАМИ ===
+# === ЗАДНИЙ РЯД (depth=2) ===
 
 def extract_rear():
+    """Извлечь полочку из заднего ряда"""
     print("=== EXTRACT REAR SHELF ===")
     setup()
     
@@ -182,7 +190,7 @@ def extract_rear():
     lock_grab(LOCK_REAR)
     
     print("Step 3: Tray -> 16800 steps to FRONT (rear handoff)")
-    tray_move(HANDOFF_REAR_FROM_BACK, 0)
+    tray_move(REAR_HANDOFF_REAR_FROM_BACK, 0)
     
     print("Step 4: Rear lock -> RELEASE")
     lock_release(LOCK_REAR)
@@ -200,6 +208,7 @@ def extract_rear():
     print("=== DONE: Shelf on carriage, front lock holding ===")
 
 def return_rear():
+    """Вернуть полочку в задний ряд"""
     print("=== RETURN REAR SHELF ===")
     setup()
     
@@ -227,8 +236,11 @@ def return_rear():
     cleanup()
     print("=== DONE: Shelf in cell, tray at center ===")
 
+# === ПЕРЕДНИЙ РЯД (depth=1) ===
+
 def extract_front():
-    print("=== EXTRACT FRONT SHELF (not tested) ===")
+    """Извлечь полочку из переднего ряда"""
+    print("=== EXTRACT FRONT SHELF ===")
     setup()
     
     print("Step 1: Tray -> FRONT endstop")
@@ -237,23 +249,48 @@ def extract_front():
     print("Step 2: Front lock -> GRAB")
     lock_grab(LOCK_FRONT)
     
-    print("Step 3: Tray -> to front handoff position")
-    tray_move(22650 - HANDOFF_FRONT_FROM_BACK, 1)
+    print("Step 3: Tray -> 16900 steps to BACK (front handoff at 5700)")
+    tray_move(16900, 1)
     
-    cleanup()
-    print("=== DONE: Shelf on carriage, front lock holding ===")
-
-def return_front():
-    print("=== RETURN FRONT SHELF (not tested) ===")
-    setup()
-    
-    print("Step 1: Tray -> FRONT endstop (front lock holding)")
-    tray_to_endstop(ENDSTOP_FRONT)
-    
-    print("Step 2: Front lock -> RELEASE")
+    print("Step 4: Front lock -> RELEASE")
     lock_release(LOCK_FRONT)
     
-    print("Step 3: Tray -> CENTER")
+    print("Step 5: Tray -> 12600 steps to FRONT (rear handoff at 18300)")
+    tray_move(LOCK_DISTANCE, 0)
+    
+    print("Step 6: Rear lock -> GRAB")
+    lock_grab(LOCK_REAR)
+    
+    print("Step 7: Tray -> 12600 steps to BACK (front handoff at 5700)")
+    tray_move(LOCK_DISTANCE, 1)
+    
+    cleanup()
+    print("=== DONE: Shelf on carriage, rear lock holding ===")
+
+def return_front():
+    """Вернуть полочку в передний ряд"""
+    print("=== RETURN FRONT SHELF ===")
+    setup()
+    
+    print("Step 1: Tray -> 12600 steps to FRONT (rear handoff at 18300)")
+    tray_move(LOCK_DISTANCE, 0)
+    
+    print("Step 2: Rear lock -> RELEASE")
+    lock_release(LOCK_REAR)
+    
+    print("Step 3: Tray -> 12600 steps to BACK (front handoff at 5700)")
+    tray_move(LOCK_DISTANCE, 1)
+    
+    print("Step 4: Front lock -> GRAB")
+    lock_grab(LOCK_FRONT)
+    
+    print("Step 5: Tray -> FRONT endstop")
+    tray_to_endstop(ENDSTOP_FRONT)
+    
+    print("Step 6: Front lock -> RELEASE")
+    lock_release(LOCK_FRONT)
+    
+    print("Step 7: Tray -> CENTER")
     tray_move(TRAY_CENTER, 1)
     
     cleanup()
