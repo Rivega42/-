@@ -176,11 +176,11 @@ class BookSequenceRunner:
         motion = self._init_motion()
         # Move X: right is A=1, B=1
         if x > 0:
-            motion.move(1, 1, x, XY_CONFIG.fast)
+            motion.move(1, 1, x, XY_CONFIG.fast)  # X right
             time.sleep(MOVE_SETTLE_SEC)
         # Move Y: up is A=1, B=0
         if y > 0:
-            motion.move(1, 0, y, XY_CONFIG.fast)
+            motion.move(1, 0, y, XY_CONFIG.fast)  # Y up
             time.sleep(MOVE_SETTLE_SEC)
 
     def _home_xy(self) -> bool:

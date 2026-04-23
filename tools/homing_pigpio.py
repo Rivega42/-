@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """
-homing_pigpio.py v4 — canonical BookCabinet homing wrapper.
+homing_pigpio.py v5 — canonical BookCabinet homing wrapper.
 HOME = LEFT + BOTTOM.
 Implementation delegates to corexy_motion_v2.
 """
 from __future__ import annotations
 
+import os
 from corexy_motion_v2 import CoreXYMotionV2, MotionConfig
 
 CONFIG = MotionConfig(
@@ -15,16 +16,29 @@ CONFIG = MotionConfig(
     backoff_y=500,
 )
 
+LOCK_FRONT = 12
+LOCK_REAR = 13
+
+
+def locks_to_zero():
+    """Сбросить замки в 0 перед хомингом"""
+    print('[INIT] Замки -> 0')
+    os.system(f'pigs s {LOCK_FRONT} 0')
+    os.system(f'pigs s {LOCK_REAR} 0')
+
 
 def main() -> int:
     print('=' * 50)
-    print('  HOMING BookCabinet v4 (corexy_motion_v2)')
+    print('  HOMING BookCabinet v5 (corexy_motion_v2)')
     print(
         f'  FAST={CONFIG.fast} SLOW={CONFIG.slow} '
         f'BACKOFF_X={CONFIG.backoff_x} BACKOFF_Y={CONFIG.backoff_y}'
     )
     print('  HOME = LEFT(pin9) + BOTTOM(pin8)')
     print('=' * 50)
+
+    # Сбросить замки перед хомингом
+    locks_to_zero()
 
     try:
         with CoreXYMotionV2(config=CONFIG) as motion:

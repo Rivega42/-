@@ -17,47 +17,47 @@
       {
         "shelf": 0,
         "front_y": 60,
-        "back_y": 160
+        "back_y": 60
       },
       {
         "shelf": 3,
         "front_y": 6510,
-        "back_y": 6610
+        "back_y": 6510
       },
       {
         "shelf": 5,
         "front_y": 10320,
-        "back_y": 10420
+        "back_y": 10320
       },
       {
         "shelf": 6,
         "front_y": 12811,
-        "back_y": 12911
+        "back_y": 12811
       },
       {
         "shelf": 7,
         "front_y": 15002,
-        "back_y": 15102
+        "back_y": 15002
       },
       {
         "shelf": 10,
         "front_y": 21410,
-        "back_y": 21510
+        "back_y": 21410
       },
       {
         "shelf": 14,
         "front_y": 29830,
-        "back_y": 29930
+        "back_y": 29830
       },
       {
         "shelf": 16,
         "front_y": 34026,
-        "back_y": 34126
+        "back_y": 34026
       },
       {
         "shelf": 18,
         "front_y": 38363,
-        "back_y": 38463
+        "back_y": 38363
       },
       {
         "shelf": 21,
@@ -144,9 +144,9 @@
   },
   "notes": [
     "All 3 racks verified to use same Y coordinates",
-    "back_y = front_y + 100 (consistent across all shelves)",
     "Tray calibration pending (Monday)",
     "Lock pin 18 broken - needs replacement",
-    "Lock pin 13 - pin unconfirmed, needs Monday verification"
+    "Lock pin 13 - pin unconfirmed, needs Monday verification",
+    "back_y = front_y (no offset needed)"
   ]
 }
