@@ -1,5 +1,5 @@
 {
-  "version": "2026-04-11-final",
+  "version": "2026-04-27",
   "description": "BookCabinet XY calibration. Address format: depth.rack.shelf (e.g. 1.2.9)",
   "racks": {
     "1": 100,
@@ -144,9 +144,18 @@
   },
   "notes": [
     "All 3 racks verified to use same Y coordinates",
-    "Tray calibration pending (Monday)",
     "Lock pin 18 broken - needs replacement",
     "Lock pin 13 - pin unconfirmed, needs Monday verification",
-    "back_y = front_y (no offset needed)"
-  ]
+    "back_y = front_y (no offset needed)",
+    "Tray calibrated 2026-04-27: total=22467, center=11233, freq=12000Hz"
+  ],
+  "tray": {
+    "total_steps": 22467,
+    "center_steps": 11233,
+    "freq_hz": 12000,
+    "calibrated": "2026-04-27",
+    "backoff_front": 1366,
+    "backoff_back": 1445,
+    "note": "Calibrated via tray_platform.py, 2 runs averaged"
+  }
 }
