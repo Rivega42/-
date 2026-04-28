@@ -1,31 +1,34 @@
 #!/usr/bin/env python3
 """
-calibrate.py — полная калибровка X стоек и Y полок.
+calibrate.py — полная калибровка X стоек и Y полок (per-rack).
 
 Фаза 1: X-калибровка 3 стоек (на полке 5)
 Фаза 2: Y-калибровка опорных полок (1,3,5,7,10,14,18,21) в каждой стойке
-        Остальные полки — линейная интерполяция между опорами.
+        Каждая стойка имеет СВОИ анкоры Y — перекос рамы/ремней учитывается.
+        Остальные полки — линейная интерполяция между опорами стойки.
 
 Управление в каждой точке:
-  Enter      — OK, позиция верна
-  x+100      — сдвиг по X на +100 шагов
-  x-50       — сдвиг по X на -50 шагов
-  y+200      — сдвиг по Y на +200 шагов
-  y-100      — сдвиг по Y на -100 шагов
-  s          — пропустить точку
-  q          — выход (с сохранением того что есть)
+  Enter / ok   — позиция верна
+  x+100        — сдвиг X на +100 шагов
+  x-50         — сдвиг X на -50 шагов
+  y+200        — сдвиг Y на +200 шагов
+  y-100        — сдвиг Y на -100 шагов
+  x+100 y-50   — сдвиг X и Y одновременно
+  s            — пропустить точку
+  q            — выход (сохраняет прогресс)
 
 Лог пишется в /tmp/calibration_log.txt
 """
-import sys, os, json, time, datetime
+import sys, os, json, time, datetime, re
 
 sys.path.insert(0, '/home/admin42/bookcabinet/tools')
 from book_sequences import BookSequenceRunner, XY_CONFIG
+from corexy_motion_v2 import MotionConfig
+XY_CONFIG = MotionConfig(fast=2600, homing_fast=1800, slow=300, backoff_x=300, backoff_y=500)
 
 CAL_FILE = '/home/admin42/bookcabinet/calibration.json'
 LOG_FILE = '/tmp/calibration_log.txt'
 
-# Опорные полки для Y-калибровки
 ANCHOR_SHELVES = [1, 3, 5, 7, 10, 14, 18, 21]
 
 def log(msg):
@@ -44,27 +47,23 @@ def save_cal(cal):
         json.dump(cal, f, indent=2, ensure_ascii=False)
     log('💾 calibration.json сохранён')
 
-def build_y_table(cal):
-    """Строим полную таблицу Y[0..21] из анкоров с интерполяцией."""
-    anchors = cal['shelves']['anchors']
-    anchor_map = {a['shelf']: a['front_y'] for a in anchors}
-    keys = sorted(anchor_map.keys())
-    result = {}
-    for s in range(22):
-        if s in anchor_map:
-            result[s] = anchor_map[s]
-        else:
-            for i in range(len(keys)-1):
-                s0, s1 = keys[i], keys[i+1]
-                if s0 <= s <= s1:
-                    t = (s - s0) / (s1 - s0)
-                    result[s] = int(anchor_map[s0] + t*(anchor_map[s1]-anchor_map[s0]))
-                    break
-    return result
+def ensure_rack_y_anchors(cal):
+    """Инициализируем rack_y_anchors если нет."""
+    if 'rack_y_anchors' not in cal['shelves']:
+        cal['shelves']['rack_y_anchors'] = {'1': [], '2': [], '3': []}
+    for r in ['1', '2', '3']:
+        if r not in cal['shelves']['rack_y_anchors']:
+            cal['shelves']['rack_y_anchors'][r] = []
 
-def update_anchors(cal, shelf, new_y):
-    """Добавить или обновить анкор для полки."""
-    anchors = cal['shelves']['anchors']
+def get_rack_anchors(cal, rack: int) -> list:
+    """Получить анкоры для стойки (per-rack)."""
+    ensure_rack_y_anchors(cal)
+    return cal['shelves']['rack_y_anchors'][str(rack)]
+
+def update_rack_anchor(cal, rack: int, shelf: int, new_y: int):
+    """Обновить или добавить анкор для конкретной стойки."""
+    ensure_rack_y_anchors(cal)
+    anchors = cal['shelves']['rack_y_anchors'][str(rack)]
     for a in anchors:
         if a['shelf'] == shelf:
             a['front_y'] = new_y
@@ -73,23 +72,44 @@ def update_anchors(cal, shelf, new_y):
     anchors.append({'shelf': shelf, 'front_y': new_y, 'back_y': new_y})
     anchors.sort(key=lambda a: a['shelf'])
 
+def interpolate_from_anchors(shelf: int, anchors: list) -> int:
+    """Линейная интерполяция Y по анкорам."""
+    if not anchors:
+        return 0
+    lower = None
+    upper = None
+    for a in sorted(anchors, key=lambda x: x['shelf']):
+        if a['shelf'] <= shelf:
+            lower = a
+        if a['shelf'] >= shelf and upper is None:
+            upper = a
+    if lower is None:
+        return upper['front_y']
+    if upper is None:
+        return lower['front_y']
+    if lower['shelf'] == upper['shelf']:
+        return lower['front_y']
+    t = (shelf - lower['shelf']) / (upper['shelf'] - lower['shelf'])
+    return int(round(lower['front_y'] + t * (upper['front_y'] - lower['front_y'])))
+
+def build_y_table_for_rack(cal, rack: int) -> dict:
+    """Таблица Y[0..21] для конкретной стойки."""
+    anchors = get_rack_anchors(cal, rack)
+    if not anchors:
+        # Фолбэк на общие анкоры
+        anchors = cal['shelves']['anchors']
+    result = {}
+    for s in range(22):
+        result[s] = interpolate_from_anchors(s, anchors)
+    return result
+
 def is_disabled(cal, rack, shelf):
-    """Проверяем хотя бы один из depth=1 или depth=2 активен."""
     d1 = f'1.{rack}.{shelf}' not in cal['disabled_cells']
     d2 = f'2.{rack}.{shelf}' not in cal['disabled_cells']
     win = f'1.{rack}.{shelf}' == cal['special_cells'].get('window')
     return not (d1 or d2) or win
 
 def parse_cmd(ans):
-    """
-    Парсим команду. Возвращаем ('ok'|'skip'|'quit'|'move', dx, dy).
-    Форматы: '', 'ok' -> OK
-             'x+100', 'x-50' -> move X
-             'y+200', 'y-100' -> move Y
-             'x+100 y-50' -> move X и Y
-             's' -> skip
-             'q' -> quit
-    """
     ans = ans.strip().lower()
     if ans in ('', 'ok'):
         return 'ok', 0, 0
@@ -97,9 +117,7 @@ def parse_cmd(ans):
         return 'skip', 0, 0
     if ans == 'q':
         return 'quit', 0, 0
-
     dx, dy = 0, 0
-    import re
     for m in re.finditer(r'([xy])([+-]\d+)', ans):
         axis, val = m.group(1), int(m.group(2))
         if axis == 'x':
@@ -108,25 +126,21 @@ def parse_cmd(ans):
             dy += val
     if dx != 0 or dy != 0:
         return 'move', dx, dy
-
     return 'unknown', 0, 0
 
 def do_move(runner, cur_x, cur_y, dx, dy):
-    """Двигаем каретку на delta от текущей позиции."""
     if dx > 0:
         runner.motion.move(1, 1, dx, XY_CONFIG.fast)
     elif dx < 0:
         runner.motion.move(0, 0, abs(dx), XY_CONFIG.fast)
     if dx != 0:
         time.sleep(0.2)
-
     if dy > 0:
         runner.motion.move(1, 0, dy, XY_CONFIG.fast)
     elif dy < 0:
         runner.motion.move(0, 1, abs(dy), XY_CONFIG.fast)
     if dy != 0:
         time.sleep(0.2)
-
     return cur_x + dx, cur_y + dy
 
 def ask(prompt):
@@ -140,28 +154,21 @@ def ask(prompt):
         raise KeyboardInterrupt
     return line.strip()
 
-def move_to_absolute(runner, cur_x, cur_y, target_x, target_y):
-    """Переезд в абсолютную позицию через дельты."""
-    dx = target_x - cur_x
-    dy = target_y - cur_y
-    new_x, new_y = do_move(runner, cur_x, cur_y, dx, dy)
-    return new_x, new_y
-
 def main():
     cal = load_cal()
+    ensure_rack_y_anchors(cal)
+
     racks_x = {1: int(cal['racks']['1']),
                2: int(cal['racks']['2']),
                3: int(cal['racks']['3'])}
-    y_table = build_y_table(cal)
 
-    # Открываем лог
     with open(LOG_FILE, 'w') as f:
         f.write(f'=== Калибровка {datetime.datetime.now()} ===\n')
 
     print('\n' + '='*60)
-    print('  КАЛИБРОВКА BookCabinet')
+    print('  КАЛИБРОВКА BookCabinet (per-rack Y)')
     print('  Фаза 1: X стоек (3 точки на полке 5)')
-    print('  Фаза 2: Y опорных полок (8 точек × 3 стойки = 24)')
+    print('  Фаза 2: Y опорных полок — КАЖДАЯ СТОЙКА ОТДЕЛЬНО')
     print()
     print('  Команды:')
     print('    Enter / ok   — позиция верна')
@@ -179,7 +186,7 @@ def main():
         return
 
     runner = BookSequenceRunner()
-    runner._init_motion()  # инициализируем motion сразу
+    runner._init_motion()
     cur_x, cur_y = 0, 0
 
     try:
@@ -187,25 +194,22 @@ def main():
         # ФАЗА 1: X-калибровка стоек
         # ══════════════════════════════════════════
         print('\n' + '='*60)
-        print('  ФАЗА 1: Калибровка X стоек')
-        print('  Каретка будет вставать напротив каждой стойки на полке 5')
+        print('  ФАЗА 1: Калибровка X стоек (на полке 5)')
         print('='*60)
         log('=== ФАЗА 1: X-калибровка ===')
 
-        # calibrated_y_for_shelf5 — общий Y для полки 5, уточняется на стойке 1
-        # и переиспользуется для стоек 2 и 3
-        shelf5_y = y_table[5]
-        calibrated_shelf5_y = shelf5_y  # будет обновлён после стойки 1
+        # Стартовый Y полки 5 — из анкоров стойки 1 или общих
+        y_table_r1 = build_y_table_for_rack(cal, 1)
+        shelf5_y = y_table_r1[5]
+        calibrated_shelf5_y = shelf5_y
 
         for rack in [1, 2, 3]:
             x_target = racks_x[rack]
-            # Используем уже откалиброванный Y от предыдущей стойки
             target_y = calibrated_shelf5_y
             log(f'Стойка {rack}: едем X={x_target}, Y={target_y}')
             print(f'\n--- Стойка {rack} ---')
             print(f'  Еду X={x_target}, Y={target_y}...')
 
-            # Едем к стойке дельтами от текущей позиции (без хоминга)
             cur_x, cur_y = do_move(runner, cur_x, cur_y, x_target - cur_x, target_y - cur_y)
             time.sleep(0.3)
 
@@ -221,7 +225,6 @@ def main():
                     break
                 elif action == 'ok':
                     racks_x[rack] = current_x
-                    # Сохраняем откалиброванный Y — будет стартовым для следующей стойки
                     calibrated_shelf5_y = cur_y
                     log(f'Стойка {rack} X: OK = {current_x}, Y зафиксирован = {cur_y}')
                     break
@@ -230,9 +233,8 @@ def main():
                     current_x = cur_x
                     log(f'Стойка {rack} X: сдвиг dx={dx:+d} dy={dy:+d} → X={cur_x} Y={cur_y}')
                 else:
-                    print('  ? Примеры: ok, x+100, x-50, y+200, x+100 y-50, s, q')
+                    print('  ? Примеры: ok, x+100, x-50, y+200, s, q')
 
-        # Сохраняем X стоек
         cal['racks']['1'] = racks_x[1]
         cal['racks']['2'] = racks_x[2]
         cal['racks']['3'] = racks_x[3]
@@ -240,29 +242,24 @@ def main():
         log(f'X стоек: rack1={racks_x[1]}, rack2={racks_x[2]}, rack3={racks_x[3]}')
 
         # ══════════════════════════════════════════
-        # ФАЗА 2: Y-калибровка опорных полок
+        # ФАЗА 2: Y-калибровка — каждая стойка отдельно
         # ══════════════════════════════════════════
         print('\n' + '='*60)
-        print(f'  ФАЗА 2: Калибровка Y опорных полок')
+        print('  ФАЗА 2: Калибровка Y — КАЖДАЯ СТОЙКА ИМЕЕТ СВОИ АНКОРЫ')
         print(f'  Опорные полки: {ANCHOR_SHELVES}')
-        print(f'  Порядок: Стойка 1 → все опоры, Стойка 2 → все опоры, ...')
         print('='*60)
-        log('=== ФАЗА 2: Y-калибровка ===')
-
-        # Пересчитываем y_table с учётом новых анкоров
-        y_table = build_y_table(cal)
-
-        # calibrated_y_per_shelf: общий словарь откалиброванных Y
-        # Заполняется на стойке 1, используется как старт для стоек 2 и 3
-        calibrated_y_per_shelf = {}  # shelf -> Y
+        log('=== ФАЗА 2: Y-калибровка (per-rack) ===')
 
         for rack in [1, 2, 3]:
             x_target = racks_x[rack]
+            y_table = build_y_table_for_rack(cal, rack)
+
             print(f'\n{"="*60}')
             print(f'  СТОЙКА {rack} | X={x_target}')
+            print(f'  (анкоры записываются только для этой стойки)')
+            print('='*60)
             log(f'--- Стойка {rack} ---')
 
-            # Едем к X стойки дельтой от текущей позиции
             cur_x, cur_y = do_move(runner, cur_x, cur_y, x_target - cur_x, 0)
             time.sleep(0.3)
 
@@ -271,13 +268,11 @@ def main():
                     log(f'  [{rack}.{shelf}] заблокировано — пропуск')
                     continue
 
-                # Используем уже откалиброванный Y если есть, иначе из таблицы
-                y_target = calibrated_y_per_shelf.get(shelf, y_table[shelf])
+                y_target = y_table[shelf]
                 log(f'  [{rack}.{shelf}] едем Y={y_target}')
-                print(f'\n  Полка {shelf:2d} | Y={y_target}')
+                print(f'\n  Полка {shelf:2d} | текущий Y={y_target}')
                 print(f'  Еду Y={y_target}...')
 
-                # Движение только по Y дельтой
                 cur_x, cur_y = do_move(runner, cur_x, cur_y, 0, y_target - cur_y)
                 time.sleep(0.3)
 
@@ -292,12 +287,15 @@ def main():
                         log(f'  [{rack}.{shelf}] пропущено')
                         break
                     elif action == 'ok':
-                        # Обновляем анкор
-                        update_anchors(cal, shelf, current_y)
-                        y_table = build_y_table(cal)  # пересчёт интерполяции
-                        # Запоминаем откалиброванный Y для следующих стоек
-                        calibrated_y_per_shelf[shelf] = current_y
-                        log(f'  [{rack}.{shelf}] OK: Y={current_y} (зафиксирован для всех стоек)')
+                        # Записываем анкор ТОЛЬКО для этой стойки
+                        update_rack_anchor(cal, rack, shelf, current_y)
+                        y_table = build_y_table_for_rack(cal, rack)
+                        # Если X сдвигался — обновляем racks_x чтобы следующие полки ехали к правильному X
+                        if cur_x != racks_x[rack]:
+                            racks_x[rack] = cur_x
+                            cal['racks'][str(rack)] = cur_x
+                            log(f'  [{rack}.{shelf}] X обновлён → {cur_x}')
+                        log(f'  [{rack}.{shelf}] OK: Y={current_y} → rack{rack} anchor обновлён')
                         cur_y = current_y
                         break
                     elif action == 'move':
@@ -307,8 +305,8 @@ def main():
                     else:
                         print('  ? Примеры: ok, y+100, y-50, x+50, s, q')
 
-        # Финальное сохранение
-        save_cal(cal)
+            # Сохраняем после каждой стойки
+            save_cal(cal)
 
     except KeyboardInterrupt:
         print('\n\n  Прерывание — сохраняю прогресс...')
@@ -323,10 +321,16 @@ def main():
     print(f'\n{"="*60}')
     print('  ИТОГ КАЛИБРОВКИ:')
     print(f'  X стоек: rack1={racks_x[1]}, rack2={racks_x[2]}, rack3={racks_x[3]}')
-    print(f'\n  Анкоры Y:')
-    for a in sorted(cal['shelves']['anchors'], key=lambda x: x['shelf']):
-        print(f'    Полка {a["shelf"]:2d}: Y={a["front_y"]}')
+    for rack in [1, 2, 3]:
+        anchors = get_rack_anchors(cal, rack)
+        print(f'\n  Стойка {rack} анкоры Y:')
+        for a in sorted(anchors, key=lambda x: x['shelf']):
+            print(f'    Полка {a["shelf"]:2d}: Y={a["front_y"]}')
     print(f'\n  Лог: {LOG_FILE}')
+    # Сохраняем последнюю позицию каретки
+    import json
+    with open('/tmp/carriage_pos.json', 'w') as pf:
+        json.dump({'x': cur_x, 'y': cur_y, 'address': 'calibrated'}, pf)
     log('=== Калибровка завершена ===')
 
 if __name__ == '__main__':
