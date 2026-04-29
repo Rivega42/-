@@ -9,12 +9,23 @@ interface ProgressScreenProps {
 }
 
 export function ProgressScreen({ message, value }: ProgressScreenProps) {
+  const displayedMessage = message || 'Выполняется операция...';
   return (
     <div className="min-h-screen bg-white flex flex-col items-center justify-center p-8" data-testid="screen-progress">
-      <Loader2 className="w-16 h-16 text-black animate-spin mb-6" />
-      <h2 className="text-2xl font-bold text-black mb-4">{message || 'Выполняется операция...'}</h2>
+      <Loader2 className="w-16 h-16 text-black animate-spin mb-6" aria-hidden="true" />
+      <div role="status" aria-live="polite">
+        <h2 className="text-2xl font-bold text-black mb-4">{displayedMessage}</h2>
+      </div>
       <div className="w-80">
-        <Progress value={value} className="h-3" />
+        <Progress
+          value={value}
+          className="h-3"
+          role="progressbar"
+          aria-valuenow={value}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-label="Выполнено"
+        />
       </div>
     </div>
   );
@@ -43,7 +54,7 @@ export function SuccessScreen({ message, onContinue, autoReturnMs = 5000 }: Succ
   return (
     <div className="min-h-screen bg-white flex flex-col items-center justify-center p-8" data-testid="screen-success">
       {/* Green checkmark with animation */}
-      <div className="relative mb-6">
+      <div className="relative mb-6" aria-hidden="true">
         <div className="absolute inset-0 rounded-full bg-green-100 animate-ping opacity-30" style={{ width: 96, height: 96 }} />
         <CheckCircle2 className="w-24 h-24 text-green-600 relative z-10 animate-bounce-once" />
       </div>
@@ -78,8 +89,8 @@ export function ErrorScreen({ message, onBack, autoReturnMs = 5000 }: ErrorScree
   }, [onBack, autoReturnMs]);
 
   return (
-    <div className="min-h-screen bg-white flex flex-col items-center justify-center p-8" data-testid="screen-error">
-      <XCircle className="w-24 h-24 text-red-500 mb-6" />
+    <div className="min-h-screen bg-white flex flex-col items-center justify-center p-8" data-testid="screen-error" role="alert">
+      <XCircle className="w-24 h-24 text-red-500 mb-6" aria-hidden="true" />
       <h2 className="text-3xl font-bold text-black mb-4">Ошибка</h2>
       <p className="text-xl text-black mb-8 text-center max-w-lg">{message}</p>
       <Button size="lg" variant="destructive" className="h-16 px-10 text-xl" onClick={onBack}>
@@ -92,8 +103,8 @@ export function ErrorScreen({ message, onBack, autoReturnMs = 5000 }: ErrorScree
 
 export function MaintenanceScreen() {
   return (
-    <div className="min-h-screen bg-white flex flex-col items-center justify-center p-8" data-testid="screen-maintenance">
-      <AlertTriangle className="w-24 h-24 text-black mb-6" />
+    <div className="min-h-screen bg-white flex flex-col items-center justify-center p-8" data-testid="screen-maintenance" role="alert">
+      <AlertTriangle className="w-24 h-24 text-black mb-6" aria-hidden="true" />
       <h2 className="text-3xl font-bold text-black mb-4">Обслуживание</h2>
       <p className="text-xl text-black">Шкаф временно недоступен. Обратитесь к библиотекарю.</p>
     </div>
