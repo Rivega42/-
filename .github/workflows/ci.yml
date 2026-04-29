@@ -20,16 +20,18 @@ jobs:
         # Lint is advisory for now — keep the pipeline green while we clean up warnings.
         run: npx eslint client/ server/ --ext .ts,.tsx --max-warnings 50 || echo "Lint warnings present"
       - name: TypeScript typecheck
-        # pcscService.ts requires native nfc-pcsc (unavailable in CI) — filter those errors.
+        # pcscService.ts needs native nfc-pcsc (unavailable in CI). We allow
+        # those errors but fail on anything else.
+        shell: bash {0}
         run: |
-          set +e
-          npx tsc --noEmit 2>&1 | tee /tmp/tsc.log
-          REAL=$(grep 'error TS' /tmp/tsc.log | grep -vc 'pcscService' || echo 0)
-          echo "Real errors (excluding pcscService): $REAL"
+          npx tsc --noEmit > /tmp/tsc.log 2>&1
+          REAL=$(grep 'error TS' /tmp/tsc.log | grep -cv 'pcscService')
+          echo "TypeScript errors (excluding pcscService): $REAL"
           if [ "$REAL" -gt 0 ]; then
             grep 'error TS' /tmp/tsc.log | grep -v 'pcscService'
             exit 1
           fi
+          echo "TypeScript OK (pcscService errors filtered)"
       - name: Build
         run: npm run build || echo "::warning::Build failed — check locally"
 
