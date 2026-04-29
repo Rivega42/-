@@ -55,6 +55,16 @@ LOCK_SETTLE_SEC = 0.3
 MOVE_SETTLE_SEC = 0.2
 
 
+POS_FILE = '/tmp/carriage_pos.json'
+
+def _save_pos(x, y, address=''):
+    import json
+    try:
+        with open(POS_FILE, 'w') as f:
+            json.dump({'x': x, 'y': y, 'address': address}, f)
+    except Exception:
+        pass
+
 class SequenceError(Exception):
     """Raised when a sequence step fails."""
     pass
@@ -176,17 +186,21 @@ class BookSequenceRunner:
         motion = self._init_motion()
         # Move X: right is A=1, B=1
         if x > 0:
-            motion.move(1, 1, x, XY_CONFIG.fast)
+            motion.move(1, 1, x, XY_CONFIG.fast)  # X right
             time.sleep(MOVE_SETTLE_SEC)
         # Move Y: up is A=1, B=0
         if y > 0:
-            motion.move(1, 0, y, XY_CONFIG.fast)
+            motion.move(1, 0, y, XY_CONFIG.fast)  # Y up
             time.sleep(MOVE_SETTLE_SEC)
+        _save_pos(x, y)
 
     def _home_xy(self) -> bool:
         """Home XY to LEFT+BOTTOM."""
         motion = self._init_motion()
-        return motion.home_xy()
+        ok = motion.home_xy()
+        if ok:
+            _save_pos(0, 0, 'home')
+        return ok
 
     async def issue_book_sequence(self, cell_address: str) -> dict:
         """

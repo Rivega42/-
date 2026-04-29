@@ -49,9 +49,6 @@ def main() -> int:
             ok = motion.home_xy()
             if ok:
                 print('\n==> HOME OK: LEFT + BOTTOM')
-                import json
-                with open('/tmp/carriage_pos.json', 'w') as pf:
-                    json.dump({'x': 0, 'y': 0, 'address': 'home'}, pf)
                 return 0
 
             print('\n==> Хоминг завершён с ошибками')

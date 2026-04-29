@@ -1,10 +1,10 @@
 {
-  "version": "2026-04-11-final",
+  "version": "2026-04-27",
   "description": "BookCabinet XY calibration. Address format: depth.rack.shelf (e.g. 1.2.9)",
   "racks": {
-    "1": 100,
-    "2": 10220,
-    "3": 20370
+    "1": 65,
+    "2": 10205,
+    "3": 20360
   },
   "depth": {
     "front": 1,
@@ -17,47 +17,52 @@
       {
         "shelf": 0,
         "front_y": 60,
-        "back_y": 160
+        "back_y": 60
+      },
+      {
+        "shelf": 1,
+        "front_y": 2120,
+        "back_y": 2120
       },
       {
         "shelf": 3,
-        "front_y": 6510,
-        "back_y": 6610
+        "front_y": 6375,
+        "back_y": 6375
       },
       {
         "shelf": 5,
-        "front_y": 10320,
-        "back_y": 10420
+        "front_y": 10625,
+        "back_y": 10625
       },
       {
         "shelf": 6,
         "front_y": 12811,
-        "back_y": 12911
+        "back_y": 12811
       },
       {
         "shelf": 7,
-        "front_y": 15002,
-        "back_y": 15102
+        "front_y": 14897,
+        "back_y": 14897
       },
       {
         "shelf": 10,
-        "front_y": 21410,
-        "back_y": 21510
+        "front_y": 21290,
+        "back_y": 21290
       },
       {
         "shelf": 14,
-        "front_y": 29830,
-        "back_y": 29930
+        "front_y": 29810,
+        "back_y": 29810
       },
       {
         "shelf": 16,
         "front_y": 34026,
-        "back_y": 34126
+        "back_y": 34026
       },
       {
         "shelf": 18,
-        "front_y": 38363,
-        "back_y": 38463
+        "front_y": 38348,
+        "back_y": 38348
       },
       {
         "shelf": 21,
@@ -77,6 +82,154 @@
           "back_y": 21310
         }
       }
+    },
+    "rack_y_anchors": {
+      "1": [
+        {
+          "shelf": 0,
+          "front_y": 60,
+          "back_y": 60
+        },
+        {
+          "shelf": 1,
+          "front_y": 2210,
+          "back_y": 2210
+        },
+        {
+          "shelf": 3,
+          "front_y": 6445,
+          "back_y": 6445
+        },
+        {
+          "shelf": 5,
+          "front_y": 10740,
+          "back_y": 10740
+        },
+        {
+          "shelf": 7,
+          "front_y": 14982,
+          "back_y": 14982
+        },
+        {
+          "shelf": 10,
+          "front_y": 21380,
+          "back_y": 21380
+        },
+        {
+          "shelf": 14,
+          "front_y": 29900,
+          "back_y": 29900
+        },
+        {
+          "shelf": 18,
+          "front_y": 38443,
+          "back_y": 38443
+        },
+        {
+          "shelf": 21,
+          "front_y": 45280,
+          "back_y": 45280
+        }
+      ],
+      "2": [
+        {
+          "shelf": 0,
+          "front_y": 60,
+          "back_y": 60
+        },
+        {
+          "shelf": 1,
+          "front_y": 2230,
+          "back_y": 2230
+        },
+        {
+          "shelf": 3,
+          "front_y": 6490,
+          "back_y": 6490
+        },
+        {
+          "shelf": 5,
+          "front_y": 10760,
+          "back_y": 10760
+        },
+        {
+          "shelf": 7,
+          "front_y": 15012,
+          "back_y": 15012
+        },
+        {
+          "shelf": 10,
+          "front_y": 21420,
+          "back_y": 21420
+        },
+        {
+          "shelf": 14,
+          "front_y": 29925,
+          "back_y": 29925
+        },
+        {
+          "shelf": 18,
+          "front_y": 38453,
+          "back_y": 38453
+        },
+        {
+          "shelf": 21,
+          "front_y": 45280,
+          "back_y": 45280
+        }
+      ],
+      "3": [
+        {
+          "shelf": 0,
+          "front_y": 60,
+          "back_y": 60
+        },
+        {
+          "shelf": 1,
+          "front_y": 2120,
+          "back_y": 2120
+        },
+        {
+          "shelf": 3,
+          "front_y": 6375,
+          "back_y": 6375
+        },
+        {
+          "shelf": 5,
+          "front_y": 10625,
+          "back_y": 10625
+        },
+        {
+          "shelf": 7,
+          "front_y": 14897,
+          "back_y": 14897
+        },
+        {
+          "shelf": 10,
+          "front_y": 21290,
+          "back_y": 21290
+        },
+        {
+          "shelf": 14,
+          "front_y": 29810,
+          "back_y": 29810
+        },
+        {
+          "shelf": 18,
+          "front_y": 38348,
+          "back_y": 38348
+        },
+        {
+          "shelf": 20,
+          "front_y": 43089,
+          "back_y": 43089
+        },
+        {
+          "shelf": 21,
+          "front_y": 45280,
+          "back_y": 45280
+        }
+      ]
     }
   },
   "disabled_cells": [
@@ -144,9 +297,18 @@
   },
   "notes": [
     "All 3 racks verified to use same Y coordinates",
-    "back_y = front_y + 100 (consistent across all shelves)",
-    "Tray calibration pending (Monday)",
     "Lock pin 18 broken - needs replacement",
-    "Lock pin 13 - pin unconfirmed, needs Monday verification"
-  ]
+    "Lock pin 13 - pin unconfirmed, needs Monday verification",
+    "back_y = front_y (no offset needed)",
+    "Tray calibrated 2026-04-27: total=22467, center=11233, freq=12000Hz"
+  ],
+  "tray": {
+    "total_steps": 22467,
+    "center_steps": 11233,
+    "freq_hz": 12000,
+    "calibrated": "2026-04-27",
+    "backoff_front": 1366,
+    "backoff_back": 1445,
+    "note": "Calibrated via tray_platform.py, 2 runs averaged"
+  }
 }

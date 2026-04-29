@@ -20,11 +20,11 @@ GPIO пины (BCM):
   Center: ~10500 шагов
 
 Использование:
-  python3 tray_platform.py calibrate  # Калибровка: FRONT -> BACK -> CENTER
+  python3 tray_platform.py calibrate  # Калибровка с backoff
   python3 tray_platform.py front      # Двигать к FRONT
   python3 tray_platform.py back       # Двигать к BACK
-  python3 tray_platform.py center     # Двигать в центр (после калибровки)
-  python3 tray_platform.py status     # Показать состояние концевиков
+  python3 tray_platform.py center     # Двигать в центр
+  python3 tray_platform.py status     # Состояние концевиков
 """
 # IMPORTANT: These GPIO pin constants MUST match bookcabinet/config.py GPIO_PINS.
 # TODO: Import from config.py to eliminate duplication (see issue #59).
@@ -42,7 +42,11 @@ ENDSTOP_FRONT = 7
 ENDSTOP_BACK = 20
 
 # === PARAMETERS ===
-TRAY_FREQ = 12000  # Hz
+TRAY_FREQ = 12000       # Hz - основная скорость
+TRAY_FREQ_SLOW = 3000   # Hz - медленный подход
+BACKOFF_STEPS = 1500    # Шагов отхода
+STABLE_READS = 5        # Чтений для подтверждения концевика
+STABLE_NEED = 3         # Минимум единиц для подтверждения
 
 
 class TrayPlatform:
@@ -58,22 +62,20 @@ class TrayPlatform:
         self._setup_pins()
     
     def _setup_pins(self):
-        """Настройка GPIO пинов."""
         for pin in [TRAY_STEP, TRAY_DIR, TRAY_EN1, TRAY_EN2]:
             self.pi.set_mode(pin, pigpio.OUTPUT)
         
-        # Драйвер выключен по умолчанию
         self.pi.write(TRAY_EN1, 1)
         self.pi.write(TRAY_EN2, 1)
         
         for pin in [ENDSTOP_FRONT, ENDSTOP_BACK]:
             self.pi.set_mode(pin, pigpio.INPUT)
             self.pi.set_pull_up_down(pin, pigpio.PUD_UP)
-            self.pi.set_glitch_filter(pin, 300)  # 300μs filter — prevents bounce
+            self.pi.set_glitch_filter(pin, 1000)
+        time.sleep(0.1)
     
-    def _create_wave(self):
-        """Создать wave для генерации импульсов."""
-        period_us = int(1000000 / TRAY_FREQ)
+    def _create_wave(self, freq):
+        period_us = int(1000000 / freq)
         pulse_us = period_us // 2
         
         self.pi.wave_clear()
@@ -83,167 +85,168 @@ class TrayPlatform:
         ]
         self.pi.wave_add_generic(waveform)
         self.wave_id = self.pi.wave_create()
+        return self.wave_id
     
     def _delete_wave(self):
-        """Удалить wave."""
         if self.wave_id is not None:
-            self.pi.wave_delete(self.wave_id)
+            try:
+                self.pi.wave_delete(self.wave_id)
+            except:
+                pass
             self.wave_id = None
         self.pi.wave_clear()
     
     def enable(self):
-        """Включить драйвер мотора."""
         self.pi.write(TRAY_EN1, 0)
         self.pi.write(TRAY_EN2, 0)
     
     def disable(self):
-        """Выключить драйвер мотора."""
         self.pi.write(TRAY_EN1, 1)
         self.pi.write(TRAY_EN2, 1)
     
-    def status(self) -> dict:
-        """Получить состояние концевиков."""
+    def status(self):
         return {
             'FRONT': self.pi.read(ENDSTOP_FRONT),
             'BACK': self.pi.read(ENDSTOP_BACK),
         }
     
-    def move_until(self, direction: int, endstop_pin: int, max_time: float = 15.0) -> tuple:
-        """
-        Двигать платформу до срабатывания концевика.
+    def sensor_stable(self, pin):
+        count = 0
+        for _ in range(STABLE_READS):
+            if self.pi.read(pin) == 1:
+                count += 1
+            time.sleep(0.001)
+        return count >= STABLE_NEED
+    
+    def move_steps(self, direction, steps, freq=TRAY_FREQ):
+        self._create_wave(freq)
+        self.pi.write(TRAY_DIR, direction)
+        time.sleep(0.01)
         
-        Args:
-            direction: 0=вперёд (FRONT), 1=назад (BACK)
-            endstop_pin: GPIO пин концевика
-            max_time: Максимальное время движения (секунды)
-        
-        Returns:
-            (steps, reached): количество шагов и флаг достижения концевика
-        """
+        self.pi.wave_send_repeat(self.wave_id)
+        time.sleep(steps / freq)
+        self.pi.wave_tx_stop()
+        self._delete_wave()
+    
+    def move_until(self, direction, endstop_pin, freq=TRAY_FREQ, max_time=15.0):
+        self._create_wave(freq)
         self.pi.write(TRAY_DIR, direction)
         time.sleep(0.01)
         
         self.pi.wave_send_repeat(self.wave_id)
         
         start = time.time()
-        while self.pi.read(endstop_pin) == 0 and (time.time() - start) < max_time:
-            time.sleep(0.0005)
+        reached = False
+        while (time.time() - start) < max_time:
+            if self.sensor_stable(endstop_pin):
+                reached = True
+                break
+            time.sleep(0.001)
         
         self.pi.wave_tx_stop()
         elapsed = time.time() - start
-        steps = int(elapsed * TRAY_FREQ)
-        reached = self.pi.read(endstop_pin) == 1
+        steps = int(elapsed * freq)
+        self._delete_wave()
         
         return steps, reached
     
-    def move_steps(self, direction: int, steps: int):
-        """
-        Двигать платформу на заданное количество шагов.
+    def home_to(self, direction, endstop_pin, name):
+        print("Moving to {} (fast)...".format(name), end=" ", flush=True)
+        steps, reached = self.move_until(direction, endstop_pin, TRAY_FREQ)
+        if not reached:
+            print("FAIL!")
+            return False
+        print("hit!", end=" ", flush=True)
         
-        Args:
-            direction: 0=вперёд (FRONT), 1=назад (BACK)
-            steps: Количество шагов
-        """
-        self.pi.write(TRAY_DIR, direction)
-        time.sleep(0.01)
+        backoff_dir = 1 if direction == 0 else 0
+        self.move_steps(backoff_dir, BACKOFF_STEPS, TRAY_FREQ_SLOW)
+        print("backoff...", end=" ", flush=True)
+        time.sleep(0.1)
         
-        self.pi.wave_send_repeat(self.wave_id)
-        time.sleep(steps / TRAY_FREQ)
-        self.pi.wave_tx_stop()
+        steps, reached = self.move_until(direction, endstop_pin, TRAY_FREQ_SLOW)
+        if not reached:
+            print("FAIL!")
+            return False
+        print("OK (slow: {} steps)".format(steps))
+        return True
     
-    def calibrate(self) -> bool:
-        """
-        Калибровка платформы: FRONT -> BACK -> CENTER.
-        
-        Returns:
-            True если калибровка успешна
-        """
-        print(f"=== TRAY CALIBRATION at {TRAY_FREQ} Hz ===")
+    def calibrate(self):
+        print("=== TRAY CALIBRATION at {} Hz ===".format(TRAY_FREQ))
         
         self.enable()
-        self._create_wave()
         
         try:
-            # Step 1: Move to FRONT
-            print("Moving to FRONT...")
-            steps_to_front, reached = self.move_until(0, ENDSTOP_FRONT)
-            if not reached:
-                print("FRONT FAIL!")
+            if not self.home_to(0, ENDSTOP_FRONT, "FRONT"):
                 return False
-            print(f"FRONT done after {steps_to_front} steps")
             time.sleep(0.3)
             
-            # Step 2: Move to BACK (measure total travel)
-            print("Moving to BACK...")
-            self.total_steps, reached = self.move_until(1, ENDSTOP_BACK)
+            print("Measuring total travel...")
+            print("Moving to BACK (fast)...", end=" ", flush=True)
+            fast_steps, reached = self.move_until(1, ENDSTOP_BACK, TRAY_FREQ)
             if not reached:
-                print("BACK FAIL!")
+                print("FAIL!")
                 return False
-            print(f"BACK done after {self.total_steps} steps")
-            time.sleep(0.3)
+            print("hit!", end=" ", flush=True)
             
-            # Step 3: Move to CENTER
-            print("Moving to CENTER...")
+            self.move_steps(0, BACKOFF_STEPS, TRAY_FREQ_SLOW)
+            print("backoff...", end=" ", flush=True)
+            time.sleep(0.1)
+            
+            slow_steps, reached = self.move_until(1, ENDSTOP_BACK, TRAY_FREQ_SLOW)
+            if not reached:
+                print("FAIL!")
+                return False
+            print("OK (slow: {} steps)".format(slow_steps))
+            
+            self.total_steps = fast_steps + slow_steps
             self.center_steps = self.total_steps // 2
-            self.move_steps(0, self.center_steps)
-            print(f"CENTER at {self.center_steps} steps")
+            time.sleep(0.3)
             
-            print(f"=== Total travel: {self.total_steps} steps ===")
+            print("Moving to CENTER ({} steps)...".format(self.center_steps), end=" ", flush=True)
+            self.move_steps(0, self.center_steps, TRAY_FREQ)
+            print("OK")
+            
+            print("=== Total travel: {} steps ===".format(self.total_steps))
             return True
             
         finally:
             self._delete_wave()
             self.disable()
     
-    def go_front(self) -> bool:
-        """Двигать к FRONT."""
-        print("Moving to FRONT...")
+    def go_front(self):
         self.enable()
-        self._create_wave()
         try:
-            steps, reached = self.move_until(0, ENDSTOP_FRONT)
-            status = "done" if reached else "FAIL"
-            print(f"FRONT {status} after {steps} steps")
-            return reached
+            return self.home_to(0, ENDSTOP_FRONT, "FRONT")
         finally:
             self._delete_wave()
             self.disable()
     
-    def go_back(self) -> bool:
-        """Двигать к BACK."""
-        print("Moving to BACK...")
+    def go_back(self):
         self.enable()
-        self._create_wave()
         try:
-            steps, reached = self.move_until(1, ENDSTOP_BACK)
-            status = "done" if reached else "FAIL"
-            print(f"BACK {status} after {steps} steps")
-            return reached
+            return self.home_to(1, ENDSTOP_BACK, "BACK")
         finally:
             self._delete_wave()
             self.disable()
     
     def go_center(self):
-        """Двигать в центр (требует предварительной калибровки)."""
         if self.total_steps == 0:
             print("ERROR: Run calibrate first!")
             return
         
-        print("Moving to CENTER...")
         self.enable()
-        self._create_wave()
         try:
-            # Сначала к FRONT, потом к центру
-            self.move_until(0, ENDSTOP_FRONT)
+            if not self.home_to(0, ENDSTOP_FRONT, "FRONT"):
+                return
             time.sleep(0.2)
-            self.move_steps(1, self.center_steps)
-            print(f"CENTER at {self.center_steps} steps")
+            print("Moving to CENTER ({} steps)...".format(self.center_steps), end=" ", flush=True)
+            self.move_steps(1, self.center_steps, TRAY_FREQ)
+            print("OK")
         finally:
             self._delete_wave()
             self.disable()
     
     def close(self):
-        """Закрыть соединение."""
         self._delete_wave()
         self.disable()
         self.pi.stop()
@@ -268,15 +271,15 @@ def main():
             ok = tray.go_back()
             return 0 if ok else 1
         elif cmd == 'center':
-            tray.calibrate()  # Need calibration first
+            tray.calibrate()
             return 0
         elif cmd == 'status':
             status = tray.status()
-            print(f"FRONT (GPIO {ENDSTOP_FRONT}): {'PRESSED' if status['FRONT'] else 'free'}")
-            print(f"BACK (GPIO {ENDSTOP_BACK}): {'PRESSED' if status['BACK'] else 'free'}")
+            print("FRONT (GPIO {}): {}".format(ENDSTOP_FRONT, 'PRESSED' if status['FRONT'] else 'free'))
+            print("BACK (GPIO {}): {}".format(ENDSTOP_BACK, 'PRESSED' if status['BACK'] else 'free'))
             return 0
         else:
-            print(f"Unknown command: {cmd}")
+            print("Unknown command: {}".format(cmd))
             print(__doc__)
             return 1
     finally:
