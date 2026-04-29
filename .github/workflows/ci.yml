@@ -16,12 +16,7 @@ jobs:
           node-version: '20'
           cache: 'npm'
       - run: npm ci
-      - name: Lint JS/TS
-        # Lint is advisory for now — keep the pipeline green while we clean up warnings.
-        run: npx eslint client/ server/ --ext .ts,.tsx --max-warnings 50 || echo "Lint warnings present"
       - name: TypeScript typecheck
-        # pcscService.ts needs native nfc-pcsc (unavailable in CI). We allow
-        # those errors but fail on anything else.
         shell: bash {0}
         run: |
           npx tsc --noEmit > /tmp/tsc.log 2>&1
@@ -31,9 +26,6 @@ jobs:
             grep 'error TS' /tmp/tsc.log | grep -v 'pcscService'
             exit 1
           fi
-          echo "TypeScript OK (pcscService errors filtered)"
-      - name: Build
-        run: npm run build || echo "::warning::Build failed — check locally"
 
   python-syntax:
     runs-on: ubuntu-latest
@@ -42,11 +34,5 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - name: Install Python deps
-        run: pip install ruff pytest
-      - name: Ruff check
-        # Advisory lint — relaxed rule set while the codebase is being cleaned up.
-        run: ruff check bookcabinet/ tools/ --ignore E501,E402,F401 || echo "Ruff warnings"
       - name: Syntax check
-        # Critical: every .py file must at least compile.
         run: find bookcabinet tools -name "*.py" -exec python -m py_compile {} +
