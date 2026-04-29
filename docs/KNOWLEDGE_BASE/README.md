@@ -41,6 +41,8 @@ python3 ~/bookcabinet/tools/move_shelf.py 2.1.16 1.2.9
 | **[RETURN_BOOK_WORKFLOW.md](RETURN_BOOK_WORKFLOW.md)** | Полный цикл возврата книги (issue #80) с диаграммами |
 | **[CALIBRATION.md](CALIBRATION.md)** | Формат calibration.json и процесс калибровки |
 | **[STARTUP.md](STARTUP.md)** | Старт системы: systemd → main.py → StartupRecovery |
+| **[RFID.md](RFID.md)** | Все считыватели: NFC ACR1281, UHF IQRFID-5102 (книги/ЕКП), UnifiedReader, RRU9816 |
+| **[IRBIS.md](IRBIS.md)** | ИРБИС64: протокол TCP, LibraryService, offline очередь, mock режим |
 
 ---
 
@@ -79,6 +81,10 @@ depth.rack.shelf
 **Настраиваешь железо?** → [HARDWARE.md](HARDWARE.md)
 
 **Изучаешь workflow выдачи?** → [ISSUE_BOOK_WORKFLOW.md](ISSUE_BOOK_WORKFLOW.md)
+
+**RFID не читает?** → [RFID.md](RFID.md)
+
+**ИРБИС не отвечает?** → [IRBIS.md](IRBIS.md)
 
 **Проблема при старте?** → [STARTUP.md](STARTUP.md)
 
