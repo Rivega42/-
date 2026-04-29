@@ -1,5 +1,8 @@
 # BookCabinet — Быстрый старт
 
+> 📚 **Полная база знаний:** [docs/KNOWLEDGE_BASE/README.md](docs/KNOWLEDGE_BASE/README.md) — команды, hardware, алгоритмы, диаграммы workflow
+
+
 ## 🔧 Среда
 - **Разработка:** Windows 11, PowerShell / Windows Terminal
 - **Целевая система:** Raspberry Pi 3, ~/bookcabinet/
