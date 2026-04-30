@@ -8,7 +8,7 @@
 
 ## В работе сейчас
 
-- **Repo setup пакет** (текущая ветка `chore/repo-setup`) — структура, шаблоны, CI/CD скелет, AI-правила, дашборд скаффолд.
+- **Repo setup пакет** (ветка `chore/repo-setup`) — ✅ завершён локально (10 коммитов), ожидает review + merge. Vika issues заготовлены в `/tmp/vika_issues.md`.
 - **Production issue/return workflow** (последний крупный merge — #79, #80) — проверка RFID, параллельные шторки, error recovery.
 - **Калибровка** — per-rack калибровка обновлена, `tools/calibrate.py` стабилизирован.
 - **`tools/move_shelf.py`** — auto-detect глубины ячейки по адресу.

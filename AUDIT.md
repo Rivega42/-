@@ -143,19 +143,60 @@
 
 ---
 
-## Статусы по шагам (заполняется по мере выполнения)
+## Статусы по шагам
 
 | Шаг | Статус | Комментарий |
 |---|---|---|
-| 1. AUDIT | 🔄 в процессе | этот документ |
-| 2. Базовая документация | ⏸ | следующий |
-| 3. Структура директорий | ⏸ | |
-| 4. Правила для AI | ⏸ | |
-| 5. Контекст для AI | ⏸ | |
-| 6. Labels, шаблоны | ⏸ | |
-| 7. CI/CD | ⏸ | |
-| 8. Автоматизация | ⏸ | |
-| 9. Дашборд | ⏸ | |
-| 10. Безопасность и финал | ⏸ | |
+| 1. AUDIT | ✅ | этот документ |
+| 2. Базовая документация | ✅ | STATE/ROADMAP/BACKLOG/SECURITY/LICENSE/.editorconfig/.gitattributes + CLAUDE §0 |
+| 3. Структура директорий | ✅ | docs/{adr,architecture,api,runbooks,guides,ai,prompts,context}, infra/, _archive/, tools/dashboard/, .github/CODEOWNERS |
+| 4. Правила для AI | ✅ | docs/ai/{CLAUDE_CODE,CLAUDE_DESIGN,VIKA,DEVOPS,EXTERNAL_TASKS,AUTOMATION}.md |
+| 5. Контекст для AI | ✅ | docs/context/{PRODUCT_CONTEXT,DOMAIN}.md (GLOSSARY уже был) |
+| 6. Labels, шаблоны | ✅ | scripts/setup-labels.sh + 6 issue templates + PR template (плейсхолдеры заменены на реальные milestones) |
+| 7. CI/CD | ✅ | ci-pr.yml адаптирован под Node 20 + Python 3.11; ci.yml → ci-legacy.yml (триггеры отключены); deploy-staging/prod, release-please, labeler, dependabot, .pre-commit-config |
+| 8. Автоматизация | ✅ | 8 workflow + 9 mjs scripts + setup-project.sh |
+| 9. Дашборд | ✅ | tools/dashboard/README.md + scripts/dashboard-fetch.mjs + dashboard-sync.yml |
+| 10. Безопасность и финал | ✅ | LICENSE, SECURITY.md, CODEOWNERS, gitleaks ⏭ (не установлен — issue для Vika); итог в STATE.md |
 
 Легенда: ✅ done · 🔄 в процессе · ⏸ не начато · ⏭ пропущено (с причиной)
+
+---
+
+## Финальные итоги (2026-04-30)
+
+### Сделано в этом PR
+
+- 10 коммитов на ветке `chore/repo-setup`.
+- Базовая документация проекта оформлена.
+- AI-правила и контекст зафиксированы.
+- CI/CD workflow-ы готовы (адаптированы под актуальный гибридный стек Node 20 + Python 3.11).
+- Автоматизация для Project v2 готова, ждёт активации (issue для Vika).
+- Дашборд скаффолд + workflow готовы, ждёт активации Pages (issue для Vika).
+- LICENSE добавлен (MIT).
+- SECURITY.md, CODEOWNERS, .editorconfig, .gitattributes созданы.
+- Существующие docs/, CLAUDE.md, CHANGELOG, README — не изменены деструктивно.
+
+### Issues для Vika (10 шт.) — собраны в `/tmp/vika_issues.md`
+
+1. Применить лейблы (P1)
+2. Создать GitHub Project v2 (P1)
+3. Branch protection для main (P0)
+4. GitHub Environments staging+production (P1)
+5. GitHub Pages для дашборда (P2)
+6. GitHub Security Features (P0)
+7. gitleaks scan на истории (P0)
+8. [META] Финальный обход (P1)
+9. [META] DevOps настройки от Vika
+10. [META] Подтвердить лицензию + секреты
+
+### Что осталось вне PR
+
+- gitleaks scan — не запущен (binary недоступен в окружении агента).
+- Активация Vika issues — после merge.
+- Декомпозиция `client/src/pages/kiosk.tsx` (2372 строки) — отдельная задача (Q3 2026 по ROADMAP).
+- Frontend tests — отдельная задача.
+- Адаптация существующих docs (HARDWARE.md устаревший про шторки) — отдельный PR.
+
+### Open questions for founders
+
+См. раздел "Открытые вопросы для founders" выше.
