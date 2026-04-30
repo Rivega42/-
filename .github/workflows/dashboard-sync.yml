@@ -1,0 +1,68 @@
+name: Dashboard sync
+
+on:
+  schedule:
+    - cron: '0 * * * *'
+  workflow_dispatch:
+  issues:
+    types: [opened, edited, closed, labeled, unlabeled]
+  pull_request:
+    types: [opened, closed]
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: dashboard-sync
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Fetch snapshot
+        env:
+          GITHUB_TOKEN: ${{ secrets.PROJECT_TOKEN || secrets.GITHUB_TOKEN }}
+          PROJECT_OWNER: ${{ vars.PROJECT_OWNER || github.repository_owner }}
+          PROJECT_NUMBER: ${{ vars.PROJECT_NUMBER }}
+          GITHUB_REPO: ${{ github.repository }}
+        run: |
+          if [ -z "$PROJECT_NUMBER" ]; then
+            echo "PROJECT_NUMBER not set, skipping"
+            exit 0
+          fi
+          node scripts/dashboard-fetch.mjs
+
+      - name: Build dashboard
+        if: hashFiles('tools/dashboard/package.json') != ''
+        run: |
+          cd tools/dashboard
+          if [ -f pnpm-lock.yaml ]; then
+            npm install -g pnpm
+            pnpm install --frozen-lockfile
+            pnpm build
+          else
+            npm install
+            npm run build
+          fi
+
+      - name: Setup Pages
+        if: hashFiles('tools/dashboard/dist/index.html') != ''
+        uses: actions/configure-pages@v5
+
+      - name: Upload artifact
+        if: hashFiles('tools/dashboard/dist/index.html') != ''
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: tools/dashboard/dist
+
+      - name: Deploy to GitHub Pages
+        if: hashFiles('tools/dashboard/dist/index.html') != ''
+        uses: actions/deploy-pages@v4
