@@ -1,0 +1,70 @@
+name: 🎯 Эпик
+description: Большой блок работы (>1 неделя, несколько issues)
+title: "[EPIC ?] "
+labels: ["тип: эпик", "статус: discovery"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ⚠️ В title замените `?` на номер эпика, например `[EPIC 5]`.
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Приоритет
+      options: ["P0", "P1", "P2", "P3"]
+    validations:
+      required: true
+  - type: dropdown
+    id: stream
+    attributes:
+      label: Stream
+      options:
+        - Платформа
+        - Продукт
+        - Инфра
+        - AI
+        - Команда
+    validations:
+      required: true
+  - type: input
+    id: target_date
+    attributes:
+      label: Целевая дата (YYYY-MM-DD)
+    validations:
+      required: true
+  - type: textarea
+    id: goal
+    attributes:
+      label: Цель эпика
+      description: Зачем это нужно. Какую проблему решаем.
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: Скоуп (что входит)
+    validations:
+      required: true
+  - type: textarea
+    id: non_scope
+    attributes:
+      label: Не входит (явно)
+      description: Чтобы не было размытия
+  - type: textarea
+    id: subissues
+    attributes:
+      label: Sub-issues (чек-лист)
+      placeholder: |
+        - [ ] #N — название
+        - [ ] #N — название
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria эпика
+    validations:
+      required: true
+  - type: textarea
+    id: dependencies
+    attributes:
+      label: Зависимости
+      description: Другие эпики или внешние задачи

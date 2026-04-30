@@ -1,0 +1,72 @@
+name: ✨ Фича
+description: Новая функциональность
+title: "[FEAT] "
+labels: ["тип: фича", "статус: бэклог"]
+body:
+  - type: dropdown
+    id: epic
+    attributes:
+      label: Эпик (родитель)
+      options:
+        - "Production Deploy"
+        - "Mechanical Reliability"
+        - "ИРБИС Integration"
+    validations:
+      required: true
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Приоритет
+      options: ["P0", "P1", "P2", "P3"]
+    validations:
+      required: true
+  - type: dropdown
+    id: size
+    attributes:
+      label: Размер (XS=4ч, S=1д, M=3д, L=1н, XL=>1н)
+      options: ["XS", "S", "M", "L", "XL"]
+    validations:
+      required: true
+  - type: dropdown
+    id: component
+    attributes:
+      label: Компонент
+      options:
+        - web
+        - mobile
+        - api
+        - db
+        - devops
+        - ai
+        - integrations
+        - другое
+    validations:
+      required: true
+  - type: input
+    id: deadline
+    attributes:
+      label: Дедлайн (YYYY-MM-DD, опционально)
+  - type: input
+    id: depends_on
+    attributes:
+      label: Зависит от
+      description: "Через запятую: #140, #141"
+  - type: textarea
+    id: description
+    attributes:
+      label: Описание
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      placeholder: |
+        - [ ] Критерий 1
+        - [ ] Критерий 2
+    validations:
+      required: true
+  - type: textarea
+    id: notes
+    attributes:
+      label: Дополнительные заметки

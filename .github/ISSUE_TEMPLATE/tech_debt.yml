@@ -1,0 +1,69 @@
+name: 🔧 Технический долг
+description: Рефакторинг, улучшение кода, чистка legacy
+title: "[TECH] "
+labels: ["тип: тех-долг", "статус: бэклог"]
+body:
+  - type: dropdown
+    id: epic
+    attributes:
+      label: Эпик
+      options:
+        - "Production Deploy"
+        - "Mechanical Reliability"
+        - "ИРБИС Integration"
+        - не относится
+    validations:
+      required: true
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Приоритет
+      options: ["P0", "P1", "P2", "P3"]
+    validations:
+      required: true
+  - type: dropdown
+    id: size
+    attributes:
+      label: Размер
+      options: ["XS", "S", "M", "L", "XL"]
+    validations:
+      required: true
+  - type: dropdown
+    id: component
+    attributes:
+      label: Компонент
+      options:
+        - web
+        - mobile
+        - api
+        - db
+        - devops
+        - ai
+        - другое
+    validations:
+      required: true
+  - type: textarea
+    id: current
+    attributes:
+      label: Текущее состояние
+      description: Что сейчас в коде, почему это плохо
+    validations:
+      required: true
+  - type: textarea
+    id: target
+    attributes:
+      label: Целевое состояние
+      description: Как должно быть
+    validations:
+      required: true
+  - type: textarea
+    id: impact
+    attributes:
+      label: Влияние
+      description: Что ломается / замедляется без рефакторинга
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+    validations:
+      required: true

@@ -1,0 +1,65 @@
+name: 🤖 DevOps задача для Вики
+description: Серверные действия, инфраструктура, GitHub admin
+title: "[devops:vika] "
+labels: ["тип: инфра", "для: вики"]
+body:
+  - type: textarea
+    id: goal
+    attributes:
+      label: Цель
+      description: Что должно произойти и зачем.
+    validations:
+      required: true
+  - type: dropdown
+    id: env
+    attributes:
+      label: Окружение
+      options:
+        - dev
+        - staging
+        - prod
+        - github-org
+        - github-repo
+        - external-service
+    validations:
+      required: true
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Приоритет
+      options: ["P0", "P1", "P2", "P3"]
+    validations:
+      required: true
+  - type: textarea
+    id: commands
+    attributes:
+      label: Команды (пошагово)
+      description: Bash-команды или GraphQL/REST вызовы.
+      render: bash
+    validations:
+      required: true
+  - type: textarea
+    id: verification
+    attributes:
+      label: Verification
+      description: Как Вика проверит, что всё применилось.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      placeholder: |
+        - [ ] критерий 1
+        - [ ] критерий 2
+    validations:
+      required: true
+  - type: textarea
+    id: rollback
+    attributes:
+      label: Rollback (если применимо)
+      description: Как откатить изменения, если что-то пошло не так.
+  - type: textarea
+    id: context
+    attributes:
+      label: Связанные документы / контекст
