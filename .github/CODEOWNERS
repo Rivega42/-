@@ -1,0 +1,22 @@
+# CODEOWNERS — кто review-ит что
+# https://docs.github.com/en/repositories/managing-your-repositories-settings-and-features/customizing-your-repository/about-code-owners
+
+# Глобальный default
+* @Rivega42
+
+# Hardware truth — критично, ничего не апрувим без owner
+/bookcabinet/config.py @Rivega42
+/bookcabinet/hardware/ @Rivega42
+/tools/corexy_*.py @Rivega42
+/tools/homing_*.py @Rivega42
+/tools/calib_*.py @Rivega42
+
+# Документация project-level
+/CLAUDE.md @Rivega42
+/STATE.md @Rivega42
+/ROADMAP.md @Rivega42
+/DECISIONS.md @Rivega42
+
+# CI/CD
+/.github/ @Rivega42
+/scripts/ @Rivega42
