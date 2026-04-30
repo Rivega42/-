@@ -35,6 +35,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from corexy_motion_v2 import CoreXYMotionV2, MotionConfig
 from tray_platform import TrayPlatform
 from calibration import resolve_cell, get_window
+from position import save_pos
 
 import pigpio
 
@@ -55,15 +56,7 @@ LOCK_SETTLE_SEC = 0.3
 MOVE_SETTLE_SEC = 0.2
 
 
-POS_FILE = '/tmp/carriage_pos.json'
-
-def _save_pos(x, y, address=''):
-    import json
-    try:
-        with open(POS_FILE, 'w') as f:
-            json.dump({'x': x, 'y': y, 'address': address}, f)
-    except Exception:
-        pass
+POS_FILE = '/tmp/carriage_pos.json'  # kept for reference; position.py owns persistence
 
 class SequenceError(Exception):
     """Raised when a sequence step fails."""
@@ -192,14 +185,14 @@ class BookSequenceRunner:
         if y > 0:
             motion.move(1, 0, y, XY_CONFIG.fast)  # Y up
             time.sleep(MOVE_SETTLE_SEC)
-        _save_pos(x, y)
+        save_pos(x, y)
 
     def _home_xy(self) -> bool:
         """Home XY to LEFT+BOTTOM."""
         motion = self._init_motion()
         ok = motion.home_xy()
         if ok:
-            _save_pos(0, 0, 'home')
+            save_pos(0, 0)
         return ok
 
     async def issue_book_sequence(self, cell_address: str) -> dict:

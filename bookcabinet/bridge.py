@@ -96,6 +96,40 @@ async def cmd_return_sequence(cell_address: str):
         runner.close()
 
 
+async def cmd_issue_workflow(source: str, window: str, rfid: str, title: str, speed: str):
+    """Full production issue workflow with RFID verify, parallel shutters, error recovery."""
+    from bookcabinet.workflows.issue import IssueWorkflow
+
+    def on_progress(**event):
+        output({'type': 'progress', **event})
+
+    wf = IssueWorkflow(progress_cb=on_progress, speed=int(speed or 2600))
+    result = await wf.run(
+        source_address=source,
+        window_address=window or '1.2.9',
+        expected_book_rfid=rfid or None,
+        book_title=title or '',
+    )
+    output({'type': 'result', **result})
+
+
+async def cmd_return_workflow(target: str, window: str, rfid: str, title: str, speed: str):
+    """Full production return workflow with RFID verify, parallel shutters, error recovery."""
+    from bookcabinet.workflows.return_book import ReturnWorkflow
+
+    def on_progress(**event):
+        output({'type': 'progress', **event})
+
+    wf = ReturnWorkflow(progress_cb=on_progress, speed=int(speed or 2600))
+    result = await wf.run(
+        target_address=target,
+        window_address=window or '1.2.9',
+        expected_book_rfid=rfid or None,
+        book_title=title or '',
+    )
+    output({'type': 'result', **result})
+
+
 COMMANDS = {
     'issue': lambda args: cmd_issue(args[0], args[1]),
     'return': lambda args: cmd_return(args[0]),
@@ -104,6 +138,20 @@ COMMANDS = {
     'status': lambda args: cmd_status(),
     'issue_sequence': lambda args: cmd_issue_sequence(args[0]),
     'return_sequence': lambda args: cmd_return_sequence(args[0]),
+    'issue_workflow': lambda args: cmd_issue_workflow(
+        args[0],
+        args[1] if len(args) > 1 else '1.2.9',
+        args[2] if len(args) > 2 else '',
+        args[3] if len(args) > 3 else '',
+        args[4] if len(args) > 4 else '2600',
+    ),
+    'return_workflow': lambda args: cmd_return_workflow(
+        args[0],
+        args[1] if len(args) > 1 else '1.2.9',
+        args[2] if len(args) > 2 else '',
+        args[3] if len(args) > 3 else '',
+        args[4] if len(args) > 4 else '2600',
+    ),
 }
 
 

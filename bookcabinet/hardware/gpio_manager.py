@@ -23,6 +23,12 @@ class GPIOManager:
             except ImportError:
                 print("WARNING: pigpio not installed, switching to mock mode")
                 self.mock_mode = True
+
+        if not self.mock_mode and self.pi:
+            # #77: Initialize lock pins as output LOW to prevent servo jitter from motor driver noise
+            for lock_pin in [GPIO_PINS.get('LOCK_FRONT', 12), GPIO_PINS.get('LOCK_REAR', 13)]:
+                self.pi.set_mode(lock_pin, 1)  # OUTPUT
+                self.pi.write(lock_pin, 0)
     
     def setup_output(self, pin: int):
         if not self.mock_mode and self.pi:

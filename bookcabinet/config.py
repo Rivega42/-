@@ -104,7 +104,7 @@ TELEGRAM = {
 }
 
 IRBIS = {
-    'mock': os.environ.get('IRBIS_MOCK', 'true').lower() == 'true',
+    'mock': os.environ.get('IRBIS_MOCK', 'false').lower() == 'true',
     'host': os.environ.get('IRBIS_HOST', '172.29.67.70'),
     'port': int(os.environ.get('IRBIS_PORT', '6666')),
     'db': os.environ.get('IRBIS_DB', 'IBIS'),

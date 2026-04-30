@@ -32,6 +32,7 @@ def reset_locks(pi: pigpio.pi) -> None:
     """Оба замка в нейтральную позицию (0°)."""
     print("[LOCKS] Resetting to neutral (500μs)...")
     for pin in [LOCK_FRONT, LOCK_REAR]:
+        pi.set_mode(pin, pigpio.OUTPUT)
         pi.set_servo_pulsewidth(pin, LOCK_NEUTRAL_PW)
     time.sleep(0.5)
     # Отключить PWM после установки

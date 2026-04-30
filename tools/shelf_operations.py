@@ -17,6 +17,10 @@ import time
 import sys
 import os
 
+# TODO (#75): integrate position.save_pos(x, y) after carriage moves.
+# shelf_operations.py only controls tray depth movement, not XY carriage,
+# so there is no (x, y) to persist here currently.
+
 # === КОНСТАНТЫ ===
 TRAY_STEP = 18
 TRAY_DIR = 27
