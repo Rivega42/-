@@ -6,6 +6,27 @@ If this file conflicts with older scattered docs, prefer this file plus the curr
 
 ---
 
+## 0. Источник правды (read this first)
+
+При старте сессии Claude Code должен прочитать в следующем порядке:
+1. `STATE.md` — текущий снапшот: что в работе, что заблокировано, известные проблемы.
+2. `ROADMAP.md` — квартальный план и направления (`Q2 2026` — production deploy в Зеленогорской библиотеке).
+3. `DECISIONS.md` (root) и `docs/DECISIONS.md` — архитектурные решения с причинами.
+4. Этот файл (`CLAUDE.md`) — hardware truth, safety rules, GPIO map.
+5. `BACKLOG.md` — навигация по GitHub Issues.
+
+После значимой работы Claude должен **обновлять** `STATE.md` (разделы "В работе сейчас", "Известные проблемы") и при принятии нового архитектурного решения — добавлять запись в `DECISIONS.md`.
+
+DevOps / админ-задачи (GitHub admin, environments, secrets, Pages, branch protection) — **не делать самому**, оформлять как issue с лейблом `vika` и заголовком `[devops:vika] ...`. Шаблон — в `docs/ai/VIKA_RULES.md`.
+
+Правила для AI-исполнителей собраны в `docs/ai/`:
+- `CLAUDE_CODE_RULES.md` — правила для меня (этого агента).
+- `CLAUDE_DESIGN_RULES.md` — правила UI/UX дизайна.
+- `VIKA_RULES.md` — правила для DevOps-агента.
+- `AUTOMATION.md` — описание workflow-ов автоматизации.
+
+---
+
 ## 1. What this project is
 
 BookCabinet is a Raspberry Pi based automated library cabinet / smart shelf.

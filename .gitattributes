@@ -1,0 +1,42 @@
+# Ensure consistent line endings across platforms (Linux, macOS, Windows dev).
+
+* text=auto eol=lf
+
+# Code
+*.py text eol=lf
+*.ts text eol=lf
+*.tsx text eol=lf
+*.js text eol=lf
+*.mjs text eol=lf
+*.json text eol=lf
+*.md text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.sh text eol=lf
+*.toml text eol=lf
+*.html text eol=lf
+*.css text eol=lf
+
+# Shell scripts must keep LF
+*.sh text eol=lf
+
+# Binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.webp binary
+*.svg text eol=lf
+*.zip binary
+*.tar binary
+*.gz binary
+*.pdf binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.eot binary
+
+# Lockfiles — kept as-is, don't fight tooling
+package-lock.json -diff
+uv.lock -diff
