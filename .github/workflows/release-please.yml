@@ -1,0 +1,31 @@
+name: Release Please
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: googleapis/release-please-action@v4
+        with:
+          release-type: simple
+          token: ${{ secrets.GITHUB_TOKEN }}
+          changelog-types: |
+            [
+              {"type":"feat","section":"✨ Новые функции","hidden":false},
+              {"type":"fix","section":"🐛 Исправления","hidden":false},
+              {"type":"perf","section":"⚡ Производительность","hidden":false},
+              {"type":"refactor","section":"♻️ Рефакторинг","hidden":false},
+              {"type":"docs","section":"📚 Документация","hidden":false},
+              {"type":"test","section":"✅ Тесты","hidden":true},
+              {"type":"build","section":"📦 Сборка","hidden":true},
+              {"type":"ci","section":"👷 CI","hidden":true},
+              {"type":"chore","section":"🔧 Прочее","hidden":true}
+            ]

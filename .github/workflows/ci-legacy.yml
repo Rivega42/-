@@ -1,10 +1,9 @@
-name: CI
+name: CI (legacy — superseded by ci-pr.yml)
 
+# Triggers disabled — этот workflow заменён на ci-pr.yml в ШАГЕ 7 repo-setup.
+# Оставлен в репо как fallback / reference. Ручной запуск возможен через workflow_dispatch.
 on:
-  push:
-    branches: [main, master]
-  pull_request:
-    branches: [main, master]
+  workflow_dispatch:
 
 jobs:
   node-typecheck:

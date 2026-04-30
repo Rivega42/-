@@ -1,0 +1,87 @@
+"компонент: client":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "client/**"
+          - "shared/**"
+
+"компонент: server":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "server/**"
+
+"компонент: bookcabinet":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "bookcabinet/**"
+
+"компонент: tools":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "tools/**"
+
+"компонент: hardware":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "bookcabinet/config.py"
+          - "bookcabinet/hardware/**"
+          - "bookcabinet/mechanics/**"
+          - "tools/corexy_*.py"
+          - "tools/homing_*.py"
+          - "tools/calib_*.py"
+          - "tools/calibrate*.py"
+
+"компонент: rfid":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "bookcabinet/rfid/**"
+          - "tools/iqrfid*.py"
+          - "tools/test_rru9816*.py"
+          - "rru9816-sidecar/**"
+
+"компонент: irbis":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "bookcabinet/irbis/**"
+
+"компонент: db":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "**/migrations/**"
+          - "drizzle.config.ts"
+          - "shared/schema.ts"
+
+"компонент: devops":
+  - changed-files:
+      - any-glob-to-any-file:
+          - ".github/**"
+          - "infra/**"
+          - "deploy/**"
+          - "scripts/**"
+          - ".pre-commit-config.yaml"
+
+"компонент: ai":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "docs/prompts/**"
+          - "docs/ai/**"
+          - "docs/context/**"
+
+"тип: документация":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "**/*.md"
+          - "docs/**"
+
+"тип: тесты":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "**/*.test.*"
+          - "**/*.spec.*"
+          - "**/tests/**"
+          - "__tests__/**"
+
+"тип: дашборд":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "tools/dashboard/**"
+          - "scripts/dashboard-fetch.mjs"

@@ -1,0 +1,69 @@
+name: Deploy to staging
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: deploy-staging
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: staging
+      url: ${{ vars.STAGING_URL }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build
+        run: |
+          echo "Адаптируйте под стек: pnpm build / docker build / cargo build и т.д."
+
+      - name: Push image (если Docker)
+        if: hashFiles('Dockerfile') != ''
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+          docker build -t ghcr.io/${{ github.repository }}:staging .
+          docker push ghcr.io/${{ github.repository }}:staging
+
+      - name: Deploy
+        run: |
+          echo "Этот шаг настраивается под платформу деплоя."
+          echo "Примеры: fly deploy / vercel deploy / kubectl apply / hetzner deploy"
+          echo "Создайте issue для Вики на настройку реального деплоя."
+
+      - name: Run migrations
+        run: |
+          echo "Адаптируйте: prisma migrate deploy / alembic upgrade head / liquibase update"
+        continue-on-error: false
+
+      - name: Smoke tests
+        run: |
+          if [ -n "${{ vars.STAGING_URL }}" ]; then
+            curl -fsS "${{ vars.STAGING_URL }}/health" || curl -fsS "${{ vars.STAGING_URL }}/healthz" || curl -fsS "${{ vars.STAGING_URL }}"
+          fi
+
+      - name: Notify success
+        if: success()
+        run: |
+          if [ -n "${{ secrets.TELEGRAM_BOT_TOKEN }}" ] && [ -n "${{ secrets.TELEGRAM_CHAT_ID }}" ]; then
+            curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+              -H "Content-Type: application/json" \
+              -d "{\"chat_id\":\"${{ secrets.TELEGRAM_CHAT_ID }}\",\"text\":\"✅ Staging deployed: ${{ github.sha }}\",\"parse_mode\":\"Markdown\"}"
+          fi
+
+      - name: Notify failure
+        if: failure()
+        run: |
+          if [ -n "${{ secrets.TELEGRAM_BOT_TOKEN }}" ] && [ -n "${{ secrets.TELEGRAM_CHAT_ID }}" ]; then
+            curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+              -H "Content-Type: application/json" \
+              -d "{\"chat_id\":\"${{ secrets.TELEGRAM_CHAT_ID }}\",\"text\":\"❌ Staging deploy failed: ${{ github.sha }}\\nRun: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\"}"
+          fi
