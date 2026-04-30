@@ -1,0 +1,35 @@
+name: Stale cleanup
+
+on:
+  schedule:
+    - cron: '0 3 * * *'
+  workflow_dispatch:
+
+permissions:
+  issues: write
+  pull-requests: write
+
+jobs:
+  stale:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/stale@v9
+        with:
+          days-before-stale: 60
+          days-before-close: 30
+          stale-issue-label: 'статус: stale'
+          stale-pr-label: 'статус: stale'
+          stale-issue-message: |
+            👋 Этот issue без активности 60 дней.
+            Будет закрыт через 30 дней без новых комментариев.
+            Если он всё ещё актуален — добавьте комментарий, чтобы снять stale-статус.
+          stale-pr-message: |
+            👋 Этот PR без активности 60 дней.
+            Будет закрыт через 30 дней без новых коммитов.
+          close-issue-message: |
+            🗄 Закрыто как stale. Можно переоткрыть, если задача актуальна.
+          close-pr-message: |
+            🗄 Закрыто как stale. Можно переоткрыть, если PR актуален.
+          exempt-issue-labels: 'тип: эпик,приоритет: P0,приоритет: P1,статус: в работе'
+          exempt-pr-labels: 'статус: в работе,статус: на ревью'
+          operations-per-run: 100
